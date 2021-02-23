@@ -2,11 +2,10 @@
 
 Add a bounding box record in helper.function. 
 ```
-type BoundingBox = {minX : float; 
-                    maxX : float; 
-                    minY : float;
-                    maxY : float;
-                    }
+type BoundingBox = {
+    TopLeft : XYPos
+    BottomRight : XYPos
+}
 ```
 
 Add a bBox (BoundingBox) field into 
