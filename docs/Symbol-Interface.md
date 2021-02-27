@@ -25,7 +25,7 @@ Returns true if pos is within the bounds of the bounding box of the given symbol
 let isSymClicked (pos : XYPos) (sym : Symbol) : bool =
     
 ```
-Updated new Symbol model to include PortNumber and PortType 27/02/2021
+Updated new Symbol model to include PortNumber PortType and HostId 27/02/2021
 ```
 //Add this to Helpers.fs so that both Sheet & Symbol can use it.
 type PortInfo = {
@@ -35,7 +35,7 @@ type PortInfo = {
     HostId : string 
 }
 
-
+// Symbol updated
 type Symbol =
     {
         Id : CommonTypes.ComponentId
