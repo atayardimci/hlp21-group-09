@@ -27,7 +27,7 @@ let isSymClicked (pos : XYPos) (sym : Symbol) : bool =
 ```
 Updated new Symbol model to include PortNumber PortType and HostId 27/02/2021
 ```
-//Add this to Helpers.fs so that both Sheet & Symbol can use it.
+//Add this to CommonTypes.fs so that both Sheet & Symbol can use it.
 type PortInfo = {
     Pos : XYPos
     PortNumber : int option
