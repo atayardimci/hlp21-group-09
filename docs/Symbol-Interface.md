@@ -4,11 +4,7 @@ Interface function:
 Returns true if pos is within the bounds of the bounding box of the given symbol; else returns false.
 ```
 let isSymClicked (pos : XYPos) (sym : Symbol) : bool =
-    match pos with 
-    | p when (p.X >= sym.BBox.TopLeft.X) && (p.X <= sym.BBox.BottomRight.X) &&
-             (p.Y >= sym.BBox.TopLeft.Y) && (p.Y <= sym.BBox.BottomRight.Y)  
-        -> true
-    | _ -> false
+
     
 ```
 Updated new Symbol model to include PortNumber PortType and HostId 27/02/2021
