@@ -18,7 +18,7 @@ type PortInfo = {
     Pos : XYPos
     PortNumber : int option
     PortType : CommonTypes.PortType
-    HostId : string 
+    HostId : CommonTypes.ComponentId 
 }
 
 // Symbol updated
