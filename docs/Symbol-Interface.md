@@ -32,6 +32,7 @@ type PortInfo = {
     Pos : XYPos
     PortNumber : int option
     PortType : CommonTypes.PortType
+    HostId : string 
 }
 
 
