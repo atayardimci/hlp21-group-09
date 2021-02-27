@@ -4,7 +4,7 @@ Interface function:
 Returns true if pos is within the bounds of the bounding box of the given symbol; else returns false.
 ```
 let isSymClicked (pos : XYPos) (sym : Symbol) : bool =
-
+let getAllPortInfo (symModel:Model) : CommonTypes.PortInfo List =
     
 ```
 Updated new Symbol model to include PortNumber PortType and HostId 27/02/2021
