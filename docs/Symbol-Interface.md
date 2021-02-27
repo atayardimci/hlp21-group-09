@@ -44,9 +44,6 @@ type Symbol =
         Pos: XYPos
         LastDragPos : XYPos
         IsDragging : bool
-
-        H : float // New Height ~~~~ Unsure if this is required
-        W : float // New Width
         BBox : BoundingBox
     }
 ```
