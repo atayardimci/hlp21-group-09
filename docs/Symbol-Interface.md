@@ -1,9 +1,12 @@
 # Interface documentation for Symbol
 
-Interface function: 
-Returns true if pos is within the bounds of the bounding box of the given symbol; else returns false.
+Interface functions: 
+
 ```
+// Returns true if pos is within the bounds of the bounding box of the given symbol; else returns false.
 let isSymClicked (pos : XYPos) (sym : Symbol) : bool =
+
+// Returns all PortInfo of all symbols in the model
 let getAllPortInfo (symModel:Model) : CommonTypes.PortInfo List =
     
 ```
