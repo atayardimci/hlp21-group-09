@@ -1,3 +1,10 @@
+# HLP21 GROUP 9 
+
+This repo includes the skeleton code we were provided in the commencement of the project. 
+
+Our interface documentation can be found under ./docs directory. A document is included for each of the three modules, that is Symbol, BusWire, and Sheet.
+
+
 # SVG Draw Application Project Skeleton Code For HLP Project 2021
 
 See [The SVG Demo README](https://github.com/tomcl/hlp21-svg-elmish-demo/blob/master/README.md) for 
