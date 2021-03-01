@@ -1,5 +1,10 @@
 # Interface documentation for Symbol
 
+Notes: 
+we need messages to select and deselect components
+we need a message for displaying the error highlight of the symbol
+we need an interface function for buswidth inference
+
 Interface functions: 
 
 ```
@@ -8,6 +13,12 @@ let isSymClicked (pos : XYPos) (sym : Symbol) : bool =
 
 // Returns all PortInfo of all symbols in the model
 let getAllPortInfo (symModel:Model) : CommonTypes.PortInfo List =
+
+// Returns the bounding box of the symbol with the given Id
+let getBoundingBoxOf (symModel: Model) (sId: CommonTypes.ComponentId) : BoundingBox =
+
+// Returns the portInfo of all ports of the symbol with the given Id
+let getPortInfoOf (symModel: Model) (sId: CommonTypes.ComponentId) : PortInfo list =
 
     
 ```
