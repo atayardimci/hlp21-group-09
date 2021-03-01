@@ -9,9 +9,6 @@ let isSymClicked (pos : XYPos) (sym : Symbol) : bool =
 // Returns all PortInfo of all symbols in the model
 let getAllPortInfo (symModel:Model) : CommonTypes.PortInfo List =
 
-// Removes the symbol with the given id from the model
-let deleteSymbol (symModel: Model) (sId: CommonTypes.ComponentId) : Model = 
-
     
 ```
 Updated new Symbol model to include PortNumber PortType and HostId 27/02/2021
