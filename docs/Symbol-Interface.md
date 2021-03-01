@@ -23,7 +23,10 @@ let getPortInfoOf (symModel: Model) (sId: CommonTypes.ComponentId) : PortInfo li
 // Returns the buswidth information of the symbol with the given id. 
 // If the buswidth information not known at symbol creation, None is returned.
 // For memory symbols, the first element is the address width, and the second element is the width of the data
-let getBusWidthOf (symModel: Model) (sId: CommonTypes.ComponentId) : Option<int> list =
+let getBusWidthOf (symModel: Model) (sId: CommonTypes.ComponentId) : Option<int list> =
+
+// Returns the Ids of the selected symbols
+let getSelectedSymbolIds (symModel: Model) : CommonTypes.ComponentId list = 
     
 ```
 
@@ -45,6 +48,7 @@ type Symbol =
         Pos: XYPos
         LastDragPos : XYPos
         IsDragging : bool
+        IsSelected : bool
         BBox : BoundingBox
     }
 //Updated Dragging and Deletion Msgs to act on a list of symbols
