@@ -23,7 +23,7 @@ let getPortInfoOf (symModel: Model) (sId: CommonTypes.ComponentId) : PortInfo li
 ```
 
 ```
-//Add this to CommonTypes.fs so that both Sheet & Symbol can use it.
+//Add this to Symbol.fs
 type PortInfo = {
     Pos : XYPos
     PortNumber : int option
