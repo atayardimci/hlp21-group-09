@@ -1,9 +1,9 @@
 # Interface documentation for Symbol
 
 Notes: 
-we need messages to select and deselect components
-we need a message for displaying the error highlight of the symbol
-we need an interface function for buswidth inference
+we need messages to select and deselect components //
+we need a message for displaying the error highlight of the symbol // 
+we need an interface function for buswidth inference //
 
 Interface functions: 
 
