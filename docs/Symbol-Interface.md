@@ -19,6 +19,11 @@ let getBoundingBoxOf (symModel: Model) (sId: CommonTypes.ComponentId) : Bounding
 
 // Returns the portInfo of all ports of the symbol with the given Id
 let getPortInfoOf (symModel: Model) (sId: CommonTypes.ComponentId) : PortInfo list =
+
+// Returns the buswidth information of the symbol with the given id. 
+// If the buswidth information not known at symbol creation, None is returned.
+// For memory symbols, the first element is the address width, and the second element is the width of the data
+let getBusWidthOf (symModel: Model) (sId: CommonTypes.ComponentId) : Option<int> list =
     
 ```
 
