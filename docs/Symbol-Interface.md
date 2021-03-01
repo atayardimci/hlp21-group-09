@@ -19,10 +19,9 @@ let getBoundingBoxOf (symModel: Model) (sId: CommonTypes.ComponentId) : Bounding
 
 // Returns the portInfo of all ports of the symbol with the given Id
 let getPortInfoOf (symModel: Model) (sId: CommonTypes.ComponentId) : PortInfo list =
-
     
 ```
-Updated new Symbol model to include PortNumber PortType and HostId 27/02/2021
+
 ```
 //Add this to CommonTypes.fs so that both Sheet & Symbol can use it.
 type PortInfo = {
@@ -32,7 +31,6 @@ type PortInfo = {
     HostId : CommonTypes.ComponentId 
 }
 
-// Symbol updated
 type Symbol =
     {
         Id : CommonTypes.ComponentId
@@ -44,4 +42,14 @@ type Symbol =
         IsDragging : bool
         BBox : BoundingBox
     }
+//Updated Dragging and Deletion Msgs to act on a list of symbols
+type Msg =   
+    | MouseMsg of MouseT 
+    /// coords not adjusted for top-level zoom
+    | StartDragging of sId : CommonTypes.ComponentId list * pagePos: XYPos list
+    | Dragging of sId : CommonTypes.ComponentId list * pagePos: XYPos list 
+    | EndDragging of sId : CommonTypes.ComponentId list
+    | AddSymbol of sType:CommonTypes.ComponentType * pos:XYPos // used by demo code to add a circle
+    | DeleteSymbol of sId:CommonTypes.ComponentId list    
+    | UpdateSymbolModelWithComponent of CommonTypes.Component // Issie interface
 ```
