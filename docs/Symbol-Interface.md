@@ -12,13 +12,13 @@ Interface functions:
 let isSymClicked (pos : XYPos) (sym : Symbol) : bool =
 
 // Returns all PortInfo of all symbols in the model
-let getAllPortInfo (symModel:Model) : CommonTypes.PortInfo List =
+let getAllPort (symModel:Model) : CommonTypes.Port List =
 
 // Returns the bounding box of the symbol with the given Id
 let getBoundingBoxOf (symModel: Model) (sId: CommonTypes.ComponentId) : BoundingBox =
 
 // Returns the portInfo of all ports of the symbol with the given Id
-let getPortInfoOf (symModel: Model) (sId: CommonTypes.ComponentId) : PortInfo list =
+let getPortOf (symModel: Model) (sId: CommonTypes.ComponentId) : Port list =
 
 // Returns the buswidth information of the symbol with the given id. 
 // If the buswidth information not known at symbol creation, None is returned.
@@ -55,7 +55,7 @@ type Symbol =
         Id : CommonTypes.ComponentId
         Type : CommonTypes.ComponentType 
         Label : string
-        PortInfoList : PortInfo list //New
+        Ports : CommonTypes.Port list
         Pos: XYPos
         LastDragPos : XYPos
         IsDragging : bool
