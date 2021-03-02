@@ -70,6 +70,8 @@ type Msg =
     | Dragging of sId : CommonTypes.ComponentId list * pagePos: XYPos list 
     | EndDragging of sId : CommonTypes.ComponentId list
     | AddSymbol of sType:CommonTypes.ComponentType * pos:XYPos // used by demo code to add a circle
-    | DeleteSymbol of sId:CommonTypes.ComponentId list    
+    | SelectSymbolsWithinRegion of BoundingBox
+    | DeleteSymbols 
     | UpdateSymbolModelWithComponent of CommonTypes.Component // Issie interface
+    
 ```
