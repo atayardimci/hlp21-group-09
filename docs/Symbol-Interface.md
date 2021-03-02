@@ -29,15 +29,26 @@ let getBusWidthOf (symModel: Model) (sId: CommonTypes.ComponentId) : Option<int 
 let getSelectedSymbolIds (symModel: Model) : CommonTypes.ComponentId list = 
     
 ```
-
-```
-//Add this to Symbol.fs
-type PortInfo = {
+PortInfo is deprecated change to Port deprecated 
+~~type PortInfo = { 
     Pos : XYPos
     PortNumber : int option
+    PortId : string
     PortType : CommonTypes.PortType
     HostId : CommonTypes.ComponentId 
-}
+}~~
+
+```
+
+    type Port = {
+        Id : string
+        PortNumber : int option  // For example, an And would have input ports 0 and 1, and output port 0.
+        PortType : PortType      // If the port is used in a Connection record as Source or Target, the Number is None. 
+        HostId : string
+        BBox : BoundingBox
+        Pos : XYPos
+        isDragging : bool
+    }
 
 type Symbol =
     {
