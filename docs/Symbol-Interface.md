@@ -1,7 +1,5 @@
 # Interface documentation for Symbol
 
-Notes: 
-- We need an interface function for buswidth inference
 
 Interface functions: 
 
