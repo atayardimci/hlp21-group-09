@@ -10,6 +10,9 @@ let wireToSelectOpt (wModel: Model) (pos: XYPos) : CommonTypes.ConnectionId opti
 
 let selectBoundedWires (wModel: Model) (boundary: BoundingBox)
     \\ Allows for sheet to provide a BoundingBox and all Wires that are completely enclosed by the BoundingBox are selected
+    
+let wire (wModel: Model) (wId: CommonTypes.ConnectionId): Wire
+    \\ If a WireId is provided, this function will search for the Wire having this Id within the Wire Model.
 
 \\\Messages
 type Msg =
