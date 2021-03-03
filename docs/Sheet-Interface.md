@@ -23,6 +23,16 @@ type Model = {
     StartDrawingPosition : XYPos option
     }
 
+type PortDU =
+    | In
+    | Out
+    | All
+
+type KeyboardMsg =
+    | CtrlS | AltC | AltV | AltZ | AltShiftZ | DEL | AltQ
+    | AltW | AltA | AltS | AltD
+    | AltShiftW | AltShiftA | AltShiftS | AltShiftD
+
 type Msg =
     | Wire of BusWire.Msg
     | KeyPress of KeyboardMsg
