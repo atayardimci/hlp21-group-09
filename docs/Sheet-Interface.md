@@ -98,8 +98,7 @@ let sortDistToSymbol(pos : XYPos) (symList : Symbol.Symbol list) : (float * Comm
 
 let tryFindPortByPortId (id : string) (ports : Symbol.Port list) : Symbol.Port option = 
 
-let findPortsMatchingHostId (portList: Symbol.Port list) (portDU : Helpers.PortDU) (dist : float , hostId : CommonTypes.ComponentId)  : (float * Symbol.Port list) =  //input 
-output or both
+let findPortsMatchingHostId (portList: Symbol.Port list) (portDU : Helpers.PortDU) (dist : float , hostId : CommonTypes.ComponentId)  : (float * Symbol.Port list)=
 
 let getPortsWithinMinRange (mousePos : XYPos ) (model : Model) (minDist : float) (portDU : PortDU)  = 
 
