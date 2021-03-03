@@ -63,7 +63,7 @@ type Msg =
     | HighlightWire of CommonTypes.ConnectionId * XYPos    
     | DraggingWire of CommonTypes.ConnectionId option *XYPos
 ```
-#Interface Functions from Symbol
+# Interface Functions from Symbol
 ```
 let symbolPos (symModel: Model) (sId: CommonTypes.ComponentId) : XYPos = 
 
@@ -81,14 +81,14 @@ let getBoundingBoxOf (symModel: Model) (sId: CommonTypes.ComponentId) : Bounding
 let getPortOf (symModel: Model) (sId: CommonTypes.ComponentId) : Port list =
 ```
 
-#Interface Functions from BusWire
+# Interface Functions from BusWire
 ```
 let wireToSelectOpt (wModel: Model) (pos: XYPos) : CommonTypes.ConnectionId option =
 
 ```
 
 
-#Helper Functions :
+# Helper Functions :
 ```
 let createPorts (portInfoLst : CommonTypes.PortInfo list) : CommonTypes.Port list
 
