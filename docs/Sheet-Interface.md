@@ -66,19 +66,54 @@ type Msg =
     | AddWire of Symbol.Port*Symbol.Port
     | HighlightWire of CommonTypes.ConnectionId * XYPos    
     | DraggingWire of CommonTypes.ConnectionId option *XYPos
+```
+Interface Functions from Symbol
+```
+let symbolPos (symModel: Model) (sId: CommonTypes.ComponentId) : XYPos = 
 
-Helper Functions : 
+/// Returns the symbol with given Id
+let getSymbolWithId (symModel: Model) (sId: CommonTypes.ComponentId) : Symbol =
+
+// Returns all Ports of all symbols in the model
+let getAllPorts (symModel: Model) : Port List =
+
+
+// Returns the bounding box of the symbol with the given Id
+let getBoundingBoxOf (symModel: Model) (sId: CommonTypes.ComponentId) : BoundingBox =
+
+// Returns all ports of the symbol with the given Id
+let getPortOf (symModel: Model) (sId: CommonTypes.ComponentId) : Port list =
+```
+
+Interface Functinos from BusWire
+```
+let wireToSelectOpt (wModel: Model) (pos: XYPos) : CommonTypes.ConnectionId option =
+
+```
+
+
+Helper Functions :
+```
 let createPorts (portInfoLst : CommonTypes.PortInfo list) : CommonTypes.Port list
+
 let isPortClicked (pos : XYPos) (port: CommonTypes.Port) : bool
+
 let sortDistToSymbol(pos : XYPos) (symList : Symbol.Symbol list) : (float * CommonTypes.ComponentId) list
 
-
 let tryFindPortByPortId (id : string) (ports : Symbol.Port list) : Symbol.Port option = 
-let findPortsMatchingHostId (portList: Symbol.Port list) (portDU : Helpers.PortDU) (dist : float , hostId : CommonTypes.ComponentId)  : (float * Symbol.Port list) =  //input output or both
+
+let findPortsMatchingHostId (portList: Symbol.Port list) (portDU : Helpers.PortDU) (dist : float , hostId : CommonTypes.ComponentId)  : (float * Symbol.Port list) =  //input 
+output or both
+
 let getPortsWithinMinRange (mousePos : XYPos ) (model : Model) (minDist : float) (portDU : PortDU)  = 
+
 let renderPorts (portList: CommonTypes.Port list) = 
+
 let private renderRegion (bBox : BoundingBox) =
+
 let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispatch<Msg>) =
+
+```
 
 
 
