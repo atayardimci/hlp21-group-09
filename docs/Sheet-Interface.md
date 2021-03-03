@@ -85,7 +85,7 @@ let getBoundingBoxOf (symModel: Model) (sId: CommonTypes.ComponentId) : Bounding
 let getPortOf (symModel: Model) (sId: CommonTypes.ComponentId) : Port list =
 ```
 
-Interface Functinos from BusWire
+Interface Functions from BusWire
 ```
 let wireToSelectOpt (wModel: Model) (pos: XYPos) : CommonTypes.ConnectionId option =
 
