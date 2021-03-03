@@ -8,6 +8,9 @@ let wireToSelectOpt (wModel: Model) (pos: XYPos) : CommonTypes.ConnectionId opti
     \\ A position is provided by Sheet.
     \\ The function then searches for a Wire in wModel whose BoundingBox encloses the specified point
 
+let selectBoundedWires (wModel: Model) (boundary: BoundingBox)
+    \\ Allows for sheet to provide a BoundingBox and all Wires that are completely enclosed by the BoundingBox are selected
+
 \\\Messages
 type Msg =
     | Symbol of Symbol.Msg 
