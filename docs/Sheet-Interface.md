@@ -4,27 +4,68 @@
 - CID will be updated to be a List of ComponentId in the future to handle moving multiple components altogether
 
 ```
-  type Model = {
+type Model = {
     Wire: BusWire.Model
     Canvas: CanvasProps
-    CID : CommonTypes.ComponentId
+    SymIdList : CommonTypes.ComponentId list
+
+    Ports : Symbol.Port list
+    PortsToBeRendered : (float* Symbol.Port list) list
+    IsPortDragging : bool
+    IdOfPortBeingDragged : string
+
+    IsDrawingRegion : bool
+
+    IsWireSelected : bool
+    SelectedWire : CommonTypes.ConnectionId option
+
+    RegionToBeRendered  : Helpers.BoundingBox
+    StartDrawingPosition : XYPos option
     }
+
 type Msg =
     | Wire of BusWire.Msg
     | KeyPress of KeyboardMsg
     | Zoom of CanvasProps
     | MouseMsg of MouseT
-    | StartDragging of sId : CommonTypes.ComponentId * pagePos: XYPos
-    | Dragging of sId : CommonTypes.ComponentId * pagePos: XYPos
-    | EndDragging of sId : CommonTypes.ComponentId
     | Msg of string
+
+    | StartDragging of sId : CommonTypes.ComponentId list * pagePos: XYPos
+    | NewDragging of sId : CommonTypes.ComponentId list * pagePos: XYPos 
+    | EndDragging of sId : CommonTypes.ComponentId list
+
+    | StartPortDragging of Symbol.Port
+    | DraggingPort of pagePos : XYPos
+    | EndPortDragging of XYPos
+    | DrawFromPortToCursor of XYPos*XYPos
+
+    | RenderPorts of sId : (float * Symbol.Port list) list
+    | UpdatePorts
+    | UpdatedPortsToBusWire of sId : Symbol.Port list
+
+    | StartDrawingRegion of XYPos
+    | DrawingRegion of pagePos : XYPos
+    | EndDrawingRegion of pagePos : XYPos
+
+    | SelectComponentsWithinRegion of Helpers.BoundingBox
+    | DeselectAllSymbols
+    | DeselectWire 
+    | RemoveDrawnLine 
+
+
+    | AddWire of Symbol.Port*Symbol.Port
+    | HighlightWire of CommonTypes.ConnectionId * XYPos    
+    | DraggingWire of CommonTypes.ConnectionId option *XYPos
 
 Helper Functions : 
 let createPorts (portInfoLst : CommonTypes.PortInfo list) : CommonTypes.Port list
 let isPortClicked (pos : XYPos) (port: CommonTypes.Port) : bool
 let sortDistToSymbol(pos : XYPos) (symList : Symbol.Symbol list) : (float * CommonTypes.ComponentId) list
-let findPortsMatchingHostID (portList: CommonTypes.Port list) (hostId : CommonTypes.ComponentId) : CommonTypes.Port list = 
+
 let renderPorts (portList: CommonTypes.Port list) = 
+let tryFindPortByPortId (id : string) (ports : Symbol.Port list) : Symbol.Port option = 
+let findPortsMatchingHostId (portList: Symbol.Port list) (portDU : Helpers.PortDU) (dist : float , hostId : CommonTypes.ComponentId)  : (float * Symbol.Port list) =  //input output or both
+
 
 
  ```
