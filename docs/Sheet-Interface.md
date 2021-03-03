@@ -83,38 +83,43 @@ let getPortOf (symModel: Model) (sId: CommonTypes.ComponentId) : Port list =
 
 ## Interface Functions from BusWire
 ```
+// A position is provided by Sheet.
+// The function then searches for a Wire in wModel whose BoundingBox encloses the specified point
 let wireToSelectOpt (wModel: Model) (pos: XYPos) : CommonTypes.ConnectionId option 
-    \\ A position is provided by Sheet.
-    \\ The function then searches for a Wire in wModel whose BoundingBox encloses the specified point
 
+// Allows for sheet to provide a BoundingBox and all Wires that are completely enclosed by the BoundingBox are selected
 let selectBoundedWires (wModel: Model) (boundary: BoundingBox)
-    \\ Allows for sheet to provide a BoundingBox and all Wires that are completely enclosed by the BoundingBox are selected
-    
+
+// If a WireId is provided, this function will search for the Wire having this Id within the Wire Model.
 let wire (wModel: Model) (wId: CommonTypes.ConnectionId): Wire
-    \\ If a WireId is provided, this function will search for the Wire having this Id within the Wire Model.
 ```
 
 
 ## Helper Functions :
 ```
-let createPorts (portInfoLst : CommonTypes.PortInfo list) : CommonTypes.Port list
-
+// Determines if is a port is clicked given a mouse position.
 let isPortClicked (pos : XYPos) (port: CommonTypes.Port) : bool
 
+// Calculate distance from a given mouse position to a list of symbols and sort them in ascending order. This is used in rendering the closer ports.
 let sortDistToSymbol(pos : XYPos) (symList : Symbol.Symbol list) : (float * CommonTypes.ComponentId) list
 
+// Find a port given a portId. Returns an option.
 let tryFindPortByPortId (id : string) (ports : Symbol.Port list) : Symbol.Port option = 
 
+// Find ports given a componentId
 let findPortsMatchingHostId (portList: Symbol.Port list) (portDU : Helpers.PortDU) 
                             (dist : float , hostId : CommonTypes.ComponentId) : (float * Symbol.Port list)=
 
-
+// Get inputType, outputType or both types within minimum range.
 let getPortsWithinMinRange (mousePos : XYPos ) (model : Model) (minDist : float) (portDU : PortDU)  = 
 
-let renderPorts (portList: CommonTypes.Port list) = 
+// Render given ports
+let renderPorts (portList: CommonTypes.Port list) : ReactElement = 
 
+// Render a boundingbox. This is for highlighting regions
 let private renderRegion (bBox : BoundingBox) =
 
+// Collects all svg elements from Symbol, BusWire and itself and renders it.
 let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispatch<Msg>) =
 
 ```
