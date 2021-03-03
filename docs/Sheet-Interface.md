@@ -62,9 +62,15 @@ let createPorts (portInfoLst : CommonTypes.PortInfo list) : CommonTypes.Port lis
 let isPortClicked (pos : XYPos) (port: CommonTypes.Port) : bool
 let sortDistToSymbol(pos : XYPos) (symList : Symbol.Symbol list) : (float * CommonTypes.ComponentId) list
 
-let renderPorts (portList: CommonTypes.Port list) = 
+
 let tryFindPortByPortId (id : string) (ports : Symbol.Port list) : Symbol.Port option = 
 let findPortsMatchingHostId (portList: Symbol.Port list) (portDU : Helpers.PortDU) (dist : float , hostId : CommonTypes.ComponentId)  : (float * Symbol.Port list) =  //input output or both
+let getPortsWithinMinRange (mousePos : XYPos ) (model : Model) (minDist : float) (portDU : PortDU)  = 
+let renderPorts (portList: CommonTypes.Port list) = 
+let private renderRegion (bBox : BoundingBox) =
+let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispatch<Msg>) =
+
+
 
 
 
