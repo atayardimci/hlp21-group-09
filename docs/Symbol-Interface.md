@@ -1,9 +1,7 @@
 # Interface documentation for Symbol
 
 Notes: 
-- we need messages to select and deselect components
-- we need a message for displaying the error highlight of the symbol
-- we need an interface function for buswidth inference
+- We need an interface function for buswidth inference
 
 Interface functions: 
 
@@ -62,6 +60,7 @@ type Symbol =
         IsSelected : bool
         BBox : BoundingBox
     }
+
 //Updated Dragging and Deletion Msgs to act on a list of symbols
 type Msg =   
     | MouseMsg of MouseT 
