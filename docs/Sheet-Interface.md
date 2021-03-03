@@ -111,12 +111,3 @@ let private renderRegion (bBox : BoundingBox) =
 let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispatch<Msg>) =
 
 ```
-
-
-
-
-
- ```
-28/02/2021
-- Added Ports and PortsToBeRendered to Model 
-
