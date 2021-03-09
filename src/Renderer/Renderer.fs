@@ -46,8 +46,17 @@
                 [| makeKeyItem "Default" "CmdOrCtrl+S" (fun () -> dispatch KeyboardMsg.CtrlS)
                    makeKeyItem "Blue" "Alt+C" (fun () -> dispatch KeyboardMsg.AltC)
                    makeKeyItem "Green" "Alt+V" (fun () -> dispatch KeyboardMsg.AltV)
-                   makeKeyItem "Default"  "delete" (fun () -> dispatch KeyboardMsg.DEL)
+                   makeKeyItem "Default"  "Backspace" (fun () -> dispatch KeyboardMsg.DEL)
                    makeKeyItem "Red" "Alt+Z" (fun () -> dispatch KeyboardMsg.AltZ)
+                   makeKeyItem "NEW" "Alt+Q" (fun () -> dispatch KeyboardMsg.AltQ)
+                   makeKeyItem "inPortLeft" "Alt+A" (fun () -> dispatch KeyboardMsg.AltA)
+                   makeKeyItem "inPortRight" "Alt+D" (fun () -> dispatch KeyboardMsg.AltD)
+                   makeKeyItem "inPortTop" "Alt+W" (fun () -> dispatch KeyboardMsg.AltW)
+                   makeKeyItem "inPortBottom" "Alt+S" (fun () -> dispatch KeyboardMsg.AltS)
+                   makeKeyItem "outPortLeft" "Alt+Shift+A" (fun () -> dispatch KeyboardMsg.AltShiftA)
+                   makeKeyItem "outPortRight" "Alt+Shift+D" (fun () -> dispatch KeyboardMsg.AltShiftD)
+                   makeKeyItem "outPortTop" "Alt+Shift+W" (fun () -> dispatch KeyboardMsg.AltShiftW)
+                   makeKeyItem "outPortBottom" "Alt+Shift+S" (fun () -> dispatch KeyboardMsg.AltShiftS)
                    menuSeparator
                    makeKeyItem "Print Statistics" "Alt+Shift+Z" (fun () -> dispatch KeyboardMsg.AltShiftZ)
                    makeRoleItem MenuItemRole.ForceReload

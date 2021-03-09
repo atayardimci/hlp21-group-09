@@ -10,7 +10,7 @@ open Fable.React
 //-------------------------------------------------------------------------//
 
 /// position on SVG canvas
-type XYPos =
+type XYPos = 
     {
         X : float
         Y : float
@@ -25,14 +25,188 @@ type MouseOp =
     | Move 
     /// Move with button Down
     | Drag
+    | CtrlScroll
+    | Scroll
 
-type MouseT = {
-    Pos: XYPos
-    Op: MouseOp}
+type CanvasProps = 
+    {
+        height: int
+        width : int 
+        zoom  : float
+    }
+
+type MouseT = 
+    {
+        Pos: XYPos
+        Op: MouseOp
+    }
+
+type BoundingBox = 
+    {
+        TopLeft : XYPos
+        BottomRight : XYPos
+    }
+
+type PortOrientation = 
+    | Top
+    | Bottom
+    | Left
+    | Right
+
+type PortDU =
+    | In
+    | Out
+    | All
+
+let posScaled (pos:XYPos) (zoom:float) = {X = pos.X/zoom; Y= pos.Y/zoom} 
+
+let posDiff a b =
+    {X=a.X-b.X; Y=a.Y-b.Y}
+
+let posAdd a b =
+    {X=a.X+b.X; Y=a.Y+b.Y}
+
+let posOf x y = {X=x;Y=y}
+
+//-------------------------------------------------------------------------//
+//------------------------------By Sheet-----------------------------------//
+//-------------------------------------------------------------------------//
+
+
+
+
 
 //--------------------------------------------------------------------------//
 //-----------------------------Helpers--------------------------------------//
 //--------------------------------------------------------------------------//
+//Zack
+let calcBBoxWithRadius (r:float) (pos: XYPos) = 
+    {
+      TopLeft=  {X = pos.X - r ; Y = pos.Y - r}
+      BottomRight = {X = pos.X + r ; Y = pos.Y + r }
+    }
+
+let calculateBoundingBox (h:float) (w:float) (pos:XYPos) = 
+    {
+        TopLeft = {X=pos.X ; Y=pos.Y - 15.}
+        BottomRight = {X=pos.X + w ; Y=pos.Y + h}
+    }
+
+//Zack
+let calcDistance (posOne : XYPos) (posTwo : XYPos) : float = 
+    let distance = ( (posTwo.Y - posOne.Y)**2.0 + (posTwo.X - posOne.X)**2.0 ) ** (1.0/2.0)
+    distance
+
+//Zack
+let createBBoxFromPos (firstPos : XYPos) (sndPos : XYPos) : BoundingBox = 
+    let topLeftX,bottomRightX = if (firstPos.X < sndPos.X) then firstPos.X, sndPos.X else sndPos.X, firstPos.X
+    let topLeftY,bottomRightY = if (firstPos.Y < sndPos.Y) then firstPos.Y, sndPos.Y else sndPos.Y, firstPos.Y
+
+    {TopLeft = {X = topLeftX ; Y = topLeftY }; BottomRight = {X = bottomRightX ; Y = bottomRightY}}
+
+//Zack
+let calculateCenterFromBBox (bBox : BoundingBox) : XYPos =  
+    let center = 
+        {X = (bBox.TopLeft.X +  bBox.BottomRight.X) /2.0 ; Y = (bBox.TopLeft.Y + bBox.BottomRight.Y) / 2.0}
+    center
+
+//--------------------------------------------------------------------------//
+//----------------------Port Position Calculations--------------------------//
+//--------------------------------------------------------------------------//
+
+let getGateInputPositionsBottom (h:float) (w:float) (pos:XYPos) =
+    let in0 = {X=pos.X + w*0.25 ; Y=pos.Y + h}
+    let in1 = {X=pos.X + w*0.75 ; Y=pos.Y + h}
+    [in0; in1]
+let getGateInputPositionsTop (h:float) (w:float) (pos:XYPos) =
+    let in0 = {X=pos.X + w*0.25 ; Y=pos.Y}
+    let in1 = {X=pos.X + w*0.75 ; Y=pos.Y}
+    [in0; in1]
+let getGateInputPositionsLeft (h:float) (w:float) (pos:XYPos) =
+    let in0 = {X=pos.X ; Y=pos.Y + h*0.25}
+    let in1 = {X=pos.X ; Y=pos.Y + h*0.75}
+    [in0; in1]
+
+let getGatePortPositions (inOrientation: PortOrientation) (inverted:bool) (h:float) (w:float) (pos:XYPos) =
+    let wTmp = if inverted then w - 9. else w 
+    let inputs = 
+        match inOrientation with
+        | Top -> getGateInputPositionsTop h wTmp pos
+        | Bottom -> getGateInputPositionsBottom h wTmp pos
+        | _ -> getGateInputPositionsLeft h w pos
+    let out0 = {X=pos.X + w ; Y=pos.Y + h/2.}
+    inputs, [out0]
+    
+
+let getMux2PortPositions (h:float) (w:float) (pos:XYPos) =
+    let in0 = {X=pos.X ; Y=pos.Y + h*0.30}
+    let in1 = {X=pos.X ; Y=pos.Y + h*0.70}
+    let in2 = {X=pos.X + w/2. ; Y=pos.Y + h - 6.5}
+    let out0 = {X=pos.X + w ; Y=pos.Y + h/2.}
+    [in0; in1; in2], [out0]
+let getDemux2PortPositions (h:float) (w:float) (pos:XYPos) =
+    let in0 = {X=pos.X ; Y=pos.Y + h/2.}
+    let in1 = {X=pos.X + w/2. ; Y=pos.Y + h - 6.5}
+    let out0 = {X=pos.X + w ; Y=pos.Y + h*0.30}
+    let out1 = {X=pos.X + w ; Y=pos.Y + h*0.70}
+    [in0; in1], [out0; out1]
+
+let getMergeWiresPortPositions (h:float) (w:float) (pos:XYPos) =
+    let in0 = {X=pos.X ; Y=pos.Y}
+    let in1 = {X=pos.X ; Y=pos.Y + h}
+    let out0 = {X=pos.X + w ; Y=pos.Y + h/2.}
+    [in0; in1], [out0]
+let getSplitWirePortPositions (h:float) (w:float) (pos:XYPos) =
+    let in0 = {X=pos.X ; Y=pos.Y + h/2.}
+    let out0 = {X=pos.X + w ; Y=pos.Y}
+    let out1 = {X=pos.X + w ; Y=pos.Y + h}
+    [in0], [out0; out1]
+
+let getDFFEPortPositions (h:float) (w:float) (pos:XYPos) =
+    let in0  = {X=pos.X        ; Y=pos.Y + h/2.}
+    let in1  = {X=pos.X + w/2. ; Y=pos.Y + h}
+    let out0 = {X=pos.X + w    ; Y=pos.Y + h/2.}
+    [in0; in1], [out0]
+let getRegisterEPortPositions (h:float) (w:float) (pos:XYPos) =
+    let in0  = {X=pos.X        ; Y=pos.Y + h/2.}
+    let in1  = {X=pos.X + w/2. ; Y=pos.Y + h}
+    let out0 = {X=pos.X + w    ; Y=pos.Y + h/2.}
+    [in0; in1], [out0]
+
+
+let getPositionsOn portOrientation numOfPorts h w pos =
+    match portOrientation with
+    | Left -> 
+        let lengthBetween = h / float (numOfPorts+1)
+        [1..numOfPorts] |> List.map ((fun n -> float n * lengthBetween) >> (fun num -> {X=pos.X ; Y=pos.Y + num}))
+    | Right -> 
+        let lengthBetween = h / float (numOfPorts+1)
+        [1..numOfPorts] |> List.map ((fun n -> float n * lengthBetween) >> (fun num -> {X=pos.X + w ; Y=pos.Y + num}))
+    | Top -> 
+        let lengthBetween = w / float (numOfPorts+1)
+        [1..numOfPorts] |> List.map ((fun n -> float n * lengthBetween) >> (fun num -> {X=pos.X + num ; Y=pos.Y}))
+    | Bottom -> 
+        let lengthBetween = w / float (numOfPorts+1)
+        [1..numOfPorts] |> List.map ((fun n -> float n * lengthBetween) >> (fun num -> {X=pos.X + num ; Y=pos.Y + h}))
+
+let getRectPortPositions (portOrientationIn, portOrientationOut) (nIn:int) (nOut:int) (h:float) (w:float) (pos:XYPos) =
+    let inputs =
+        match portOrientationIn with 
+        | Top -> getPositionsOn Top nIn h w pos
+        | Bottom -> getPositionsOn Bottom nIn h w pos
+        | _ -> getPositionsOn Left nIn h w pos
+    let outputs =
+        match portOrientationOut with 
+        | Top -> getPositionsOn Top nOut h w pos
+        | Bottom -> getPositionsOn Bottom nOut h w pos
+        | _ -> getPositionsOn Right nOut h w pos
+    inputs, outputs
+
+
+
+        
+
+
 
 /// return a v4 (random) universally unique identifier (UUID)
 let uuid():string = import "v4" "uuid"
@@ -99,8 +273,14 @@ let printStats() =
 let canvasUnscaledDimensions : XYPos = 
     {X = 1000. ; Y = 1000.}
 
+let dragColor  = "DarkKhaki" // Old version DarkTurquoise
+let constColor = "lightgrey"
+let errorColor = "FireBrick"
+let busColor = "Purple"
+let drawLineColor = "OrangeRed"
+let portColor = "slategrey"
 
 
-
+let VerticalAdjustment = 7.5
     
 
