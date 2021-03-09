@@ -39,7 +39,7 @@ type Msg =
     | Msg of string
 
     | StartDragging of sId : CommonTypes.ComponentId list * pagePos: XYPos
-    | NewDragging of sId : CommonTypes.ComponentId list * pagePos: XYPos 
+    | Dragging of sId : CommonTypes.ComponentId list * pagePos: XYPos 
     | EndDragging of sId : CommonTypes.ComponentId list
 
     | StartPortDragging of Symbol.Port
@@ -62,7 +62,7 @@ type Msg =
 
 
     | AddWire of Symbol.Port*Symbol.Port
-    | HighlightWire of CommonTypes.ConnectionId * XYPos    
+    | SelectWire of CommonTypes.ConnectionId * XYPos    
     | DraggingWire of CommonTypes.ConnectionId option *XYPos
     
 
@@ -86,13 +86,12 @@ let sortDistToSymbol (pos : XYPos) (symList : Symbol.Symbol list) : (float * Com
 
 let tryFindPortByPortId (id : string) (ports : Symbol.Port list) : Symbol.Port option= 
     let findPortByPortId (id : string) (port : Symbol.Port) : bool =   
+       id = port.Id
 
-        id = port.Id
     List.tryFind(findPortByPortId id) ports
 
 
-
-let findPortsMatchingHostId (portList: Symbol.Port list) (portDU : PortDU) (dist : float , hostId : CommonTypes.ComponentId)  : (float * Symbol.Port list) =  //input output or both
+let findPortsMatchingHostId (portList: Symbol.Port list) (portDU : Helpers.PortDU) (dist : float , hostId : CommonTypes.ComponentId)  : (float * Symbol.Port list) =  //input output or both
 
     let findOnePortMatchingHostId (dist : float, hostId : CommonTypes.ComponentId) (portDU : Helpers.PortDU) (port : Symbol.Port) : bool  =  //returns all ports of HostID
             match portDU with 
@@ -105,7 +104,7 @@ let findPortsMatchingHostId (portList: Symbol.Port list) (portDU : PortDU) (dist
             | All -> match port with 
                      |{HostId = hId} when (hostId = hId) -> true //if hostId matches with portHostId
                      | _ -> false
-     //func ends here
+     //findOnePortMatchingHostID func ends here
     let newPortList = List.filter (findOnePortMatchingHostId (dist,hostId) portDU) portList   //return ports that are only matching HostID
     
     (dist,newPortList)
@@ -224,74 +223,84 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             { WireModel with
                Symbol = SymModel
             }
-        { model with 
-            Wire = newWireModel
-            SymIdList = []
-        }, Cmd.ofMsg(UpdatePorts)
+        let newModel = 
+            { model with 
+                Wire = newWireModel
+                SymIdList = []
+            }
+        newModel, Cmd.ofMsg(UpdatePorts)
     
     | KeyPress AltA -> 
         let newSymModel, newCmd = 
             Symbol.update (Symbol.Msg.UpdateInputOrientation Left) model.Wire.Symbol
-        { model with 
-            Wire = {model.Wire with Symbol = newSymModel}
-            SymIdList = []
-        }
-        , Cmd.ofMsg(UpdatePorts)
+        let newModel = 
+            { model with 
+                Wire = {model.Wire with Symbol = newSymModel}
+                SymIdList = []
+            }
+        newModel, Cmd.ofMsg(UpdatePorts)
     
     | KeyPress AltW -> 
         let newSymModel, newCmd = 
             Symbol.update (Symbol.Msg.UpdateInputOrientation Top) model.Wire.Symbol
-        { model with 
-            Wire = {model.Wire with Symbol = newSymModel}
-            SymIdList = []
-        }
-        , Cmd.ofMsg(UpdatePorts)
+        let newModel =
+            { model with 
+                Wire = {model.Wire with Symbol = newSymModel}
+                SymIdList = []
+            }
+        newModel, Cmd.ofMsg(UpdatePorts)
     
     | KeyPress AltS -> 
         let newSymModel, newCmd = 
             Symbol.update (Symbol.Msg.UpdateInputOrientation Bottom) model.Wire.Symbol
-        { model with 
-            Wire = {model.Wire with Symbol = newSymModel}
-            SymIdList = []
-        }
-        , Cmd.ofMsg(UpdatePorts)
+        let newModel = 
+            { model with 
+                Wire = {model.Wire with Symbol = newSymModel}
+                SymIdList = []
+            }
+        newModel, Cmd.ofMsg(UpdatePorts)
 
     
     | KeyPress AltShiftW -> 
         let newSymModel, newCmd = 
             Symbol.update (Symbol.Msg.UpdateOutputOrientation Top) model.Wire.Symbol
-        { model with 
-            Wire = {model.Wire with Symbol = newSymModel}
-            SymIdList = []
-        }
-        , Cmd.ofMsg(UpdatePorts)
+        let newModel = 
+            { model with 
+                Wire = {model.Wire with Symbol = newSymModel}
+                SymIdList = []
+            }
+        newModel, Cmd.ofMsg(UpdatePorts)
     
     | KeyPress AltShiftS -> 
         let newSymModel, newCmd = 
             Symbol.update (Symbol.Msg.UpdateOutputOrientation Bottom) model.Wire.Symbol
-        { model with 
-            Wire = {model.Wire with Symbol = newSymModel}
-            SymIdList = []
-        }
-        ,Cmd.ofMsg(UpdatePorts)
+        
+        let newModel = 
+            { model with 
+                Wire = {model.Wire with Symbol = newSymModel}
+                SymIdList = []
+            }
+        newModel, Cmd.ofMsg(UpdatePorts)
 
     | KeyPress AltShiftD -> 
         let newSymModel, newCmd = 
             Symbol.update (Symbol.Msg.UpdateOutputOrientation Right) model.Wire.Symbol
-        { model with 
-            Wire = {model.Wire with Symbol = newSymModel}
-            SymIdList = []
-        }
-        , Cmd.ofMsg(UpdatePorts)
+        let newModel = 
+            { model with 
+                Wire = {model.Wire with Symbol = newSymModel}
+                SymIdList = []
+            }
+        newModel, Cmd.ofMsg(UpdatePorts)    
 
     | KeyPress AltQ ->  
         let newSymModel, newCmd = 
             Symbol.update (Symbol.Msg.ToggleError) model.Wire.Symbol
-        { model with 
-            Wire = {model.Wire with Symbol = newSymModel}
-            SymIdList = []
-        }
-        , Cmd.ofMsg(UpdatePorts)
+        let newModel = 
+            { model with 
+                Wire = {model.Wire with Symbol = newSymModel}
+                SymIdList = []
+            }
+        newModel, Cmd.ofMsg(UpdatePorts)
 
 
         
@@ -353,13 +362,14 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                 let startPort = tryFindPortByPortId model.IdOfPortBeingDragged model.Ports
                 let newMsg = 
                     match startPort with
-                    |Some startPort -> AddWire (startPort,endPort)                                                      
-                    |None -> Msg "Error in Port"  
+                    |Some startPort when endPort.PortType<>startPort.PortType -> AddWire (startPort,endPort) 
+                    |None -> Msg "Error in Port" 
+                    | _ -> Msg "endPort must be a different PortType then startPort"
 
                 {model with 
                     IsPortDragging = false;
                     IdOfPortBeingDragged = "null";
-                 }, Cmd.ofMsg (newMsg)
+                 }, Cmd.batch ([Cmd.ofMsg(newMsg); Cmd.ofMsg(RemoveDrawnLine)])
         | _ -> 
                 {model with 
                     IsPortDragging = false;
@@ -387,9 +397,9 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             Wire = newBusModel
         }, Cmd.none
 
-    | HighlightWire (connectionId, mousePos) -> 
+    | SelectWire (connectionId, mousePos) -> 
         let newBusModel, newCmd = 
-            BusWire.update (BusWire.Msg.HighlightWire (connectionId,mousePos)) model.Wire
+            BusWire.update (BusWire.Msg.SelectWire (connectionId,mousePos)) model.Wire
         {model with 
             Wire = newBusModel
             IsWireSelected = true
@@ -478,7 +488,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         }
         , Cmd.batch [Cmd.ofMsg(RenderPorts []);] //render no ports
 
-    | NewDragging (rank, pagePos) ->
+    | Dragging (rank, pagePos) ->
         let newSymModel, newCmd = 
             Symbol.update (Symbol.Msg.Dragging (rank, pagePos)) model.Wire.Symbol
         { model with 
@@ -518,9 +528,8 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                 | None  -> 
                     let ClickedWire = BusWire.wireToSelectOpt model.Wire mMsg.Pos
                     match ClickedWire with 
-                    | Some wireId -> [DeselectAllSymbols;DeselectWire; HighlightWire (wireId,mMsg.Pos)]
-                    | None ->    
-
+                    | Some wireId -> [DeselectAllSymbols;DeselectWire; SelectWire (wireId,mMsg.Pos)]
+                    | None ->
                         let ClickedSym = List.tryFind (Symbol.isSymClicked mMsg.Pos) model.Wire.Symbol
                         let sIdList = Symbol.getSelectedSymbolIds model.Wire.Symbol
                         match ClickedSym with
@@ -533,7 +542,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             
             | Drag when (Symbol.getSelectedSymbolIds model.Wire.Symbol <> []) -> 
                     let sIdList = Symbol.getSelectedSymbolIds model.Wire.Symbol
-                    [NewDragging (sIdList, mMsg.Pos)]
+                    [Dragging (sIdList, mMsg.Pos)]
                              
             | Drag when (model.IsDrawingRegion = true) -> [DrawingRegion (mMsg.Pos)]
 
@@ -557,7 +566,6 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                  model, Cmd.none
 
     | Zoom msg -> {model with Canvas = msg}, Cmd.none 
-
 
 
 let init() = 

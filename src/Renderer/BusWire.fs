@@ -22,7 +22,7 @@ type ConnectPoint = {
 /// for demo only. The real wires will
 /// connect to Ports - not symbols, where each symbol has
 /// a number of ports (see Issie Component and Port types) and have
-/// extra information for highlighting, width, etc.
+/// extra information for highlighting, width, etc.`
 /// NB - how you define Ports for drawing - whether they correspond to
 /// a separate datatype and Id, or whether port offsets from
 /// component coordinates are held in some other way, is up to groups.
@@ -58,7 +58,7 @@ type Msg =
     | MouseMsg of MouseT
     | DrawFromPortToCursor of XYPos*XYPos
     | AddWire of Symbol.Port*Symbol.Port
-    | HighlightWire of CommonTypes.ConnectionId*XYPos
+    | SelectWire of CommonTypes.ConnectionId*XYPos
     | DeleteWire
     | UpdatedPortsToBusWire of sId : Symbol.Port list
     | DeselectWire
@@ -347,7 +347,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         let nwpts = List.map2 followCircle model.Symbol model.Portlst
         {model with Symbol=sm ; Portlst = nwpts}, Cmd.map Symbol sCmd
     | SetColor c -> {model with Color = c}, Cmd.none
-    | HighlightWire (wId,p) -> 
+    | SelectWire (wId,p) -> 
         //let updateWlist = model.WX
           //                |> List.map (fun w ->
             //                if (wId <> w.Id) then w
