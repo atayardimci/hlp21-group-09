@@ -157,8 +157,6 @@ let private renderRegion (bBox : BoundingBox) =
                 ])
 
 
-
-
 let mutable getScrollPos : (unit ->(float*float) option) = (fun () -> None) 
 
 let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispatch<Msg>) =
@@ -196,7 +194,6 @@ let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispat
           OnMouseUp (fun ev -> (mouseOp Up ev (scrollTop,scrollLeft)))
           OnMouseMove (fun ev -> mouseOp (if mDown ev then Drag else Move) ev (scrollTop,scrollLeft) )
           OnWheel (fun ev -> if ev.ctrlKey = true then wheelOp CtrlScroll ev else ())
-
           
         ]
         [ svg
@@ -207,12 +204,10 @@ let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispat
                     Width (model.Canvas.width )          
                 ]
             ]
-     
-                    
+
             [ g // group list of elements with list of attributes
                 [ Style [Transform  (sprintf "scale(%f)" model.Canvas.zoom)]] // top-level transform style attribute for zoom
                 [   
-
                     svgReact  
                     renderPortsByDistance
                     renderRegion model.RegionToBeRendered
