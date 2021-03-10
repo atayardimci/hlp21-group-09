@@ -156,13 +156,18 @@ let private renderRegion (bBox : BoundingBox) =
                     ] [ ]
                 ])
 
+
+
+
+let mutable getScrollPos : (unit ->(float*float) option) = (fun () -> None) 
+
 let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispatch<Msg>) =
 
     let mDown (ev:Types.MouseEvent) = 
         if ev.buttons <> 0. then true else false
 
-    let mouseOp op (ev:Types.MouseEvent) = 
-        dispatch <| MouseMsg {Op = op ; Pos = { X = (ev.clientX)/(model.Canvas.zoom) ;  Y = (ev.clientY)/ (model.Canvas.zoom)}}
+    let mouseOp op (ev:Types.MouseEvent) (scrollPos : (float*float)) = 
+        dispatch <| MouseMsg {Op = op ; Pos = { X = (ev.clientX  + (fst scrollPos))/(model.Canvas.zoom) ;  Y = ( ev.clientY + (snd scrollPos))/ (model.Canvas.zoom)}}
         
     let wheelOp op (ev:Types.WheelEvent) =   
         let newZoom = model.Canvas.zoom - (model.Canvas.zoom*ev.deltaY*0.0007)
@@ -176,12 +181,23 @@ let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispat
                 MaxWidth "100vw"
                 CSSProp.OverflowX OverflowOptions.Auto 
                 CSSProp.OverflowY OverflowOptions.Auto
-            ] 
-          OnMouseDown (fun ev -> (mouseOp Down ev))
-          OnMouseUp (fun ev -> (mouseOp Up ev))
-          OnMouseMove (fun ev -> mouseOp (if mDown ev then Drag else Move) ev)
+
+            ]
+            
+          Ref (fun html ->  
+                getScrollPos <- fun () -> Some (html.scrollLeft, html.scrollTop))
+                  
+          let scrollTop,scrollLeft = 
+              match getScrollPos() with
+              | Some (scrollLeft,scrollRight) -> (scrollLeft, scrollRight)
+              | None -> (0.0,0.0)
+
+          OnMouseDown (fun ev -> (mouseOp Down ev (scrollTop,scrollLeft)))
+          OnMouseUp (fun ev -> (mouseOp Up ev (scrollTop,scrollLeft)))
+          OnMouseMove (fun ev -> mouseOp (if mDown ev then Drag else Move) ev (scrollTop,scrollLeft) )
           OnWheel (fun ev -> if ev.ctrlKey = true then wheelOp CtrlScroll ev else ())
 
+          
         ]
         [ svg
             [ Style 
@@ -191,16 +207,20 @@ let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispat
                     Width (model.Canvas.width )          
                 ]
             ]
+     
+                    
             [ g // group list of elements with list of attributes
                 [ Style [Transform  (sprintf "scale(%f)" model.Canvas.zoom)]] // top-level transform style attribute for zoom
-                [ 
-                    svgReact
+                [   
+
+                    svgReact  
                     renderPortsByDistance
                     renderRegion model.RegionToBeRendered
                 ] 
-                
+                 
             ]
         ]
+
 
 let view (model:Model) (dispatch : Msg -> unit) =
     let wDispatch wMsg = dispatch (Wire wMsg)
