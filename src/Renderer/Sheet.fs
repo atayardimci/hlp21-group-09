@@ -139,7 +139,7 @@ let renderPorts (distance: float , portList: Symbol.Port list) =
         )) 
 
 
-let private renderRegion (bBox : BoundingBox) =
+let private renderHighlightRegion (bBox : BoundingBox) =
             let fX, fY = bBox.TopLeft.X, bBox.TopLeft.Y
             let fX_2, fY_2 = bBox.BottomRight.X, bBox.BottomRight.Y
             g   [ ] 
@@ -156,6 +156,39 @@ let private renderRegion (bBox : BoundingBox) =
                     ] [ ]
                 ])
 
+
+
+let private renderGrid =  //Canvas Grid 
+        svg [
+            SVGAttr.Width "100%"
+            SVGAttr.Height "100%"
+        ]
+            [
+               defs[]
+                   [ 
+                        pattern [
+                            Id "smallGrid"
+                            SVGAttr.Width 24.0;
+                            SVGAttr.Height 24.0;
+                            SVGAttr.PatternUnits "userSpaceOnUse"
+                        ] [path [SVGAttr.D "M 24 0 L 0 0 0 24" ; SVGAttr.Fill "none" ; SVGAttr.Stroke "lightgray"; SVGAttr.StrokeWidth 0.5] []]
+
+                        pattern [
+                            Id "grid"
+                            SVGAttr.Width 120;
+                            SVGAttr.Height 120;
+                            SVGAttr.PatternUnits "userSpaceOnUse"        
+                        ][rect [SVGAttr.Width 120.0; SVGAttr.Height 120.0; SVGAttr.Fill "url(#smallGrid)"; SVGAttr.Stroke "gray"; SVGAttr.StrokeWidth 1.0][]
+                          path [SVGAttr.D "M 120 0 L 0 0 0 120"; SVGAttr.Fill "none"; SVGAttr.Stroke "gray"; SVGAttr.StrokeWidth 1.0][]  
+                         ]
+                   ]
+               
+               rect [
+                   SVGAttr.Width "100%"
+                   SVGAttr.Height "100%"
+                   SVGAttr.Fill "url(#smallGrid)"
+               ] []
+            ]
 
 let mutable getScrollPos : (unit ->(float*float) option) = (fun () -> None) 
 
@@ -181,7 +214,6 @@ let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispat
                 CSSProp.OverflowY OverflowOptions.Auto
 
             ]
-            
           Ref (fun html ->  
                 getScrollPos <- fun () -> Some (html.scrollLeft, html.scrollTop))
                   
@@ -195,26 +227,29 @@ let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispat
           OnMouseMove (fun ev -> mouseOp (if mDown ev then Drag else Move) ev (scrollTop,scrollLeft) )
           OnWheel (fun ev -> if ev.ctrlKey = true then wheelOp CtrlScroll ev else ())
           
-        ]
-        [ svg
-            [ Style 
-                [
-                    Border "2px solid grey"
-                    Height (model.Canvas.height) 
-                    Width (model.Canvas.width )          
+        ] 
+        [ 
+            svg
+                [ Style 
+                    [
+                        Border "2px solid grey"
+                        Height (model.Canvas.height) 
+                        Width (model.Canvas.width )          
+                    ]
                 ]
-            ]
 
-            [ g // group list of elements with list of attributes
-                [ Style [Transform  (sprintf "scale(%f)" model.Canvas.zoom)]] // top-level transform style attribute for zoom
-                [   
-                    svgReact  
-                    renderPortsByDistance
-                    renderRegion model.RegionToBeRendered
-                ] 
+                [ g // group list of elements with list of attributes
+                    [ Style [Transform  (sprintf "scale(%f)" model.Canvas.zoom)]] // top-level transform style attribute for zoom
+                    [   
+                        renderGrid // adds the background Grid canvas to current svg
+                        svgReact  
+                        renderPortsByDistance
+                        renderHighlightRegion model.RegionToBeRendered
+                    ] 
                  
-            ]
-        ]
+                ]
+             
+        ] 
 
 
 let view (model:Model) (dispatch : Msg -> unit) =
