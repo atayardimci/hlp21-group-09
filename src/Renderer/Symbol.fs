@@ -184,7 +184,7 @@ let getPorts hostId inputPortsPosList outputPortsPosList =
                 PortType = CommonTypes.PortType.Input
                 HostId = hostId
                 Pos = pos
-                BBox = calcBBoxWithRadius 5. pos
+                BBox = calcBBoxWithRadius 6.0 pos
                 IsDragging = false
             }
         )
@@ -197,7 +197,7 @@ let getPorts hostId inputPortsPosList outputPortsPosList =
                 PortType = CommonTypes.PortType.Output
                 HostId = hostId
                 Pos = pos
-                BBox = calcBBoxWithRadius 5. pos
+                BBox = calcBBoxWithRadius 6.0 pos
                 IsDragging = false
             }
         )
@@ -616,7 +616,7 @@ let createLogicGate (strOnGate:string) (isInverted:bool) (props:RenderSymbolProp
         getLogicGateNameStyle props [str strOnGate]
 
         if isInverted then createInvertElement props
-    ] @  getPortElements props.Symbol.InputPorts props.Symbol.OutputPorts)
+    ] )
 
 let createClock fontSize fX fY heigth =
     g[] [
@@ -665,7 +665,7 @@ let createRectangularSymbol (symName:string) (inputPortNames:string list) (outpu
             let clkH = if props.Symbol.InputOrientation = Bottom then h/2. else h
             if includeClk then createClock 10. fX fY clkH
         ] @ portLabels
-        @ getPortElements props.Symbol.InputPorts props.Symbol.OutputPorts)
+        )
 
 
 

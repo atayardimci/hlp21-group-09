@@ -13,7 +13,9 @@ type Model = {
     SymIdList : CommonTypes.ComponentId list
 
     Ports : Symbol.Port list
-    PortsToBeRendered : (float* Symbol.Port list) list
+    HoveringPortsToBeRendered : (float* Symbol.Port list) list
+    DraggingPortsToBeRendered : (float* Symbol.Port list) list
+    OnePortToBeRendered : XYPos * Symbol.Port option
     IsPortDragging : bool
     IdOfPortBeingDragged : string
 
@@ -45,9 +47,10 @@ type Msg =
     | StartPortDragging of Symbol.Port
     | DraggingPort of pagePos : XYPos
     | EndPortDragging of XYPos
-    | DrawFromPortToCursor of XYPos*XYPos
+    | DrawFromPortToCursor of XYPos*XYPos * Symbol.Port option
 
-    | RenderPorts of sId : (float * Symbol.Port list) list
+    | RenderPorts of sId : (float * Symbol.Port list) list * isHovering : bool
+    | RenderOnePort of mousePos : XYPos* Symbol.Port option
     | UpdatePorts
     | UpdatedPortsToBusWire of sId : Symbol.Port list
 
@@ -74,14 +77,21 @@ let isPortClicked (pos : XYPos) (port: Symbol.Port) : bool =
          -> true
     | _ -> false
 
+let isWithinDistanceToPort (pos : XYPos ) (dist : float) (port: Symbol.Port)   : bool = 
+    if ( (calcDistance pos port.Pos) < dist ) then true else false
+
+let getDistToOnePort (pos : XYPos) (port : Symbol.Port) : float = 
+    let dist = calcDistance pos port.Pos
+    dist
+
 
 let sortDistToSymbol (pos : XYPos) (symList : Symbol.Symbol list) : (float * CommonTypes.ComponentId) list=
-    let getDistToOnePort (pos : XYPos) (sym : Symbol.Symbol) : float * CommonTypes.ComponentId = 
+    let getDistToCentreofSymbol (pos : XYPos) (sym : Symbol.Symbol) : float * CommonTypes.ComponentId = 
         let dist = calcDistance pos (Helpers.calculateCenterFromBBox sym.BBox)
         dist,sym.Id
     symList
-    |>List.map (getDistToOnePort pos)
-    |>List.sortBy (fst)
+    |>List.map (getDistToCentreofSymbol pos)
+    |>List.sortBy (fun (x,y) -> x)
 
 
 let tryFindPortByPortId (id : string) (ports : Symbol.Port list) : Symbol.Port option= 
@@ -113,15 +123,15 @@ let getPortsWithinMinRange (mousePos : XYPos ) (model : Model) (minDist : float)
     let sortedSymbols = sortDistToSymbol (mousePos) model.Wire.Symbol
     let symbolsWithinMinRange = 
         sortedSymbols
-        |> List.filter (fun x -> (fst x) < minDist)  //only consider those within the minimum distance
-        |> List.map (fun x -> x)          //return snd of tuple which is symbolID
+        |> List.filter (fun x -> (fst x) < minDist)  //only consider those within the minimum distance    
     let portsWithinMinRange = List.map (findPortsMatchingHostId model.Ports portDU) symbolsWithinMinRange
+
     portsWithinMinRange
 
 
-let renderPorts (distance: float , portList: Symbol.Port list) = 
-    
-    let new_dist = 1.0/distance * 75.0
+let private renderPortsHovering (distance: float , portList: Symbol.Port list) = 
+    let radius = 6.0
+    let opacity = 1.0/distance * 55.0
 
     g   [] 
         (portList |> List.map (fun port -> 
@@ -129,14 +139,51 @@ let renderPorts (distance: float , portList: Symbol.Port list) =
             [ 
                 Cx port.Pos.X
                 Cy port.Pos.Y
-                R 5.0
-                SVGAttr.Fill portColor
+                R radius
+                SVGAttr.Fill portColor_const
                 SVGAttr.Stroke "black"
                 SVGAttr.StrokeWidth 1
-                SVGAttr.FillOpacity new_dist
+                SVGAttr.FillOpacity opacity
             ]
             [ ]
-        )) 
+        ))
+
+let private renderPortsDragging (distance: float, portList: Symbol.Port list ) =
+    let radius = 10.0
+    let opacity = 1.0/ distance * 55.0
+    g []
+        (   (portList 
+            |> List.map (fun port ->
+                            circle
+                                [ 
+                                    Cx port.Pos.X
+                                    Cy port.Pos.Y
+                                    R radius
+                                    SVGAttr.Fill portColor_const
+                                    SVGAttr.Stroke "black"
+                                    SVGAttr.StrokeWidth 1
+                                    SVGAttr.FillOpacity opacity
+                                ]
+                                [ ]
+                            )
+            )
+           
+        )
+let private renderOnePort (mouseOnPort : XYPos * Symbol.Port option)(reElem : ReactElement) = 
+        let mouseOnPortCircle = 
+            match mouseOnPort with
+            | (mousePos, Some port) when (calcDistance mousePos port.Pos < 10.0)->
+                                            //printf ("IM HERHERHERHEJKHQWEKJFCNASCAKSJDCNASKDJNSKDJCNACASKDJCNASKDJNKSJ")
+                                            circle [Cx port.Pos.X; Cy port.Pos.Y ; R 14.0 ; SVGAttr.Fill "lightskyblue"
+                                                    SVGAttr.Stroke "lightskyblue"; SVGAttr.StrokeWidth 0.8; SVGAttr.FillOpacity 0.3
+                                                   ] []
+                                                        
+            | _ -> circle [] []
+
+        g [] [mouseOnPortCircle; reElem]
+               
+        
+        
 
 
 let private renderHighlightRegion (bBox : BoundingBox) =
@@ -157,7 +204,6 @@ let private renderHighlightRegion (bBox : BoundingBox) =
                 ])
 
 
-
 let private renderGrid =  //Canvas Grid 
         svg [
             SVGAttr.Width "100%"
@@ -171,7 +217,7 @@ let private renderGrid =  //Canvas Grid
                             SVGAttr.Width 24.0;
                             SVGAttr.Height 24.0;
                             SVGAttr.PatternUnits "userSpaceOnUse"
-                        ] [path [SVGAttr.D "M 24 0 L 0 0 0 24" ; SVGAttr.Fill "none" ; SVGAttr.Stroke "lightgray"; SVGAttr.StrokeWidth 0.5] []]
+                        ] [path [SVGAttr.D "M 24 0 L 0 0 0 24" ; SVGAttr.Fill "none" ; SVGAttr.Stroke "silver"; SVGAttr.StrokeWidth 0.5] []]
 
                         pattern [
                             Id "grid"
@@ -204,7 +250,9 @@ let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispat
         let newZoom = model.Canvas.zoom - (model.Canvas.zoom*ev.deltaY*0.0007)
         dispatch <| Zoom  {model.Canvas with zoom = newZoom;}
 
-    let renderPortsByDistance = g [] ((List.map renderPorts) model.PortsToBeRendered)
+    let renderHoveringPortsByDistance = g [] (List.map renderPortsHovering  model.HoveringPortsToBeRendered)
+    let renderDraggingPortsByDistance = (g [](List.map renderPortsDragging  model.DraggingPortsToBeRendered))
+                                        |> renderOnePort model.OnePortToBeRendered
 
     div [ Style 
             [ 
@@ -243,7 +291,8 @@ let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispat
                     [   
                         renderGrid // adds the background Grid canvas to current svg
                         svgReact  
-                        renderPortsByDistance
+                        renderDraggingPortsByDistance
+                        renderHoveringPortsByDistance
                         renderHighlightRegion model.RegionToBeRendered
                     ] 
                  
@@ -358,7 +407,6 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         let nCanvas = {model.Canvas with zoom = 1.0}
         {model with Canvas = nCanvas}, Cmd.none
 
-
     | KeyPress s -> // all other keys are turned into SetColor commands
         let c =
             match s with
@@ -369,10 +417,15 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         printfn "Key:%A" c
         model, Cmd.ofMsg (BusWire.SetColor c |> Wire) //Cmd.ofMsg used to chain commands
 
-    | RenderPorts floatPortListTuple -> 
+    | RenderPorts (floatPortListTuple,isHovering) -> 
         match model.SymIdList with
-        | [] -> {model with PortsToBeRendered = floatPortListTuple}, Cmd.none
-        | _ -> {model with PortsToBeRendered = []}, Cmd.none
+        | [] when isHovering = true -> {model with HoveringPortsToBeRendered = floatPortListTuple}, Cmd.none
+        | [] when isHovering = false -> {model with DraggingPortsToBeRendered = floatPortListTuple}, Cmd.none
+        | _  -> {model with HoveringPortsToBeRendered = []; DraggingPortsToBeRendered = []}, Cmd.none
+
+    | RenderOnePort (mousePos, portOption) ->
+      
+         {model with OnePortToBeRendered = (mousePos, portOption)},Cmd.none   
 
     | StartPortDragging (startPort) -> 
         {model with
@@ -385,19 +438,27 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         let port = 
             match draggedPort with
             |Some port -> port
-
             |None -> failwithf "Error in Port"
-        let newMsg = DrawFromPortToCursor (port.Pos, mousePos)
-        let portsToBeRenderedWithinMinRange =
+
+        let portsToBeRenderedTuple =
             match port.PortType with 
             | CommonTypes.Input -> getPortsWithinMinRange mousePos model 120.0 Out //if dragging input only render outputports
             | CommonTypes.Output -> getPortsWithinMinRange mousePos model 120.0 In //if dragging output only render inputports
+        let portsToBeRendered =
+            portsToBeRenderedTuple
+            |> List.collect (fun (x,y) -> y) 
         
-        model, Cmd.batch [Cmd.ofMsg (newMsg); Cmd.ofMsg (RenderPorts portsToBeRenderedWithinMinRange)] (*; Cmd.ofMsg (RenderPorts)]*)
 
-    | DrawFromPortToCursor (startPos,endPos) -> 
+        let firstMsg = DrawFromPortToCursor (port.Pos, mousePos, List.tryFind (isWithinDistanceToPort mousePos 10.0) portsToBeRendered)
+        let secondMsg = RenderPorts (portsToBeRenderedTuple,false)
+        let thirdMsg = RenderOnePort (mousePos,List.tryFind (isWithinDistanceToPort mousePos 10.0) portsToBeRendered)
+
+        model, Cmd.batch [Cmd.ofMsg (firstMsg); Cmd.ofMsg(secondMsg);
+                          Cmd.ofMsg (thirdMsg)]
+
+    | DrawFromPortToCursor (startPos,endPos, endPort) -> 
          let newBusModel, newCmd = 
-             BusWire.update (BusWire.Msg.DrawFromPortToCursor (startPos,endPos)) model.Wire
+             BusWire.update (BusWire.Msg.DrawFromPortToCursor (startPos,endPos, endPort)) model.Wire
          {model with
              Wire = newBusModel
          }
@@ -405,7 +466,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
 
     | EndPortDragging mousePos->
 
-        let endOutcome = List.tryFind (isPortClicked mousePos) model.Ports
+        let endOutcome = List.tryFind (isWithinDistanceToPort mousePos 10.0) model.Ports
   
         match endOutcome with 
         | Some endPort  ->  
@@ -419,7 +480,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                 {model with 
                     IsPortDragging = false;
                     IdOfPortBeingDragged = "null";
-                 }, Cmd.batch ([Cmd.ofMsg(newMsg); Cmd.ofMsg(RemoveDrawnLine)])
+                 }, Cmd.batch ([Cmd.ofMsg(newMsg)])
         | _ -> 
                 {model with 
                     IsPortDragging = false;
@@ -441,10 +502,12 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         }, Cmd.none
 
     | RemoveDrawnLine ->
-        let newBusModel, newCmd = 
+        let newBusModel, newMsg = 
             BusWire.update (BusWire.Msg.RemoveDrawnLine) model.Wire
         {model with
             Wire = newBusModel
+            OnePortToBeRendered = {X = 0.0; Y = 0.0},None;
+            DraggingPortsToBeRendered = [];
         }, Cmd.none
 
     | SelectWire (connectionId, mousePos) -> 
@@ -536,7 +599,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             Wire = {model.Wire with Symbol = newSymModel}
             SymIdList = sIdList
         }
-        , Cmd.batch [Cmd.ofMsg(RenderPorts []);] //render no ports
+        , Cmd.batch [Cmd.ofMsg(RenderPorts ([],false) );] //render no ports
 
     | Dragging (rank, pagePos) ->
         let newSymModel, newCmd = 
@@ -569,7 +632,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             match mMsg.Op with 
             | Move -> 
                 let portsWithinMinRange = getPortsWithinMinRange mMsg.Pos model 100.0 All
-                [RenderPorts portsWithinMinRange]
+                [RenderPorts (portsWithinMinRange, true)] //isHovering
                     
             | Down -> 
                 let ClickedPort = List.tryFind (isPortClicked mMsg.Pos) model.Ports  
@@ -625,7 +688,8 @@ let init() =
         Canvas = {height = CommonTypes.draw2dCanvasHeight ; width = CommonTypes.draw2dCanvasWidth; zoom = 1.0}
         SymIdList =  []
         Ports = Symbol.getAllPorts (wModel.Symbol)
-        PortsToBeRendered = []
+        HoveringPortsToBeRendered = []
+        DraggingPortsToBeRendered = []
         IsPortDragging = false
         IdOfPortBeingDragged = "null"
         IsWireSelected = false
@@ -633,4 +697,5 @@ let init() =
         RegionToBeRendered = {TopLeft = {X=0.0; Y =0.0}; BottomRight = {X = 0.0; Y = 0.0}}
         StartDrawingPosition = None
         SelectedWire = None
+        OnePortToBeRendered = {X=0.0; Y =0.0},None
     }, Cmd.map Wire cmdw

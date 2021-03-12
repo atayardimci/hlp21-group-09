@@ -278,8 +278,9 @@ let dragColor  = "Turquoise" // Old version DarkTurquoise
 let constColor = "lightgrey"
 let errorColor = "FireBrick"
 let busColor = "Purple"
-let drawLineColor = "OrangeRed"
-let portColor = "slategrey"
+let drawLineColor_const = "green"
+let drawLineColor_special = "royalblue"
+let portColor_const = "slategrey"
 
 
 let VerticalAdjustment = 7.5

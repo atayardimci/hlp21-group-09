@@ -42,7 +42,7 @@ type Model = {
     Color: CommonTypes.HighLightColor
     Countselected: int // Capitalize start of words
     Portlst: ConnectPoint list
-    PortToCursor : XYPos * XYPos
+    PortToCursor : XYPos * XYPos * Symbol.Port option
     }
 
 //----------------------------Message Type-----------------------------------//
@@ -56,7 +56,7 @@ type Msg =
     | Symbol of Symbol.Msg
     | SetColor of CommonTypes.HighLightColor
     | MouseMsg of MouseT
-    | DrawFromPortToCursor of XYPos*XYPos
+    | DrawFromPortToCursor of XYPos*XYPos* Symbol.Port option
     | AddWire of Symbol.Port*Symbol.Port
     | SelectWire of CommonTypes.ConnectionId*XYPos
     | DeleteWire
@@ -96,17 +96,23 @@ let selectBoundedWires (wModel: Model) (boundary: BoundingBox) =
             {wr with Selected = true}
         else wr
     List.map selectWireinBounds wModel.WX
-let drawLineToCursor (start : XYPos,final : XYPos) = 
+let drawLineToCursor (startPos : XYPos, endPos : XYPos, endPort : Symbol.Port option) = 
+
+    let drawLineColor,strokeWidth,strokeDashArray = 
+        match endPort with
+        | Some port -> drawLineColor_special, "5.0", "15.0 15.0"
+        | None -> drawLineColor_const, "2.0", "7.0 7.0"
+
     g   []
         [    
             line [
-                X1 start.X
-                Y1 start.Y
-                X2 final.X
-                Y2 final.Y
+                X1 startPos.X
+                Y1 startPos.Y
+                X2 endPos.X
+                Y2 endPos.Y
                 SVGAttr.Stroke drawLineColor
-                SVGAttr.StrokeWidth "2.0"
-                SVGAttr.StrokeDasharray "10.0 10.0"
+                SVGAttr.StrokeWidth strokeWidth
+                SVGAttr.StrokeDasharray strokeDashArray
         ] []
         ]
 
@@ -265,7 +271,8 @@ let view (model:Model) (dispatch: Msg -> unit)=
                 StrokeWidthP = "2px" }
             autosingleWireView props)
     let symbols = Symbol.view model.Symbol (fun sMsg -> dispatch (Symbol sMsg))
-    let lineToCursor= drawLineToCursor model.PortToCursor //ZACK ADDED THIS 
+    let lineToCursor= drawLineToCursor model.PortToCursor
+    
     g [] [(g [] wires) ; symbols; lineToCursor]
 
 /// dummy init for testing: real init would probably start with no wires.
@@ -274,7 +281,7 @@ let view (model:Model) (dispatch: Msg -> unit)=
 let init n () =
     let symbols, cmd = Symbol.init()
     let pointlst = List.map createpoint symbols    
-    {WX=[];Symbol=symbols; Color=CommonTypes.Red ; Countselected = 0 ; Portlst = pointlst; PortToCursor = ({X = 0.0; Y= 0.0},{X = 0.0; Y= 0.0})},Cmd.none 
+    {WX=[];Symbol=symbols; Color=CommonTypes.Red ; Countselected = 0 ; Portlst = pointlst; PortToCursor = ({X = 0.0; Y= 0.0},{X = 0.0; Y= 0.0}, None)},Cmd.none 
 
 let findSeg (cable: Wire) (pos: XYPos) =
     let inShape (b:BoundingBox) =
@@ -400,10 +407,10 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         let nwWlst =
             List.filter (notHighlighted) model.WX
         {model with WX = nwWlst} , Cmd.none
-    | DrawFromPortToCursor 
-        (startPos,endPos) -> {model with PortToCursor = (startPos,endPos)}, Cmd.none
+    | DrawFromPortToCursor (startPos,endPos,endPort) -> 
+        {model with PortToCursor = (startPos,endPos,endPort)}, Cmd.none
     | RemoveDrawnLine -> 
-        {model with PortToCursor = ({X = 0.0; Y = 0.0}, {X = 0.0; Y=0.0})}, Cmd.none //zack 
+        {model with PortToCursor = ({X = 0.0; Y = 0.0}, {X = 0.0; Y=0.0}, None)}, Cmd.none //zack 
     | SelectWiresWithinRegion bbox ->
         {model with WX =  selectBoundedWires (model) bbox},Cmd.none
 
