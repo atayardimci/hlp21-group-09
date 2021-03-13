@@ -330,7 +330,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                 Wire = newWireModel
                 SymIdList = []
             }
-        newModel, Cmd.ofMsg(UpdatePorts)
+        newModel, Cmd.batch [Cmd.ofMsg (UpdatePorts); Cmd.ofMsg (RenderPorts ([],true))]
        
     | KeyPress AltC  ->  //Duplicate of Symbols which then calls duplicateWire
         let symbolsToBeDup = Symbol.getSelectedSymbols(model.Wire.Symbol)
