@@ -18,14 +18,7 @@ type ConnectPoint = {
     Select: bool
 }
 
-/// type for buswires
-/// for demo only. The real wires will
-/// connect to Ports - not symbols, where each symbol has
-/// a number of ports (see Issie Component and Port types) and have
-/// extra information for highlighting, width, etc.`
-/// NB - how you define Ports for drawing - whether they correspond to
-/// a separate datatype and Id, or whether port offsets from
-/// component coordinates are held in some other way, is up to groups.
+
 type Wire = {
     Id: CommonTypes.ConnectionId 
     SrcSymbol: Symbol.Port
@@ -46,12 +39,6 @@ type Model = {
     }
 
 //----------------------------Message Type-----------------------------------//
-
-/// Messages to update buswire model
-/// These are OK for the demo - but not the correct messages for
-/// a production system. In the real system wires must connection
-/// to ports, not symbols. In addition there will be other changes needed
-/// for highlighting, width inference, etc
 type Msg =
     | Symbol of Symbol.Msg
     | SetColor of CommonTypes.HighLightColor
@@ -63,6 +50,7 @@ type Msg =
     | UpdatedPortsToBusWire of sId : Symbol.Port list
     | DeselectWire
     | DraggingWire of CommonTypes.ConnectionId*XYPos
+    | DuplicateWire of XYPos *Symbol.Port list
     | RemoveDrawnLine
     | SelectWiresWithinRegion of Helpers.BoundingBox
 
@@ -115,6 +103,7 @@ let drawLineToCursor (startPos : XYPos, endPos : XYPos, endPort : Symbol.Port op
                 SVGAttr.StrokeDasharray strokeDashArray
         ] []
         ]
+
 
 let pairListElements sequence = 
         let revseq = List.rev sequence
@@ -293,16 +282,34 @@ let findSeg (cable: Wire) (pos: XYPos) =
     | [false ; false ; false ; true ; false] -> 2
     | _ -> -1
 
-let createaWire (starter: Symbol.Port) (finisher: Symbol.Port) =
+let createWire (startPort: Symbol.Port) (endPort: Symbol.Port) (createDU : CreateDU) =
     {
         Id = CommonTypes.ConnectionId (uuid())
-        SrcSymbol = starter
-        TargetSymbol = finisher
-        Selected = false
+        SrcSymbol = startPort
+        TargetSymbol = endPort
+        Selected = if (createDU = Duplicate) then true else false
         BusWidth = 1 ;
         relativPositions = [{X=0.0 ; Y=0.0} ; origin ; origin]
         PrevPositions = [origin ; origin ; origin]
     }
+
+let duplicateWire (displacementPos : XYPos ) (wireList : Wire list) (portList : Symbol.Port list) : (Symbol.Port option *Symbol.Port option) list  =
+    
+    wireList
+    |> List.map (fun wire ->  
+
+                let sourcePort =  List.tryFind (fun (p : Symbol.Port)  ->  
+                                                let dist = calcDistance (posAdd (wire.SrcSymbol.Pos)(displacementPos)) p.Pos
+                                                (dist < 0.001) ) portList
+                                        
+                let endPort =  List.tryFind (fun (p : Symbol.Port)  ->  
+                                             let dist = calcDistance (posAdd (wire.TargetSymbol.Pos)(displacementPos)) p.Pos
+                                             (dist < 0.001) ) portList
+                (sourcePort,endPort)
+
+                )
+
+    
 
 let dragAWire (cable: Wire) (pos: XYPos) =
     let vLs = match vertexlstZero cable with
@@ -354,14 +361,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         let nwpts = List.map2 followCircle model.Symbol model.Portlst
         {model with Symbol=sm ; Portlst = nwpts}, Cmd.map Symbol sCmd
     | SetColor c -> {model with Color = c}, Cmd.none
-    | SelectWire (wId,p) -> 
-        //let updateWlist = model.WX
-          //                |> List.map (fun w ->
-            //                if (wId <> w.Id) then w
-              //              else {w with Selected = true}
-                //          )
-        //{model with WX = updateWlist} , Cmd.none
-        
+    | SelectWire (wId,p) ->         
         let clickedWire =
             List.map (fun w ->
                         if w.Id <> wId then w
@@ -385,7 +385,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         let updateNetList nLs = List.map newW nLs
         {model with WX = updateNetList model.WX} , Cmd.none
     | AddWire (s , f) -> 
-        let nwW = createaWire s f 
+        let nwW = createWire s f Init
         let addThisWire wLs= nwW::wLs
         {model with WX = addThisWire model.WX} , Cmd.none 
     | DeselectWire  ->
@@ -404,9 +404,24 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         {model with WX = nwWls model.WX} , Cmd.none
     | DeleteWire -> 
         let notHighlighted w = not w.Selected
-        let nwWlst =
+        let newWireList =
             List.filter (notHighlighted) model.WX
-        {model with WX = nwWlst} , Cmd.none
+        {model with WX = newWireList} , Cmd.none
+    | DuplicateWire (displacementPos,portList) ->
+        let selectedWireList =
+            List.filter (fun w -> w.Selected) model.WX
+        let dupWireList = duplicateWire displacementPos selectedWireList portList 
+        
+        let createDupWireList = 
+            dupWireList
+            |> List.map (fun w -> 
+                match w  with
+                | Some sourcePort , Some targetPort -> createWire sourcePort targetPort Duplicate
+                | _ , _ -> failwithf "Shouldn't happen")
+        
+        let newWireList  = model.WX @ createDupWireList
+        let newModel = {model with WX = newWireList}
+        newModel,Cmd.none
     | DrawFromPortToCursor (startPos,endPos,endPort) -> 
         {model with PortToCursor = (startPos,endPos,endPort)}, Cmd.none
     | RemoveDrawnLine -> 

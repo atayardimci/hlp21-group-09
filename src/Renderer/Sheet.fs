@@ -52,7 +52,6 @@ type Msg =
     | RenderPorts of sId : (float * Symbol.Port list) list * isHovering : bool
     | RenderOnePort of mousePos : XYPos* Symbol.Port option
     | UpdatePorts
-    | UpdatedPortsToBusWire of sId : Symbol.Port list
 
     | StartDrawingRegion of XYPos
     | DrawingRegion of pagePos : XYPos
@@ -60,10 +59,11 @@ type Msg =
 
     | SelectComponentsWithinRegion of Helpers.BoundingBox
     | DeselectAllSymbols
-    | DeselectWire 
+
     | RemoveDrawnLine 
 
-
+    | DuplicateWire of displacementPos : XYPos
+    | DeselectWire 
     | AddWire of Symbol.Port*Symbol.Port
     | SelectWire of CommonTypes.ConnectionId * XYPos    
     | DraggingWire of CommonTypes.ConnectionId option *XYPos
@@ -173,7 +173,6 @@ let private renderOnePort (mouseOnPort : XYPos * Symbol.Port option)(reElem : Re
         let mouseOnPortCircle = 
             match mouseOnPort with
             | (mousePos, Some port) when (calcDistance mousePos port.Pos < 10.0)->
-                                            //printf ("IM HERHERHERHEJKHQWEKJFCNASCAKSJDCNASKDJNSKDJCNACASKDJCNASKDJNKSJ")
                                             circle [Cx port.Pos.X; Cy port.Pos.Y ; R 14.0 ; SVGAttr.Fill "lightskyblue"
                                                     SVGAttr.Stroke "lightskyblue"; SVGAttr.StrokeWidth 0.8; SVGAttr.FillOpacity 0.3
                                                    ] []
@@ -328,6 +327,33 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                 SymIdList = []
             }
         newModel, Cmd.ofMsg(UpdatePorts)
+       
+    | KeyPress AltC  ->  //Duplicate Done in Sheet
+        let symbolsToBeDup = Symbol.getSelectedSymbols(model.Wire.Symbol)
+        let dupSymbol = Symbol.duplicateSymbol (symbolsToBeDup)
+        let newSymModel =
+            model.Wire.Symbol
+            |> List.map (fun sym -> {sym with IsSelected = false})
+            |> List.append (snd dupSymbol)
+
+        let displacement = fst dupSymbol
+
+
+        let newModel =  //Sym duplicated
+            { model with 
+                Wire = {model.Wire with Symbol = newSymModel}
+            }
+
+        newModel,Cmd.batch[Cmd.ofMsg(UpdatePorts); Cmd.ofMsg(DuplicateWire displacement)] //sends a message to BusWire to duplicate Wires
+
+    | DuplicateWire displacementPos -> 
+        let newBusModel, newMsg =
+            BusWire.update (BusWire.Msg.DuplicateWire (displacementPos,model.Ports)) model.Wire
+        let newModel =
+            { model with    
+                Wire = newBusModel
+            }
+        newModel,Cmd.none
    
     | KeyPress s -> // Updates Orientation Key Presses
         let newSymModel,newCmd =
@@ -338,6 +364,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             | AltShiftW -> Symbol.update (Symbol.Msg.UpdateOutputOrientation Top) model.Wire.Symbol
             | AltShiftS -> Symbol.update (Symbol.Msg.UpdateOutputOrientation Bottom) model.Wire.Symbol
             | AltShiftD -> Symbol.update (Symbol.Msg.UpdateOutputOrientation Right) model.Wire.Symbol
+            | AltQ -> Symbol.update (Symbol.Msg.ToggleError) model.Wire.Symbol
         
         let newModel = {
             model with
@@ -345,6 +372,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                 SymIdList = []
             }
         newModel, Cmd.ofMsg (UpdatePorts) 
+
 
        
     | RenderPorts (floatPortListTuple,isHovering) -> 
@@ -410,7 +438,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                 {model with 
                     IsPortDragging = false;
                     IdOfPortBeingDragged = "null";
-                 }, Cmd.batch ([Cmd.ofMsg(newMsg)])
+                 }, Cmd.batch ([Cmd.ofMsg(newMsg); Cmd.ofMsg(RemoveDrawnLine)])
         | _ -> 
                 {model with 
                     IsPortDragging = false;
@@ -419,18 +447,15 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
       
     | UpdatePorts  ->
         let newPorts = Symbol.getAllPorts (model.Wire.Symbol)
+        let newPorts = Symbol.getAllPorts (model.Wire.Symbol)
+        let newBusModel, newCmd = 
+            BusWire.update (BusWire.Msg.UpdatedPortsToBusWire newPorts) model.Wire
                     
         {model with 
             Ports = newPorts
-        }, Cmd.ofMsg (UpdatedPortsToBusWire newPorts)
-    
-    | UpdatedPortsToBusWire newPorts -> 
-        let newBusModel, newCmd = 
-                BusWire.update (BusWire.Msg.UpdatedPortsToBusWire newPorts) model.Wire
-        {model with
             Wire = newBusModel
         }, Cmd.none
-
+    
     | RemoveDrawnLine ->
         let newBusModel, newMsg = 
             BusWire.update (BusWire.Msg.RemoveDrawnLine) model.Wire

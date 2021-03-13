@@ -58,6 +58,11 @@ type PortDU =
     | Out
     | All
 
+type CreateDU =
+    | Init      //initialized
+    | Duplicate // duplicated
+    
+
 let posScaled (pos:XYPos) (zoom:float) = {X = pos.X/zoom; Y= pos.Y/zoom} 
 
 let posDiff a b =
@@ -79,7 +84,6 @@ let posOf x y = {X=x;Y=y}
 //--------------------------------------------------------------------------//
 //-----------------------------Helpers--------------------------------------//
 //--------------------------------------------------------------------------//
-//Zack
 let calcBBoxWithRadius (r:float) (pos: XYPos) = 
     {
       TopLeft=  {X = pos.X - r ; Y = pos.Y - r}
@@ -92,19 +96,16 @@ let calculateBoundingBox (h:float) (w:float) (pos:XYPos) =
         BottomRight = {X=pos.X + w ; Y=pos.Y + h}
     }
 
-//Zack
 let calcDistance (posOne : XYPos) (posTwo : XYPos) : float = 
     let distance = ( (posTwo.Y - posOne.Y)**2.0 + (posTwo.X - posOne.X)**2.0 ) ** (1.0/2.0)
     distance
 
-//Zack
 let createBBoxFromPos (firstPos : XYPos) (sndPos : XYPos) : BoundingBox = 
     let topLeftX,bottomRightX = if (firstPos.X < sndPos.X) then firstPos.X, sndPos.X else sndPos.X, firstPos.X
     let topLeftY,bottomRightY = if (firstPos.Y < sndPos.Y) then firstPos.Y, sndPos.Y else sndPos.Y, firstPos.Y
 
     {TopLeft = {X = topLeftX ; Y = topLeftY }; BottomRight = {X = bottomRightX ; Y = bottomRightY}}
 
-//Zack
 let calculateCenterFromBBox (bBox : BoundingBox) : XYPos =  
     let center = 
         {X = (bBox.TopLeft.X +  bBox.BottomRight.X) /2.0 ; Y = (bBox.TopLeft.Y + bBox.BottomRight.Y) / 2.0}
