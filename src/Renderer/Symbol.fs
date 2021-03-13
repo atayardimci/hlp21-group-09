@@ -239,11 +239,6 @@ let createSymbolWithPortOrientation (sym:Symbol) =
 
 
 
-
-
-
-
-
 //-----------------------Symbol Creation----------------------//
 
 /// Returns a symbol of given type with given name at the given position
@@ -275,18 +270,18 @@ let createNewSymbol (sType:CommonTypes.ComponentType) (name:string) (pos:XYPos) 
     }
 
 let duplicateSymbol (symList : Symbol list) : XYPos*Symbol list = 
-    let minX =
-        symList
-        |>List.minBy (fun sym -> sym.BBox.TopLeft.X)
-        |>(fun sym -> sym.BBox.TopLeft.X)
+    //let minX =
+    //    symList
+    //    |>List.minBy (fun sym -> sym.BBox.TopLeft.X)
+    //    |>(fun sym -> sym.BBox.TopLeft.X)
     let minY = 
         symList
         |>List.minBy (fun sym -> sym.BBox.TopLeft.Y)
         |>(fun sym -> sym.BBox.TopLeft.Y)
-    let maxX = 
-        symList
-        |>List.minBy (fun sym -> (-1.0)*(sym.BBox.TopLeft.X))
-        |>(fun sym -> sym.BBox.BottomRight.X)
+    //let maxX = 
+    //    symList
+    //    |>List.minBy (fun sym -> (-1.0)*(sym.BBox.TopLeft.X))
+    //    |>(fun sym -> sym.BBox.BottomRight.X)
     let maxY = 
         symList
         |>List.minBy (fun sym -> (-1.0)*(sym.BBox.TopLeft.Y))
@@ -1016,10 +1011,9 @@ let symbolPos (symModel: Model) (sId: CommonTypes.ComponentId) : XYPos =
     |> (fun sym -> sym.Pos)
 
 /// Returns the symbol with given Id
-let getSymbolWithId (symModel: Model) (sId: CommonTypes.ComponentId) : Symbol =
-    match List.tryFind (fun sym -> sym.Id = sId) symModel with
-    | Some sym -> sym
-    | None -> failwithf "Symbol with given Id not found"
+let getSymbolWithId (symModel: Model) (sId: CommonTypes.ComponentId) : Symbol option =
+    List.tryFind (fun sym -> sym.Id = sId) symModel 
+
 
 // Returns all Ports of all symbols in the model
 let getAllPorts (symModel: Model) : Port List =
@@ -1028,11 +1022,19 @@ let getAllPorts (symModel: Model) : Port List =
 
 // Returns the bounding box of the symbol with the given Id
 let getBoundingBoxOf (symModel: Model) (sId: CommonTypes.ComponentId) : BoundingBox =
-    (getSymbolWithId symModel sId).BBox
+    let sym = 
+        match (getSymbolWithId symModel sId) with
+        | Some sym -> sym
+        | None -> failwithf "Symbol with given Id not found"
+    
+    sym.BBox
     
 // Returns all ports of the symbol with the given Id
 let getPortOf (symModel: Model) (sId: CommonTypes.ComponentId) : Port list =
-    let sym = getSymbolWithId symModel sId
+    let sym = 
+        match (getSymbolWithId symModel sId) with
+        | Some sym -> sym
+        | None -> failwithf "Symbol with given Id not found"
     sym.InputPorts @ sym.OutputPorts
 
 
@@ -1052,7 +1054,10 @@ let updateSymbolModelWithComponent (symModel: Model) (comp:CommonTypes.Component
 /// If the buswidth information not known at symbol creation, None is returned.
 /// For memory symbols, the first element is the address width, and the second element is the width of the data
 let getBusWidthOf (symModel: Model) (sId: CommonTypes.ComponentId) : Option<int list> =
-    let sym = getSymbolWithId symModel sId
+    let sym = 
+        match (getSymbolWithId symModel sId) with
+        | Some sym -> sym
+        | None -> failwithf "Symbol with given Id not found"
     
     match sym.Type with
     | CommonTypes.ComponentType.Input w | CommonTypes.ComponentType.Output w 

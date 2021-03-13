@@ -247,7 +247,6 @@ let autosingleWireView =
 
 let view (model:Model) (dispatch: Msg -> unit)= 
     
-   // let conpoints = connectionlist model.Symbol
     let wires = 
         model.WX
         |> List.map (fun w ->
@@ -264,9 +263,7 @@ let view (model:Model) (dispatch: Msg -> unit)=
     
     g [] [(g [] wires) ; symbols; lineToCursor]
 
-/// dummy init for testing: real init would probably start with no wires.
-/// this initialisation is not realistic - ports are not used
-/// this initialisation depends on details of Symbol.Model type.
+
 let init n () =
     let symbols, cmd = Symbol.init()
     let pointlst = List.map createpoint symbols    
@@ -293,7 +290,7 @@ let createWire (startPort: Symbol.Port) (endPort: Symbol.Port) (createDU : Creat
         PrevPositions = [origin ; origin ; origin]
     }
 
-let duplicateWire (displacementPos : XYPos ) (wireList : Wire list) (portList : Symbol.Port list) : (Symbol.Port option *Symbol.Port option) list  =
+let getWiresToBeDuplicated (displacementPos : XYPos ) (wireList : Wire list) (portList : Symbol.Port list) : (Symbol.Port option *Symbol.Port option) list  =
     
     wireList
     |> List.map (fun wire ->  
@@ -348,9 +345,7 @@ let dragAWire (cable: Wire) (pos: XYPos) =
     |_ -> cable        
 
 let deleteWire (model: Model) (wName: CommonTypes.ConnectionId) =
-    let found conn =
-        conn.Id <> wName
-    List.filter (found) model.WX
+    List.filter (fun w -> w.Id <> wName) model.WX
 
 let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
     match msg with
@@ -403,14 +398,16 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                               ) 
         {model with WX = nwWls model.WX} , Cmd.none
     | DeleteWire -> 
-        let notHighlighted w = not w.Selected
         let newWireList =
-            List.filter (notHighlighted) model.WX
+            model.WX
+            |>List.filter (fun w -> w.Selected = false ) 
+            |>List.filter (fun w -> Symbol.getSymbolWithId (model.Symbol) (w.SrcSymbol.HostId) <> None )
+            |>List.filter (fun w -> Symbol.getSymbolWithId (model.Symbol) (w.TargetSymbol.HostId) <> None) 
         {model with WX = newWireList} , Cmd.none
     | DuplicateWire (displacementPos,portList) ->
         let selectedWireList =
             List.filter (fun w -> w.Selected) model.WX
-        let dupWireList = duplicateWire displacementPos selectedWireList portList 
+        let dupWireList = getWiresToBeDuplicated displacementPos selectedWireList portList 
         
         let createDupWireList = 
             dupWireList
@@ -418,8 +415,12 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                 match w  with
                 | Some sourcePort , Some targetPort -> createWire sourcePort targetPort Duplicate
                 | _ , _ -> failwithf "Shouldn't happen")
-        
-        let newWireList  = model.WX @ createDupWireList
+
+        let newWireList  = 
+            model.WX
+            |> List.map (fun w -> {w with Selected = false})
+            |> List.append createDupWireList
+            
         let newModel = {model with WX = newWireList}
         newModel,Cmd.none
     | DrawFromPortToCursor (startPos,endPos,endPort) -> 

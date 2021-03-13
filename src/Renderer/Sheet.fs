@@ -311,16 +311,20 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
     | Wire wMsg -> 
         let wModel, wCmd = BusWire.update wMsg model.Wire
         {model with Wire = wModel}, Cmd.map Wire wCmd
+    
 
-    | KeyPress DEL -> 
+    | KeyPress DEL ->  
         let SymModel, newCmd = 
-            Symbol.update Symbol.Msg.DeleteSymbols model.Wire.Symbol
-        let WireModel, wireCmd = 
-            BusWire.update BusWire.Msg.DeleteWire model.Wire
-        let newWireModel = 
-            { WireModel with
-               Symbol = SymModel
+            Symbol.update Symbol.Msg.DeleteSymbols model.Wire.Symbol  
+
+        let newModel = 
+            { model with
+                 Wire = {model.Wire with Symbol = SymModel}
             }
+
+        let newWireModel, wireCmd = 
+            BusWire.update BusWire.Msg.DeleteWire newModel.Wire
+
         let newModel = 
             { model with 
                 Wire = newWireModel
@@ -328,7 +332,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             }
         newModel, Cmd.ofMsg(UpdatePorts)
        
-    | KeyPress AltC  ->  //Duplicate Done in Sheet
+    | KeyPress AltC  ->  //Duplicate of Symbols which then calls duplicateWire
         let symbolsToBeDup = Symbol.getSelectedSymbols(model.Wire.Symbol)
         let dupSymbol = Symbol.duplicateSymbol (symbolsToBeDup)
         let newSymModel =
@@ -391,6 +395,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             IdOfPortBeingDragged = startPort.Id
         }, Cmd.none
 
+
     | DraggingPort (mousePos) -> 
         let draggedPort = tryFindPortByPortId model.IdOfPortBeingDragged model.Ports
         let port = 
@@ -446,7 +451,6 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                 }, Cmd.ofMsg (RemoveDrawnLine)
       
     | UpdatePorts  ->
-        let newPorts = Symbol.getAllPorts (model.Wire.Symbol)
         let newPorts = Symbol.getAllPorts (model.Wire.Symbol)
         let newBusModel, newCmd = 
             BusWire.update (BusWire.Msg.UpdatedPortsToBusWire newPorts) model.Wire
