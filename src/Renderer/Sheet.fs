@@ -328,95 +328,25 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                 SymIdList = []
             }
         newModel, Cmd.ofMsg(UpdatePorts)
-    
-    | KeyPress AltA -> 
-        let newSymModel, newCmd = 
-            Symbol.update (Symbol.Msg.UpdateInputOrientation Left) model.Wire.Symbol
-        let newModel = 
-            { model with 
-                Wire = {model.Wire with Symbol = newSymModel}
-                SymIdList = []
-            }
-        newModel, Cmd.ofMsg(UpdatePorts)
-    
-    | KeyPress AltW -> 
-        let newSymModel, newCmd = 
-            Symbol.update (Symbol.Msg.UpdateInputOrientation Top) model.Wire.Symbol
-        let newModel =
-            { model with 
-                Wire = {model.Wire with Symbol = newSymModel}
-                SymIdList = []
-            }
-        newModel, Cmd.ofMsg(UpdatePorts)
-    
-    | KeyPress AltS -> 
-        let newSymModel, newCmd = 
-            Symbol.update (Symbol.Msg.UpdateInputOrientation Bottom) model.Wire.Symbol
-        let newModel = 
-            { model with 
-                Wire = {model.Wire with Symbol = newSymModel}
-                SymIdList = []
-            }
-        newModel, Cmd.ofMsg(UpdatePorts)
-
-    
-    | KeyPress AltShiftW -> 
-        let newSymModel, newCmd = 
-            Symbol.update (Symbol.Msg.UpdateOutputOrientation Top) model.Wire.Symbol
-        let newModel = 
-            { model with 
-                Wire = {model.Wire with Symbol = newSymModel}
-                SymIdList = []
-            }
-        newModel, Cmd.ofMsg(UpdatePorts)
-    
-    | KeyPress AltShiftS -> 
-        let newSymModel, newCmd = 
-            Symbol.update (Symbol.Msg.UpdateOutputOrientation Bottom) model.Wire.Symbol
+   
+    | KeyPress s -> // Updates Orientation Key Presses
+        let newSymModel,newCmd =
+            match s with 
+            | AltA -> Symbol.update (Symbol.Msg.UpdateInputOrientation Left) model.Wire.Symbol
+            | AltW -> Symbol.update (Symbol.Msg.UpdateInputOrientation Top) model.Wire.Symbol
+            | AltS -> Symbol.update (Symbol.Msg.UpdateInputOrientation Bottom) model.Wire.Symbol
+            | AltShiftW -> Symbol.update (Symbol.Msg.UpdateOutputOrientation Top) model.Wire.Symbol
+            | AltShiftS -> Symbol.update (Symbol.Msg.UpdateOutputOrientation Bottom) model.Wire.Symbol
+            | AltShiftD -> Symbol.update (Symbol.Msg.UpdateOutputOrientation Right) model.Wire.Symbol
         
-        let newModel = 
-            { model with 
+        let newModel = {
+            model with
                 Wire = {model.Wire with Symbol = newSymModel}
                 SymIdList = []
             }
-        newModel, Cmd.ofMsg(UpdatePorts)
+        newModel, Cmd.ofMsg (UpdatePorts) 
 
-    | KeyPress AltShiftD -> 
-        let newSymModel, newCmd = 
-            Symbol.update (Symbol.Msg.UpdateOutputOrientation Right) model.Wire.Symbol
-        let newModel = 
-            { model with 
-                Wire = {model.Wire with Symbol = newSymModel}
-                SymIdList = []
-            }
-        newModel, Cmd.ofMsg(UpdatePorts)    
-
-    | KeyPress AltQ ->  
-        let newSymModel, newCmd = 
-            Symbol.update (Symbol.Msg.ToggleError) model.Wire.Symbol
-        let newModel = 
-            { model with 
-                Wire = {model.Wire with Symbol = newSymModel}
-                SymIdList = []
-            }
-        newModel, Cmd.ofMsg(UpdatePorts)
-
-
-        
-    | KeyPress AltShiftZ -> 
-        let nCanvas = {model.Canvas with zoom = 1.0}
-        {model with Canvas = nCanvas}, Cmd.none
-
-    | KeyPress s -> // all other keys are turned into SetColor commands
-        let c =
-            match s with
-            | AltC -> CommonTypes.Blue
-            | AltV -> CommonTypes.Green
-            | AltZ -> CommonTypes.Red
-            | _ -> CommonTypes.Grey
-        printfn "Key:%A" c
-        model, Cmd.ofMsg (BusWire.SetColor c |> Wire) //Cmd.ofMsg used to chain commands
-
+       
     | RenderPorts (floatPortListTuple,isHovering) -> 
         match model.SymIdList with
         | [] when isHovering = true -> {model with HoveringPortsToBeRendered = floatPortListTuple}, Cmd.none
