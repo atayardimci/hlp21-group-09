@@ -50,9 +50,9 @@ type Model = Symbol list
 
 type Msg =
     | MouseMsg of MouseT
-    | StartDragging of sIdList: CommonTypes.ComponentId list * pagePos: XYPos
-    | Dragging of sIdList : CommonTypes.ComponentId list * pagePos: XYPos
-    | EndDragging of sIdList : CommonTypes.ComponentId list
+    //| StartDragging of sIdList: CommonTypes.ComponentId list * pagePos: XYPos
+    //| Dragging of sIdList : CommonTypes.ComponentId list * pagePos: XYPos
+    //| EndDragging of sIdList : CommonTypes.ComponentId list
     | AddSymbol of sType:CommonTypes.ComponentType * pos:XYPos // used by demo code to add a circle
     | DeleteSymbols
     | DeselectAllSymbols
@@ -94,6 +94,10 @@ let selectSymbolsInRegion (symModel: Model) (box: BoundingBox) : Model =
     symModel
     |> List.map (fun sym -> if doesCollide sym.BBox then {sym with IsSelected = true} else sym)
 
+/// Render a ruler to assist in assigning the symbols
+// fun (symbollist ) () go throughs the symbol list to find top left X = current topLeft = x 
+//let renderRuler (symList : Symbol list) (BBox : BoundingBox) 
+//    //
 
 //---------------------------------helper types and functions----------------//
 
@@ -324,18 +328,11 @@ let createNewSymbol (sType:CommonTypes.ComponentType) (name:string) (pos:XYPos) 
     }
 
 let duplicateSymbol (symList : Symbol list) : XYPos*Symbol list = 
-    //let minX =
-    //    symList
-    //    |>List.minBy (fun sym -> sym.BBox.TopLeft.X)
-    //    |>(fun sym -> sym.BBox.TopLeft.X)
     let minY = 
         symList
         |>List.minBy (fun sym -> sym.BBox.TopLeft.Y)
         |>(fun sym -> sym.BBox.TopLeft.Y)
-    //let maxX = 
-    //    symList
-    //    |>List.minBy (fun sym -> (-1.0)*(sym.BBox.TopLeft.X))
-    //    |>(fun sym -> sym.BBox.BottomRight.X)
+
     let maxY = 
         symList
         |>List.minBy (fun sym -> (-1.0)*(sym.BBox.TopLeft.Y))
@@ -401,45 +398,48 @@ let init () =
 
 
 
-let startDraggingSymbol pagePos model sId  =
-    model
-    |> List.map (fun sym ->
-            if sId <> sym.Id then
-                sym
-            else
-                { sym with
-                    LastDragPos = pagePos
-                    IsDragging = true
-                }
-        )
-let draggingSymbol pagePos model sId  = 
-    model
-    |> List.map (fun sym ->
-        if sId <> sym.Id then
-            sym
-        else
-            let diff = posDiff pagePos sym.LastDragPos
-            { sym with
-                Pos = posAdd sym.Pos diff
-                InputPorts = sym.InputPorts |> List.map (fun port -> {port with Pos = posAdd port.Pos diff ; BBox = calcBBoxWithRadius 5. (posAdd port.Pos diff)}) 
-                OutputPorts = sym.OutputPorts |> List.map (fun port -> {port with Pos = posAdd port.Pos diff ; BBox = calcBBoxWithRadius 5. (posAdd port.Pos diff)})
-                LastDragPos = pagePos
-                BBox = {
-                    TopLeft = (posAdd sym.BBox.TopLeft diff) 
-                    BottomRight = (posAdd sym.BBox.BottomRight diff)
-                }
-            }
-    )
-let endDraggingSymbol model sId =
-    model
-    |> List.map (fun sym ->
-        if sId <> sym.Id then 
-            sym
-        else
-            { sym with
-                IsDragging = false 
-            }
-    )
+//let startDraggingSymbol pagePos model sId  =
+//    model
+//    |> List.map (fun sym ->
+//            if sId <> sym.Id then
+//                sym
+//            else
+//                { sym with
+//                    LastDragPos = pagePos
+//                    IsDragging = true
+//                }
+//        )
+//let draggingSymbol pagePos model sId  = 
+//    model
+//    |> List.map (fun sym ->
+//        if sId <> sym.Id then
+//            sym
+//        else
+//            let diff = posDiff pagePos sym.LastDragPos
+                     
+//            { sym with
+//                Pos = posAdd sym.Pos diff
+//                InputPorts = sym.InputPorts |> List.map (fun port -> {port with Pos = posAdd port.Pos diff ; BBox = calcBBoxWithRadius 5. (posAdd port.Pos diff)}) 
+//                OutputPorts = sym.OutputPorts |> List.map (fun port -> {port with Pos = posAdd port.Pos diff ; BBox = calcBBoxWithRadius 5. (posAdd port.Pos diff)})
+//                LastDragPos = pagePos
+//                BBox = {
+//                    TopLeft = (posAdd sym.BBox.TopLeft diff) 
+//                    BottomRight = (posAdd sym.BBox.BottomRight diff)
+//                }
+//            }
+//              // fun (symbollist ) () go throughs the symbol list to find top left X = current topLeft = x 
+
+//    )
+//let endDraggingSymbol model sId =
+//    model
+//    |> List.map (fun sym ->
+//        if sId <> sym.Id then 
+//            sym
+//        else
+//            { sym with
+//                IsDragging = false 
+//            }
+//    )
 
 
 
@@ -454,22 +454,6 @@ let update (msg : Msg) (model : Model): Model*Cmd<'a> =
         model |> List.filter (fun sym -> not (List.contains sym.Id selectedIds))
         , Cmd.none
 
-    | StartDragging (sIdList, pagePos) ->
-        (model, sIdList)
-        ||> List.fold (startDraggingSymbol pagePos)
-        |> List.map (fun sym -> if List.contains sym.Id sIdList then {sym with IsSelected = true} else sym)
-        , Cmd.none
-
-    | Dragging (sIdList, pagePos) ->
-        (model, sIdList)
-        ||> List.fold (draggingSymbol pagePos)
-        , Cmd.none
-        
-    | EndDragging sIdList ->
-        (model, sIdList)
-        ||> List.fold (endDraggingSymbol)
-        , Cmd.none
-    
     | DeselectAllSymbols ->
         model
         |> List.map (fun sym -> {sym with IsSelected = false})
@@ -1039,9 +1023,6 @@ let view (model : Model) (dispatch : Msg -> unit) =
 
 
 
-
-
-
 //---------------Other interface functions--------------------//
 
 let symbolPos (symModel: Model) (sId: CommonTypes.ComponentId) : XYPos = 
@@ -1075,10 +1056,13 @@ let getPortOf (symModel: Model) (sId: CommonTypes.ComponentId) : Port list =
         | None -> failwithf "Symbol with given Id not found"
     sym.InputPorts @ sym.OutputPorts
 
-
+// let getBusWidthOfPortWithId () ->>> we need an interface function 
     
 
-
+let getOrientationOfPort (symModel: Model) (port:Port) : PortOrientation = 
+    match getSymbolWithId symModel port.HostId with
+    | Some sym -> if port.PortType = CommonTypes.PortType.Input then sym.InputOrientation else sym.OutputOrientation
+    | _ -> failwithf "The hosting symbol of the given port is not found"
 
 
 
