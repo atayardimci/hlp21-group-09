@@ -18,6 +18,7 @@ type Port =
         Pos : XYPos
         BBox : BoundingBox
         IsDragging : bool
+        BusWidth : int Option
     }
 
 type Symbol =
@@ -181,9 +182,55 @@ let getPortPositions sType pos =
     | CommonTypes.ComponentType.Custom spec -> getRegularPortPositions (Left, Right) spec.InputLabels.Length spec.OutputLabels.Length h w pos
     // | _ -> failwithf "Shouldn't happen"
 
+
+
+
+let getBusWidthOfPort (sType:CommonTypes.ComponentType) (portType:CommonTypes.PortType) (portNumber:int) : int Option = 
+    match sType with
+    | CommonTypes.ComponentType.Input w -> Some w
+    | CommonTypes.ComponentType.Output w -> Some w
+    | CommonTypes.ComponentType.IOLabel -> None
+    | CommonTypes.ComponentType.Constant (w, v) -> Some w
+    | CommonTypes.ComponentType.BusSelection (w, lsb) -> if portType = CommonTypes.PortType.Input then None else Some w
+    | CommonTypes.ComponentType.BusCompare (w, v) -> if portType = CommonTypes.PortType.Input then Some w else Some 1
+    | CommonTypes.ComponentType.Not | CommonTypes.ComponentType.Nand 
+    | CommonTypes.ComponentType.Nor | CommonTypes.ComponentType.Xnor 
+    | CommonTypes.ComponentType.And | CommonTypes.ComponentType.Or   
+    | CommonTypes.ComponentType.Xor -> Some 1
+    | CommonTypes.ComponentType.Decode4 -> if portType = CommonTypes.PortType.Input && portNumber = 0 then Some 2 else Some 1
+    | CommonTypes.ComponentType.Mux2 -> if portType = CommonTypes.PortType.Input && portNumber = 2 then Some 1 else None
+    | CommonTypes.ComponentType.Demux2 -> if portType = CommonTypes.PortType.Input && portNumber = 1 then Some 1 else None
+    | CommonTypes.ComponentType.NbitsAdder w -> 
+        match portType with 
+        | CommonTypes.PortType.Input when portNumber = 0 -> Some 1
+        | CommonTypes.PortType.Output when portNumber = 1 -> Some 1
+        | _ -> Some w
+    | CommonTypes.ComponentType.NbitsXor w -> Some w
+    | CommonTypes.ComponentType.MergeWires -> None
+    | CommonTypes.ComponentType.SplitWire w -> if portType = CommonTypes.PortType.Output && portNumber = 0 then Some w else None
+    | CommonTypes.ComponentType.DFF | CommonTypes.ComponentType.DFFE -> Some 1
+    | CommonTypes.ComponentType.Register w -> Some w
+    | CommonTypes.ComponentType.RegisterE w -> if portType = CommonTypes.PortType.Input && portNumber = 1 then Some 1 else Some w
+    | CommonTypes.ComponentType.AsyncROM memo | CommonTypes.ComponentType.ROM memo 
+        -> if portType = CommonTypes.PortType.Input then Some memo.AddressWidth else Some memo.WordWidth
+    | CommonTypes.ComponentType.RAM memo -> 
+        match portType with 
+        | CommonTypes.PortType.Input when portNumber = 2 -> Some 1
+        | CommonTypes.PortType.Input when portNumber = 0 -> Some memo.AddressWidth
+        | _ -> Some memo.WordWidth
+    | CommonTypes.ComponentType.Custom spec -> 
+        match portType with 
+        | CommonTypes.PortType.Input -> Some (snd spec.InputLabels.[portNumber])
+        | _                          -> Some (snd spec.OutputLabels.[portNumber])
+    // | _ -> failwithf "Shouldn't happen"
+
+
+
+
+
 /// Returns the input and output ports using the hostId of the symbol 
 /// together with the input and output ports position lists
-let getPorts hostId inputPortsPosList outputPortsPosList = 
+let getPorts (sType:CommonTypes.ComponentType) hostId inputPortsPosList outputPortsPosList = 
     let inputPorts = 
         inputPortsPosList
         |> List.mapi (fun idx pos -> 
@@ -195,6 +242,7 @@ let getPorts hostId inputPortsPosList outputPortsPosList =
                 Pos = pos
                 BBox = calcBBoxWithRadius 6.0 pos
                 IsDragging = false
+                BusWidth = getBusWidthOfPort sType CommonTypes.PortType.Input idx
             }
         )
     let outputPorts = 
@@ -208,6 +256,7 @@ let getPorts hostId inputPortsPosList outputPortsPosList =
                 Pos = pos
                 BBox = calcBBoxWithRadius 6.0 pos
                 IsDragging = false
+                BusWidth = getBusWidthOfPort sType CommonTypes.PortType.Output idx
             }
         )
     inputPorts, outputPorts
@@ -251,7 +300,7 @@ let createNewSymbol (sType:CommonTypes.ComponentType) (name:string) (pos:XYPos) 
     let h, w = (getHeightWidthOf sType)
     let hostId = CommonTypes.ComponentId (uuid())
     let inputPortsPosList, outputPortsPosList = getPortPositions sType pos
-    let inputPorts, outputPorts = getPorts hostId inputPortsPosList outputPortsPosList
+    let inputPorts, outputPorts = getPorts sType hostId inputPortsPosList outputPortsPosList
     {
         Id = hostId // create a unique id for this symbol
         Type = sType
@@ -1088,7 +1137,7 @@ let createSymbolFromComponent (comp:CommonTypes.Component) (pos:XYPos) : Symbol 
     let h, w = getHeightWidthOf comp.Type
     let hostId = CommonTypes.ComponentId comp.Id
     let inputPortsPosList, outputPortsPosList = getPortPositions comp.Type pos
-    let inputPorts, outputPorts = getPorts hostId inputPortsPosList outputPortsPosList
+    let inputPorts, outputPorts = getPorts comp.Type hostId inputPortsPosList outputPortsPosList
     {
         Id = hostId 
         Type = comp.Type
