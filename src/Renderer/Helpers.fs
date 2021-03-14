@@ -263,7 +263,7 @@ let canvasUnscaledDimensions : XYPos =
     {X = 1000. ; Y = 1000.}
 
 //let dragColor  = "DarkKhaki" // Old version DarkTurquoise
-let dragColor  = "Turquoise" // Old version DarkTurquoise
+let dragColor  = "Turquoise" 
 let constColor = "lightgrey"
 let errorColor = "FireBrick"
 let busColor = "Purple"
