@@ -100,6 +100,49 @@ let tryFindPortByPortId (id : string) (ports : Symbol.Port list) : Symbol.Port o
 
     List.tryFind(findPortByPortId id) ports
 
+let startDraggingSymbol (pagePos: XYPos)  (model : Symbol.Symbol list) sId  =
+    model
+    |> List.map (fun sym ->
+            if sId <> sym.Id then
+                sym
+            else
+                { sym with
+                    LastDragPos = pagePos
+                    IsDragging = true
+                }
+        )
+let draggingSymbol (pagePos: XYPos)  (model : Symbol.Symbol list) sId  = 
+    model
+    |> List.map (fun sym ->
+        if sId <> sym.Id then
+            sym
+        else
+            let diff = posDiff pagePos sym.LastDragPos
+                     
+            { sym with
+                Pos = posAdd sym.Pos diff
+                InputPorts = sym.InputPorts |> List.map (fun port -> {port with Pos = posAdd port.Pos diff ; BBox = calcBBoxWithRadius 5. (posAdd port.Pos diff)}) 
+                OutputPorts = sym.OutputPorts |> List.map (fun port -> {port with Pos = posAdd port.Pos diff ; BBox = calcBBoxWithRadius 5. (posAdd port.Pos diff)})
+                LastDragPos = pagePos
+                BBox = {
+                    TopLeft = (posAdd sym.BBox.TopLeft diff) 
+                    BottomRight = (posAdd sym.BBox.BottomRight diff)
+                }
+            }
+              // fun (symbollist ) () go throughs the symbol list to find top left X = current topLeft = x 
+
+    )
+let endDraggingSymbol (model : Symbol.Symbol list) sId =
+    model
+    |> List.map (fun sym ->
+        if sId <> sym.Id then 
+            sym
+        else
+            { sym with
+                IsDragging = false 
+            }
+    )
+
 
 let findPortsMatchingHostId (portList: Symbol.Port list) (portDU : Helpers.PortDU) (dist : float , hostId : CommonTypes.ComponentId)  : (float * Symbol.Port list) =  //input output or both
 
@@ -551,31 +594,35 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         , Cmd.ofMsg (RemoveDrawnLine)
 
     | StartDragging (sIdList, pagePos) ->
-        let newSymModel, newCmd = 
-            Symbol.update (Symbol.Msg.StartDragging (sIdList, pagePos)) model.Wire.Symbol
-        
+        let newSymModel = 
+            (model.Wire.Symbol, sIdList)
+            ||> List.fold (startDraggingSymbol pagePos)
+            |> List.map (fun sym -> if List.contains sym.Id sIdList then {sym with IsSelected = true} else sym)
+
         { model with 
             Wire = {model.Wire with Symbol = newSymModel}
             SymIdList = sIdList
         }
         , Cmd.batch [Cmd.ofMsg(RenderPorts ([],false) );] //render no ports
 
-    | Dragging (rank, pagePos) ->
-        let newSymModel, newCmd = 
-            Symbol.update (Symbol.Msg.Dragging (rank, pagePos)) model.Wire.Symbol
+    | Dragging (sIdList, pagePos) ->
+        let newSymModel = 
+            (model.Wire.Symbol, sIdList)
+            ||> List.fold (draggingSymbol pagePos)
         { model with 
             Wire = {model.Wire with Symbol = newSymModel}
         }
         , Cmd.ofMsg (UpdatePorts)
 
-    | EndDragging sId ->
-        let newSymModel, newCmd = 
-            Symbol.update (Symbol.Msg.EndDragging sId) model.Wire.Symbol
+    | EndDragging sIdList ->
+        let newSymModel = 
+             (model.Wire.Symbol, sIdList)
+             ||> List.fold (endDraggingSymbol)
         { model with 
             Wire = {model.Wire with Symbol = newSymModel}
             SymIdList = []
         }
-        , newCmd
+        ,Cmd.none
 
     | DeselectAllSymbols  ->
         let newSymModel, newCmd = 
