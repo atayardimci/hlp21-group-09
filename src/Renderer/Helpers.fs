@@ -163,18 +163,6 @@ let getSplitWirePortPositions (h:float) (w:float) (pos:XYPos) =
     let out1 = {X=pos.X + w ; Y=pos.Y + h}
     [in0], [out0; out1]
 
-let getDFFEPortPositions (h:float) (w:float) (pos:XYPos) =
-    let in0  = {X=pos.X        ; Y=pos.Y + h/2.}
-    let in1  = {X=pos.X + w/2. ; Y=pos.Y + h}
-    let out0 = {X=pos.X + w    ; Y=pos.Y + h/2.}
-    [in0; in1], [out0]
-let getRegisterEPortPositions (h:float) (w:float) (pos:XYPos) =
-    let in0  = {X=pos.X        ; Y=pos.Y + h/2.}
-    let in1  = {X=pos.X + w/2. ; Y=pos.Y + h}
-    let out0 = {X=pos.X + w    ; Y=pos.Y + h/2.}
-    [in0; in1], [out0]
-
-
 let getPositionsOn portOrientation numOfPorts h w pos =
     match portOrientation with
     | Left -> 
@@ -190,7 +178,7 @@ let getPositionsOn portOrientation numOfPorts h w pos =
         let lengthBetween = w / float (numOfPorts+1)
         [1..numOfPorts] |> List.map ((fun n -> float n * lengthBetween) >> (fun num -> {X=pos.X + num ; Y=pos.Y + h}))
 
-let getRectPortPositions (portOrientationIn, portOrientationOut) (nIn:int) (nOut:int) (h:float) (w:float) (pos:XYPos) =
+let getRegularPortPositions (portOrientationIn, portOrientationOut) (nIn:int) (nOut:int) (h:float) (w:float) (pos:XYPos) =
     let inputs =
         match portOrientationIn with 
         | Top -> getPositionsOn Top nIn h w pos

@@ -101,12 +101,13 @@ let getHeightWidthOf (sType:CommonTypes.ComponentType) =
     match sType with
     | CommonTypes.ComponentType.Input _ | CommonTypes.ComponentType.Output _ | CommonTypes.ComponentType.IOLabel -> 20., 30. 
     | CommonTypes.ComponentType.Constant _ -> 20., 39.6
-    | CommonTypes.ComponentType.BusSelection _ -> 24., 45.
+    | CommonTypes.ComponentType.BusSelection _ | CommonTypes.ComponentType.BusCompare _ -> 24., 45.
     | CommonTypes.ComponentType.Not | CommonTypes.ComponentType.Nand | CommonTypes.ComponentType.Nor | CommonTypes.ComponentType.Xnor -> 35., 49.
     | CommonTypes.ComponentType.And | CommonTypes.ComponentType.Or | CommonTypes.ComponentType.Xor -> 35., 40.
     | CommonTypes.ComponentType.Decode4 -> 110., 90. 
     | CommonTypes.ComponentType.Mux2 | CommonTypes.ComponentType.Demux2 -> 50., 30. 
-    | CommonTypes.ComponentType.NbitsAdder _ -> 110., 90. 
+    | CommonTypes.ComponentType.NbitsAdder _ 
+    | CommonTypes.ComponentType.NbitsXor _ -> 110., 90. 
     | CommonTypes.ComponentType.MergeWires | CommonTypes.ComponentType.SplitWire _ -> 30., 40. 
     | CommonTypes.ComponentType.DFF | CommonTypes.ComponentType.DFFE -> 70., 80.
     | CommonTypes.ComponentType.Register _ | CommonTypes.ComponentType.RegisterE _ -> 70., 120.
@@ -132,11 +133,13 @@ let initialNameOfComponent (model : Model) (sType:CommonTypes.ComponentType) =
     | CommonTypes.ComponentType.IOLabel -> sprintf $"IO{count}"
     | CommonTypes.ComponentType.Constant _ -> sprintf $"C{count}"
     | CommonTypes.ComponentType.BusSelection _ -> sprintf $"B{count}"
+    | CommonTypes.ComponentType.BusCompare _ -> sprintf $"EQ{count}"
     | CommonTypes.ComponentType.Not | CommonTypes.ComponentType.Nand | CommonTypes.ComponentType.Nor | CommonTypes.ComponentType.Xnor
     | CommonTypes.ComponentType.And | CommonTypes.ComponentType.Or | CommonTypes.ComponentType.Xor -> sprintf $"G{count}"
     | CommonTypes.ComponentType.Mux2 -> sprintf $"MUX{count}"
     | CommonTypes.ComponentType.Demux2 -> sprintf $"DM{count}"
     | CommonTypes.ComponentType.NbitsAdder _ -> sprintf $"A{count}"
+    | CommonTypes.ComponentType.NbitsXor _ -> sprintf $"XOR{count}"
     | CommonTypes.ComponentType.DFF -> sprintf $"FF{count}"
     | CommonTypes.ComponentType.DFFE -> sprintf $"FFE{count}"
     | CommonTypes.ComponentType.Register _ -> sprintf $"REG{count}"
@@ -153,27 +156,29 @@ let getPortPositions sType pos =
     let h, w = getHeightWidthOf sType
     match sType with
     | CommonTypes.ComponentType.Input _ 
-    | CommonTypes.ComponentType.Constant _ -> getRectPortPositions (Left, Right) 0 1 h w pos
-    | CommonTypes.ComponentType.Output _ -> getRectPortPositions (Left, Right) 1 0 h w pos
+    | CommonTypes.ComponentType.Constant _ -> getRegularPortPositions (Left, Right) 0 1 h w pos
+    | CommonTypes.ComponentType.Output _ -> getRegularPortPositions (Left, Right) 1 0 h w pos
     | CommonTypes.ComponentType.IOLabel
-    | CommonTypes.ComponentType.BusSelection _ -> getRectPortPositions (Left, Right) 1 1 h w pos
-    | CommonTypes.ComponentType.Not -> getRectPortPositions (Left, Right) 1 1 h w pos
+    | CommonTypes.ComponentType.BusSelection _ 
+    | CommonTypes.ComponentType.BusCompare _ -> getRegularPortPositions (Left, Right) 1 1 h w pos
+    | CommonTypes.ComponentType.Not -> getRegularPortPositions (Left, Right) 1 1 h w pos
     | CommonTypes.ComponentType.Nand | CommonTypes.ComponentType.Nor | CommonTypes.ComponentType.Xnor -> getGatePortPositions Left true h w pos
     | CommonTypes.ComponentType.And | CommonTypes.ComponentType.Or   | CommonTypes.ComponentType.Xor -> getGatePortPositions Left false h w pos
-    | CommonTypes.ComponentType.Decode4 -> getRectPortPositions (Left, Right) 2 4 h w pos
+    | CommonTypes.ComponentType.Decode4 -> getRegularPortPositions (Left, Right) 2 4 h w pos
     | CommonTypes.ComponentType.Mux2 -> getMux2PortPositions h w pos
     | CommonTypes.ComponentType.Demux2 -> getDemux2PortPositions h w pos
-    | CommonTypes.ComponentType.NbitsAdder _ -> getRectPortPositions (Left, Right) 3 2 h w pos
+    | CommonTypes.ComponentType.NbitsAdder _ -> getRegularPortPositions (Left, Right) 3 2 h w pos
+    | CommonTypes.ComponentType.NbitsXor _ -> getRegularPortPositions (Left, Right) 2 1 h w pos
     | CommonTypes.ComponentType.MergeWires _ -> getMergeWiresPortPositions h w pos
     | CommonTypes.ComponentType.SplitWire _ -> getSplitWirePortPositions h w pos
-    | CommonTypes.ComponentType.DFF -> getRectPortPositions (Left, Right) 1 1 h w pos
-    | CommonTypes.ComponentType.DFFE -> getDFFEPortPositions h w pos
-    | CommonTypes.ComponentType.Register _ -> getRectPortPositions (Left, Right) 1 1 h w pos
-    | CommonTypes.ComponentType.RegisterE _ -> getRegisterEPortPositions h w pos
-    | CommonTypes.ComponentType.AsyncROM _ -> getRectPortPositions (Left, Right) 1 1 h w pos
-    | CommonTypes.ComponentType.ROM _ -> getRectPortPositions (Left, Right) 1 1 h w pos
-    | CommonTypes.ComponentType.RAM _ -> getRectPortPositions (Left, Right) 3 1 h w pos
-    | CommonTypes.ComponentType.Custom spec -> getRectPortPositions (Left, Right) spec.InputLabels.Length spec.OutputLabels.Length h w pos
+    | CommonTypes.ComponentType.DFF -> getRegularPortPositions (Left, Right) 1 1 h w pos
+    | CommonTypes.ComponentType.DFFE -> getRegularPortPositions (Left, Right) 2 1 h w pos
+    | CommonTypes.ComponentType.Register _ -> getRegularPortPositions (Left, Right) 1 1 h w pos
+    | CommonTypes.ComponentType.RegisterE _ -> getRegularPortPositions (Left, Right) 2 1 h w pos
+    | CommonTypes.ComponentType.AsyncROM _ -> getRegularPortPositions (Left, Right) 1 1 h w pos
+    | CommonTypes.ComponentType.ROM _ -> getRegularPortPositions (Left, Right) 1 1 h w pos
+    | CommonTypes.ComponentType.RAM _ -> getRegularPortPositions (Left, Right) 3 1 h w pos
+    | CommonTypes.ComponentType.Custom spec -> getRegularPortPositions (Left, Right) spec.InputLabels.Length spec.OutputLabels.Length h w pos
     // | _ -> failwithf "Shouldn't happen"
 
 /// Returns the input and output ports using the hostId of the symbol 
@@ -217,12 +222,12 @@ let createSymbolWithPortOrientation (sym:Symbol) =
             | CommonTypes.ComponentType.And | CommonTypes.ComponentType.Or | CommonTypes.ComponentType.Xor -> 
                 getGatePortPositions sym.InputOrientation false sym.H sym.W sym.Pos
             | CommonTypes.ComponentType.Not ->
-                getRectPortPositions (sym.InputOrientation, sym.OutputOrientation) 1 1 sym.H (sym.W-9.) sym.Pos
-            | CommonTypes.ComponentType.Decode4 | CommonTypes.ComponentType.NbitsAdder _ | CommonTypes.ComponentType.DFF 
-            | CommonTypes.ComponentType.DFFE | CommonTypes.ComponentType.Register _ | CommonTypes.ComponentType.RegisterE _
-            | CommonTypes.ComponentType.AsyncROM _ | CommonTypes.ComponentType.ROM _ | CommonTypes.ComponentType.RAM _ 
-            | CommonTypes.ComponentType.Custom _ ->
-                getRectPortPositions (sym.InputOrientation, sym.OutputOrientation) sym.InputPorts.Length sym.OutputPorts.Length sym.H sym.W sym.Pos
+                getRegularPortPositions (sym.InputOrientation, sym.OutputOrientation) 1 1 sym.H (sym.W-9.) sym.Pos
+            | CommonTypes.ComponentType.Decode4 | CommonTypes.ComponentType.NbitsAdder _ | CommonTypes.ComponentType.NbitsXor _ 
+            | CommonTypes.ComponentType.DFF | CommonTypes.ComponentType.DFFE | CommonTypes.ComponentType.Register _ 
+            | CommonTypes.ComponentType.RegisterE _ | CommonTypes.ComponentType.AsyncROM _ | CommonTypes.ComponentType.ROM _ 
+            | CommonTypes.ComponentType.RAM _ | CommonTypes.ComponentType.Custom _ ->
+                getRegularPortPositions (sym.InputOrientation, sym.OutputOrientation) sym.InputPorts.Length sym.OutputPorts.Length sym.H sym.W sym.Pos
             | _ -> failwithf "This symbol's port orientation cannot be changed"
 
     let newInputPorts = 
@@ -242,7 +247,7 @@ let createSymbolWithPortOrientation (sym:Symbol) =
 //-----------------------Symbol Creation----------------------//
 
 /// Returns a symbol of given type with given name at the given position
-let createNewSymbol (sType:CommonTypes.ComponentType) (name:string) (pos:XYPos) (createDU : CreateDU) =
+let createNewSymbol (sType:CommonTypes.ComponentType) (name:string) (pos:XYPos) (createDU: CreateDU) =
     let h, w = (getHeightWidthOf sType)
     let hostId = CommonTypes.ComponentId (uuid())
     let inputPortsPosList, outputPortsPosList = getPortPositions sType pos
@@ -314,6 +319,7 @@ let init () =
         createNewSymbol (CommonTypes.ComponentType.IOLabel)                 "IO1"    {X = float (3*64+30); Y=float (1*64+30)} Init
         createNewSymbol (CommonTypes.ComponentType.Constant (4, 15))        "C1"     {X = float (4*64+30); Y=float (1*64+30)} Init
         createNewSymbol (CommonTypes.ComponentType.BusSelection (4, 2))     "B1"     {X = float (5*64+30); Y=float (1*64+30)} Init
+        createNewSymbol (CommonTypes.ComponentType.BusCompare (4, 10))      "EQ1"    {X = float (6*64+30); Y=float (1*64+30)} Init
         createNewSymbol (CommonTypes.ComponentType.Not)                     "G1"     {X = float (1*64+30); Y=float (2*64+30)} Init
         createNewSymbol (CommonTypes.ComponentType.And)                     "G2"     {X = float (2*64+30); Y=float (2*64+30)} Init
         createNewSymbol (CommonTypes.ComponentType.Or)                      "G3"     {X = float (3*64+30); Y=float (2*64+30)} Init
@@ -325,6 +331,7 @@ let init () =
         createNewSymbol (CommonTypes.ComponentType.Mux2)                    "MUX2"   {X = float (3*64+30); Y=float (3*64+30)} Init
         createNewSymbol (CommonTypes.ComponentType.Demux2)                  "DEMUX2" {X = float (4*64+30); Y=float (3*64+30)} Init
         createNewSymbol (CommonTypes.ComponentType.NbitsAdder 4)            "A1"     {X = float (5*64+30); Y=float (3*64+30)} Init 
+        createNewSymbol (CommonTypes.ComponentType.NbitsXor   7)            "XOR1"   {X = float (7*64+30); Y=float (3*64+30)} Init 
         createNewSymbol (CommonTypes.ComponentType.MergeWires)              "MERGE"  {X = float (1*64+30); Y=float (6*64+30)} Init
         createNewSymbol (CommonTypes.ComponentType.SplitWire 3)             "SPLIT"  {X = float (2*64+30); Y=float (6*64+30)} Init
         createNewSymbol (CommonTypes.ComponentType.DFF)                     "FF1"    {X = float (3*64+30); Y=float (6*64+30)} Init 
@@ -506,8 +513,8 @@ let createInSymbolText (fontSize:float) (hAlignment:string) (rotation:int) (pos:
         X pos.X 
         Y pos.Y
         Style [
-            TextAnchor hAlignment // horizontal algnment vs (X,Y)
-            DominantBaseline "middle" // vertical alignment vs (X,Y)
+            TextAnchor hAlignment 
+            DominantBaseline "middle" 
             FontSize fontSize
             FontFamily "monospace"
             Fill "Black"
@@ -519,7 +526,7 @@ let createInSymbolText (fontSize:float) (hAlignment:string) (rotation:int) (pos:
     ][str textStr]
 
 
-
+// will be changed
 let getBusWidthInfo (sym:Symbol) =
     let w = 
         match sym.Type with
@@ -527,6 +534,7 @@ let getBusWidthInfo (sym:Symbol) =
         | CommonTypes.ComponentType.Output w 
         | CommonTypes.ComponentType.Constant (w, _)
         | CommonTypes.ComponentType.NbitsAdder w 
+        | CommonTypes.ComponentType.NbitsXor w 
         | CommonTypes.ComponentType.Register w 
         | CommonTypes.ComponentType.RegisterE w -> w
         | _ -> 0
@@ -541,8 +549,8 @@ let createComponentTitle (props:RenderSymbolProps) =
         X (props.Symbol.Pos.X + props.Symbol.W / 2.); 
         Y (props.Symbol.Pos.Y - VerticalAdjustment)
         Style [
-            TextAnchor "middle" // horizontal algnment vs (X,Y)
-            DominantBaseline "text-top" // vertical alignment vs (X,Y)
+            TextAnchor "middle" 
+            DominantBaseline "text-top" 
             FontSize "12px"
             Fill "Black"
             PointerEvents "none"
@@ -597,45 +605,6 @@ let wireStyle opacity =
         StrokeOpacity opacity
     ]
 
-/// to be deleted
-let getBoundingBox props =
-    let topLeft = props.Symbol.BBox.TopLeft
-    let bottomRight = props.Symbol.BBox.BottomRight
-    polygon [ 
-        Points $"{topLeft.X},{topLeft.Y} {bottomRight.X},{topLeft.Y} {bottomRight.X},{bottomRight.Y} {topLeft.X},{bottomRight.Y}"
-        Style [
-            StrokeWidth 1
-            Stroke "black"
-            Opacity 0.15
-        ]
-    ] [ ]
-
-/// to be deleted
-let getPortElements (inputPorts:Port list) (outputPorts:Port list) =
-    (inputPorts |> List.map (fun port -> 
-        circle
-            [ 
-                Cx port.Pos.X
-                Cy port.Pos.Y
-                R 2.
-                SVGAttr.Fill "green"
-                SVGAttr.Stroke "green"
-                SVGAttr.StrokeWidth 1
-            ]
-            [ ]
-    )) @ 
-    (outputPorts |> List.map (fun port -> 
-        circle
-            [ 
-                Cx port.Pos.X
-                Cy port.Pos.Y
-                R 2.
-                SVGAttr.Fill "blue"
-                SVGAttr.Stroke "blue"
-                SVGAttr.StrokeWidth 1
-            ]
-            [ ]
-    ))
 
 let createLogicGate (strOnGate:string) (isInverted:bool) (props:RenderSymbolProps) =
     g []([
@@ -674,7 +643,7 @@ let createRectangularSymbol (symName:string) (inputPortNames:string list) (outpu
             | x, _ when x = fX + w -> createInSymbolText 10. "end" 0 {port.Pos with X = port.Pos.X - 8.} portName
             | _, y when y = fY -> createInSymbolText 10. "middle" rotationOfTopAndBottomPorts {port.Pos with Y = port.Pos.Y + 10.} portName
             | _, y when y = fY + h -> createInSymbolText 10. "middle" rotationOfTopAndBottomPorts {port.Pos with Y = port.Pos.Y - 10.} portName
-            | _ -> failwithf "Shouldn't happen"
+            | _ -> failwithf "Port position is not at the edge of the symbol!"
     
         )
     g   [ ] 
@@ -712,13 +681,13 @@ let private renderInput =
         fun (props : RenderSymbolProps) ->
             let fX, fY = props.Symbol.Pos.X, props.Symbol.Pos.Y
             g   [ ] 
-                ([
+                [
                     polygon [ 
                         Points $"{fX},{fY} {fX+20.},{fY} {fX+30.},{fY+10.} {fX+20.},{fY+20.} {fX},{fY+20.}"
                         symbolShapeStyle props
                     ] [ ]
                     createComponentTitle props 
-                ] @ getPortElements props.Symbol.InputPorts props.Symbol.OutputPorts) 
+                ]
     , "Input"
     , equalsButFunctions
     )
@@ -728,13 +697,13 @@ let private renderOutput =
         fun (props : RenderSymbolProps) ->
             let fX, fY = props.Symbol.Pos.X, props.Symbol.Pos.Y
             g   [ ] 
-                ([
+                [
                     polygon [ 
                         Points $"{fX},{fY+10.} {fX+10.},{fY} {fX+30.},{fY} {fX+30.},{fY+20.} {fX+10.},{fY+20.}"
                         symbolShapeStyle props
                     ] [ ]
                     createComponentTitle props
-                ] @ getPortElements props.Symbol.InputPorts props.Symbol.OutputPorts)
+                ]
     , "Output"
     , equalsButFunctions
     )
@@ -744,14 +713,13 @@ let private renderIOLabel =
         fun (props : RenderSymbolProps) ->
             let fX, fY = props.Symbol.Pos.X, props.Symbol.Pos.Y
             g   [ ] 
-                ([
+                [
                     polygon [ 
                         Points $"{fX},{fY+10.} {fX+10.},{fY} {fX+20.},{fY} {fX+30.},{fY+10.} {fX+20.},{fY+20.} {fX+10.},{fY+20.}"
                         symbolShapeStyle props
                     ] [ ]
                     createComponentTitle props
-                    getBoundingBox props
-                ] @ getPortElements props.Symbol.InputPorts props.Symbol.OutputPorts)
+                ]
     , "IOLabel"
     , equalsButFunctions
     )
@@ -767,14 +735,14 @@ let private renderConstant =
                 | _ -> failwithf "Shouldn't happen"
             
             g   [] 
-                ([
+                [
                     polygon [ 
                         Points $"{fX},{fY} {fX+10.},{fY+10.} {fX+39.6},{fY+10.} {fX+10.},{fY+10.} {fX},{fY+20.}"
                         symbolShapeStyle props
                     ] [ ]
                     text [ 
                         X (fX + 10.); 
-                        Y (fY + 18.)
+                        Y (fY + 19.)
                         Style [
                             TextAnchor "left" 
                             DominantBaseline "text-top" 
@@ -785,7 +753,7 @@ let private renderConstant =
                         ]
                     ] [str valueInfo]
                     createComponentTitle props
-                ] @ getPortElements props.Symbol.InputPorts props.Symbol.OutputPorts)
+                ]
     , "Constant"
     , equalsButFunctions
     )
@@ -799,17 +767,37 @@ let private renderBusSelection =
                 | CommonTypes.ComponentType.BusSelection (w, n) ->
                     if w > 1 then $"[{n+w-1}:{n}]" else $"{n}"
                 | _ -> failwithf "Shouldn't happen"
-
             g   [ ] 
-                ([
+                [
                     polygon [ 
                         Points $"{fX},{fY+24.} {fX},{fY} {fX+25.},{fY} {fX+35.},{fY+6.} {fX+45.},{fY+6.} {fX+45.},{fY+18.} {fX+35.},{fY+18.} {fX+25.},{fY+24.}"
                         symbolShapeStyle props
                     ] [ ]
                     createComponentTitle props
                     createInSymbolText 10. "middle" 0 {X=fX + 17.5; Y=fY + 12.} busInfo
-                ] @  getPortElements props.Symbol.InputPorts props.Symbol.OutputPorts) 
+                ]
     , "BusSelection"
+    , equalsButFunctions
+    )
+
+let private renderBusCompare =
+    FunctionComponent.Of(
+        fun (props : RenderSymbolProps) ->
+            let fX, fY = props.Symbol.Pos.X, props.Symbol.Pos.Y
+            let valInfo = 
+                match props.Symbol.Type with
+                | CommonTypes.ComponentType.BusCompare (w, n) -> $"={n}"
+                | _ -> failwithf "Failed in getting the decimal value to compare in renderBusCompare!"
+            g   [ ] 
+                [
+                    polygon [ 
+                        Points $"{fX},{fY+24.} {fX},{fY} {fX+25.},{fY} {fX+35.},{fY+6.} {fX+45.},{fY+6.} {fX+45.},{fY+18.} {fX+35.},{fY+18.} {fX+25.},{fY+24.}"
+                        symbolShapeStyle props
+                    ] [ ]
+                    createComponentTitle props
+                    createInSymbolText 10. "middle" 0 {X=fX + 17.5; Y=fY + 12.} valInfo
+                ]
+    , "BusCompare"
     , equalsButFunctions
     )
 
@@ -818,16 +806,15 @@ let private renderMux2 =
         fun (props : RenderSymbolProps) ->
             let fX, fY = props.Symbol.Pos.X, props.Symbol.Pos.Y
             g   [ ] 
-                ([
+                [
                     polygon [ 
                         Points $"{fX},{fY} {fX+30.},{fY+13.} {fX+30.},{fY+37.} {fX},{fY+50.}"
                         symbolShapeStyle props
                     ] [ ]
                     createComponentTitle props
-
                     createInSymbolText 10.5 "left" 0 {props.Symbol.InputPorts.[0].Pos with X = props.Symbol.InputPorts.[0].Pos.X + 4.} "0"
                     createInSymbolText 10.5 "left" 0 {props.Symbol.InputPorts.[1].Pos with X = props.Symbol.InputPorts.[1].Pos.X + 4.} "1"
-                ] @ getPortElements props.Symbol.InputPorts props.Symbol.OutputPorts)
+                ]
     , "Mux2"
     , equalsButFunctions
     )
@@ -836,16 +823,15 @@ let private renderDemux2 =
         fun (props : RenderSymbolProps) ->
             let fX, fY = props.Symbol.Pos.X, props.Symbol.Pos.Y
             g   [ ] 
-                ([
+                [
                     polygon [ 
                         Points $"{fX},{fY+13.} {fX+30.},{fY} {fX+30.},{fY+50.} {fX},{fY+37.}"
                         symbolShapeStyle props
                     ] [ ]
                     createComponentTitle props
-
                     createInSymbolText 10.5 "end" 0 {props.Symbol.OutputPorts.[0].Pos with X = props.Symbol.OutputPorts.[0].Pos.X - 4.} "0"
                     createInSymbolText 10.5 "end" 0 {props.Symbol.OutputPorts.[1].Pos with X = props.Symbol.OutputPorts.[1].Pos.X - 4.} "1"
-                ] @ getPortElements props.Symbol.InputPorts props.Symbol.OutputPorts)
+                ] 
     , "Demux2"
     , equalsButFunctions
     )
@@ -863,7 +849,7 @@ let private renderMergeWires =
             let bottomStyle = if bottomWidth > 1 then busWireStyle opacity else wireStyle opacity
 
             g   [ ] 
-                ([
+                [
                     line [ X1 fX; Y1 fY; X2 (fX+w/2.); Y2 fY; topStyle] []
                     line [ X1 (fX+w/2.); Y1 fY; X2 (fX+w/2.); Y2 (fY+h/2.); topStyle] []
 
@@ -873,7 +859,7 @@ let private renderMergeWires =
                     line [ X1 (fX+w/2.); Y1 (fY+h/2.); X2 (fX+w); Y2 (fY+h/2.); busWireStyle opacity] []
 
                     createComponentTitle props
-                ] @ getPortElements props.Symbol.InputPorts props.Symbol.OutputPorts)
+                ]
     , "MergeWires"
     , equalsButFunctions
     )
@@ -894,7 +880,7 @@ let private renderSplitWire =
             let bottomStyle = if bottomWidth > 1 then busWireStyle opacity else wireStyle opacity
 
             g   [ ] 
-                ([
+                [
                     line [ X1 (fX); Y1 (fY+h/2.); X2 (fX+w/2.); Y2 (fY+h/2.); busWireStyle opacity] []
 
                     line [ X1 (fX+w/2.); Y1 fY; X2 (fX+w/2.); Y2 (fY+h/2.); topStyle] []
@@ -904,7 +890,7 @@ let private renderSplitWire =
                     line [ X1 (fX+w/2.); Y1 (fY+h); X2 (fX+w); Y2 (fY+h); bottomStyle] []
 
                     createComponentTitle props
-                ] @ getPortElements props.Symbol.InputPorts props.Symbol.OutputPorts)
+                ]
     , "SplitWire"
     , equalsButFunctions
     )
@@ -932,6 +918,7 @@ let private renderRectSymbol =
             match props.Symbol.Type with
             | CommonTypes.ComponentType.Decode4      ->   createRectangularSymbol "decode" ["Sel"; "Data"] ["0"; "1"; "2"; "3"] false props
             | CommonTypes.ComponentType.NbitsAdder _ ->   createRectangularSymbol ("adder" + getBusWidthInfo props.Symbol) ["Cin"; "A"; "B"] ["Sum"; "Cout"] false props
+            | CommonTypes.ComponentType.NbitsXor _   ->   createRectangularSymbol ("XOR" + getBusWidthInfo props.Symbol) ["P"; "Q"] ["Out"] false props
             | CommonTypes.ComponentType.DFF          ->   createRectangularSymbol "DFF" ["D"] ["Q"] true props
             | CommonTypes.ComponentType.DFFE         ->   createRectangularSymbol "DFF" ["D"; "EN"] ["Q"] true props
             | CommonTypes.ComponentType.Register _   ->   createRectangularSymbol ("REG" + getBusWidthInfo props.Symbol) ["data-in"] ["data-out"] true props
@@ -959,6 +946,7 @@ let private renderSymbol (props : RenderSymbolProps) =
     | CommonTypes.ComponentType.IOLabel -> renderIOLabel props
     | CommonTypes.ComponentType.Constant _ -> renderConstant props
     | CommonTypes.ComponentType.BusSelection _ -> renderBusSelection props
+    | CommonTypes.ComponentType.BusCompare _ -> renderBusCompare props
     | CommonTypes.ComponentType.Not -> renderGate props
     | CommonTypes.ComponentType.And -> renderGate props
     | CommonTypes.ComponentType.Or -> renderGate props
@@ -970,6 +958,7 @@ let private renderSymbol (props : RenderSymbolProps) =
     | CommonTypes.ComponentType.Mux2 -> renderMux2 props
     | CommonTypes.ComponentType.Demux2 -> renderDemux2 props
     | CommonTypes.ComponentType.NbitsAdder _ -> renderRectSymbol props
+    | CommonTypes.ComponentType.NbitsXor _ -> renderRectSymbol props
     | CommonTypes.ComponentType.MergeWires -> renderMergeWires props
     | CommonTypes.ComponentType.SplitWire _ -> renderSplitWire props
     | CommonTypes.ComponentType.DFF -> renderRectSymbol props
