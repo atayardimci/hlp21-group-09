@@ -1075,10 +1075,13 @@ let getPortOf (symModel: Model) (sId: CommonTypes.ComponentId) : Port list =
         | None -> failwithf "Symbol with given Id not found"
     sym.InputPorts @ sym.OutputPorts
 
-
+// let getBusWidthOfPortWithId () ->>> we need an interface function 
     
 
-
+let getOrientationOfPort (symModel: Model) (port:Port) : PortOrientation = 
+    match getSymbolWithId symModel port.HostId with
+    | Some sym -> if port.PortType = CommonTypes.PortType.Input then sym.InputOrientation else sym.OutputOrientation
+    | _ -> failwithf "The hosting symbol of the given port is not found"
 
 
 
