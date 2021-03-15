@@ -541,10 +541,18 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
     | AddWire (startPort,endPort) -> 
         let newBusModel, newCmd = 
             BusWire.update (BusWire.Msg.AddWire (startPort,endPort)) model.Wire
+        
+        let newSymModel = 
+            model.Wire.Symbol
+            |>List.map (fun sym -> Symbol.changePortStateIsConnected startPort sym)
+            |>List.map (fun sym -> Symbol.changePortStateIsConnected endPort sym)
+
+        let newerBusModel = 
+            {newBusModel with Symbol = newSymModel}
         {model with
-            Wire = newBusModel
+            Wire = newerBusModel
         }
-        , Cmd.ofMsg (RemoveDrawnLine)
+        , Cmd.batch [Cmd.ofMsg (RemoveDrawnLine); Cmd.ofMsg(UpdatePorts)]
 
     | DeselectWire -> 
         let newBusModel, newCmd = 

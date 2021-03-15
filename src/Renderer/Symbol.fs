@@ -18,7 +18,9 @@ type Port =
         Pos : XYPos
         BBox : BoundingBox
         IsDragging : bool
+        IsConnected : bool 
         BusWidth : int Option
+        
     }
 
 type Symbol =
@@ -88,6 +90,17 @@ let boxesCollide (boxOne: BoundingBox) (boxTwo: BoundingBox) =
     let oneTL, oneBR, twoTL, twoBR = boxOne.TopLeft, boxOne.BottomRight, boxTwo.TopLeft, boxTwo.BottomRight
     not (oneBR.X < twoTL.X || oneBR.Y < twoTL.Y || oneTL.X > twoBR.X || oneTL.Y > twoBR.Y)
 
+let changePortStateIsConnected (port : Port) (sym : Symbol) : Symbol = 
+    let newInputPorts =
+        sym.InputPorts
+        |>List.map (fun inPort -> if (inPort.Id = port.Id) then {inPort with IsConnected = true} else inPort)
+    let newOutputPorts = 
+        sym.OutputPorts
+        |>List.map (fun outPort -> if (outPort.Id = port.Id) then {outPort with IsConnected = true} else outPort)
+    {sym with InputPorts = newInputPorts ; OutputPorts = newOutputPorts}
+
+    
+
 /// Selects all symbols which have their bounding box collide with the given box and returns the updated model
 let selectSymbolsInRegion (symModel: Model) (box: BoundingBox) : Model =
     let doesCollide = boxesCollide box
@@ -148,6 +161,7 @@ let autoCompleteWidths (sym : Symbol)  =
                                                                    | _ -> sym
                                                                tmp
                                        completedSymbol
+            | _ -> sym
 
                            
         newSym
@@ -305,6 +319,7 @@ let getPorts (sType:CommonTypes.ComponentType) hostId inputPortsPosList outputPo
                 Pos = pos
                 BBox = calcBBoxWithRadius 6.0 pos
                 IsDragging = false
+                IsConnected = false
                 BusWidth = getBusWidthOfPort sType CommonTypes.PortType.Input idx
             }
         )
@@ -319,6 +334,7 @@ let getPorts (sType:CommonTypes.ComponentType) hostId inputPortsPosList outputPo
                 Pos = pos
                 BBox = calcBBoxWithRadius 6.0 pos
                 IsDragging = false
+                IsConnected = false
                 BusWidth = getBusWidthOfPort sType CommonTypes.PortType.Output idx
             }
         )

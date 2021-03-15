@@ -348,34 +348,57 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             wir |> updateWS |> updateWT
         let updateNetList nLs = List.map newW nLs
         {model with WX = updateNetList model.WX} , Cmd.none
-    | AddWire (startPort , endPort) -> 
+    | AddWire (startPort , endPort) ->  
         let newWireSym  = 
             match (startPort.BusWidth, endPort.BusWidth ) with 
-            | Some startWidth, Some endWidth  when startWidth = endWidth ->  //Buswidth match
-                                                let wire = createWire startPort endPort Init
-                                                let sym  = model.Symbol
-                                                printf("SOME SOME ")
-                                                (wire,sym)
+            | Some startWidth, Some endWidth  when (startWidth = endWidth) && startPort.PortType = CommonTypes.Input ->  //Buswidth match but inputPort has many drivers
+                                                if (startPort.IsConnected <> true ) then 
+                                                    let wire = createWire startPort endPort Init
+
+                                                    let sym  = model.Symbol
                                                 
+                                                    (wire,sym) 
+                                                else
+                                                    let wire = createWire startPort endPort Error
+                                                    printf ("Error : InputPort can only have One Driver.")
+                                                    let sym = model.Symbol
+                                                    (wire,sym)
+                                                
+            | Some startWidth, Some endWidth  when startWidth = endWidth && endPort.PortType = CommonTypes.Input ->  //Buswidth match but inputPort has many drivers
+                                                if (endPort.IsConnected <> true ) then 
+                                                    let wire = createWire startPort endPort Init
+                                                    let sym  = model.Symbol
+                                                                                               
+                                                    (wire,sym) 
+                                                else
+                                                    let wire = createWire startPort endPort Error
+                                                    printf ("Error : InputPort can only have One Driver.")
+                                                    let sym = model.Symbol
+                                                    (wire,sym)
+
+            | Some startWidth, Some endWidth  when startWidth = endWidth ->  //Buswidth match but inputPort has many drivers
+                                                    let wire = createWire startPort endPort Init
+                                                    let sym  = model.Symbol
+                                                   
+                                                    (wire,sym)
             | Some startWidth, Some endWidth  when startWidth <> endWidth ->  //Buswidth dont match 
                                                 let wire = createWire startPort endPort Error
                                                 let sym,symMsg = Symbol.update (Symbol.Msg.AddErrorToErrorList
                                                                   [startPort;endPort]
                                                                  )model.Symbol
-                                                printf(" SOME SOME DONT MATCH ")
+                                                
                                                 (wire,sym)
             | Some startWidth, None  -> let wire = createWire startPort endPort Init //enforce the Port with BusWidth None to be a BusWidth 
                                         let sym,symMsg  = Symbol.update (Symbol.Msg.EnforceBusWidth 
                                                             (startWidth,endPort,EnforceEndPort)
                                                           )model.Symbol
-                                        printf(" SOME  ENFORCE ")
+
 
                                         (wire,sym)
             | None , Some endWidth  -> let wire = createWire startPort endPort Init
                                        let sym,symMsg  = Symbol.update (Symbol.Msg.EnforceBusWidth 
                                                             (endWidth,startPort,EnforceStartPort)
                                                           )model.Symbol
-                                       printf("ENFORCE SOME ")
                                        (wire,sym)
 
             | _ -> failwithf " BusWidths of sourcePort and targetPort are not specified !!!!"
