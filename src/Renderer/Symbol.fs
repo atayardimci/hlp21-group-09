@@ -118,8 +118,40 @@ let enforceBusWidth (busWidth : int )(port : Port) (sym : Symbol ) (bwDU : BusWi
                          {sym with OutputPorts = newOutputPortList }
 
 
-    //{sym with InputPorts = ports}
-// fun (port) (sym) (DU )
+let autoCompleteWidths (sym : Symbol)  = 
+        let newSym = 
+            match (sym.Type) with 
+            |CommonTypes.SplitWire num ->  
+                                       let completedSymbol =  
+                                                      match (sym.InputPorts,sym.OutputPorts) with 
+                                                      | [in1],[out1;out2] ->let tmp = 
+                                                                                match in1.BusWidth,out1.BusWidth,out2.BusWidth with
+                                                                                | None, Some given, Some x ->   let newInPort = {in1 with BusWidth = Some (given + x) } 
+                                                                                                                {sym with InputPorts = [newInPort]}
+                                                                                | Some x , Some given, None ->  let newOutPort = {out2 with BusWidth = Some (x - given) }
+                                                                                                                {sym with OutputPorts = [out1;newOutPort]}
+                                                                                | _ -> sym
+                                                                            tmp
+                                                      | _ -> failwithf "Impossible"
+                                       completedSymbol         
+            |CommonTypes.MergeWires    ->  
+                                       let completedSymbol = 
+                                         match (sym.InputPorts,sym.OutputPorts) with 
+                                         | [in1;in2],[out1] -> let tmp =
+                                                                   match (in1.BusWidth,in2.BusWidth,out1.BusWidth) with
+                                                                   | None, Some given, Some x ->   let newInPort = {in1 with BusWidth = Some (x- given)} 
+                                                                                                   {sym with InputPorts = [newInPort; in2]}
+                                                                   | Some given , None, Some x ->  let newIn2Port = {in2 with BusWidth = Some (x - given)}
+                                                                                                   {sym with InputPorts = [in1; newIn2Port]}
+                                                                   | Some x , Some given, None ->  let newOutPort = {out1 with BusWidth = Some (x + given) }
+                                                                                                   {sym with OutputPorts = [out1;newOutPort]}
+                                                                   | _ -> sym
+                                                               tmp
+                                       completedSymbol
+
+                           
+        newSym
+                        
 
 /// Render a ruler to assist in assigning the symbols
 // fun (symbollist ) () go throughs the symbol list to find top left X = current topLeft = x 
@@ -535,13 +567,13 @@ let update (msg : Msg) (model : Model): Model*Cmd<'a> =
                                                     |EnforceStartPort -> enforceBusWidth busWidth port sym EnforceStartPort
                                                     |EnforceEndPort -> enforceBusWidth busWidth port sym EnforceEndPort
                                                 newSym
+                                                |>autoCompleteWidths
+
                                              else 
                                                 sym
-                                             )mdl
+                                             ) mdl
                            )
         newModel,Cmd.none
-
-
 
     | MouseMsg _ -> model, Cmd.none // allow unused mouse messags
 
