@@ -51,7 +51,6 @@ type Msg =
     | DeselectWire
     | StartDraggingWire of CommonTypes.ConnectionId*XYPos
     | DraggingWire of CommonTypes.ConnectionId*XYPos
-    | EndDraggingWire of CommonTypes.ConnectionId
     | DuplicateWire of XYPos *Symbol.Port list
     | RemoveDrawnLine
     | SelectWiresWithinRegion of Helpers.BoundingBox
@@ -355,6 +354,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             | Some startWidth, Some endWidth  when startWidth = endWidth ->  //Buswidth match
                                                 let wire = createWire startPort endPort Init
                                                 let sym  = model.Symbol
+                                                printf("SOME SOME ")
                                                 (wire,sym)
                                                 
             | Some startWidth, Some endWidth  when startWidth <> endWidth ->  //Buswidth dont match 
@@ -362,13 +362,22 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                                                 let sym,symMsg = Symbol.update (Symbol.Msg.AddErrorToErrorList
                                                                   [startPort;endPort]
                                                                  )model.Symbol
+                                                printf(" SOME SOME DONT MATCH ")
                                                 (wire,sym)
-            | Some startWidth, None  -> let wire = createWire startPort endPort Init
-                                        let sym  = model.Symbol
+            | Some startWidth, None  -> let wire = createWire startPort endPort Init //enforce the Port with BusWidth None to be a BusWidth 
+                                        let sym,symMsg  = Symbol.update (Symbol.Msg.EnforceBusWidth 
+                                                            (startWidth,endPort,EnforceEndPort)
+                                                          )model.Symbol
+                                        printf(" SOME  ENFORCE ")
+
                                         (wire,sym)
             | None , Some endWidth  -> let wire = createWire startPort endPort Init
-                                       let sym  = model.Symbol
+                                       let sym,symMsg  = Symbol.update (Symbol.Msg.EnforceBusWidth 
+                                                            (endWidth,startPort,EnforceStartPort)
+                                                          )model.Symbol
+                                       printf("ENFORCE SOME ")
                                        (wire,sym)
+
             | _ -> failwithf " BusWidths of sourcePort and targetPort are not specified !!!!"
 
 
@@ -396,15 +405,20 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                               ) 
         {model with WX = nwWls model.WX} , Cmd.none
     | DeleteWire -> 
+        printf ("HERE BOI 1") 
+        
         let wireToBeRendered, wireToBeDeleted =
             model.WX
             |>List.partition (fun w -> w.isSelected = false) 
-
+        printf ($"{wireToBeRendered}{wireToBeDeleted}")
         let newWireList = 
-            wireToBeRendered
-            |>List.filter (fun w -> (Symbol.getSymbolWithId (model.Symbol) (w.SourcePort.HostId)) <> None ) //when symbol is deleted, delete wire as well
-            |>List.filter (fun w -> (Symbol.getSymbolWithId (model.Symbol) (w.TargetPort.HostId)) <> None)  // when symbol is deleted, delete wire as well 
-       
+            match wireToBeRendered with
+            | wireList when (wireList = []) ->   []
+            | wireList when (wireList <> []) ->  wireList
+                                                 |>List.filter (fun w -> (Symbol.getSymbolWithId (model.Symbol) (w.SourcePort.HostId)) <> None) 
+                                                 |>List.filter (fun w -> (Symbol.getSymbolWithId (model.Symbol) (w.TargetPort.HostId)) <> None) // when symbol is deleted, delete wire as well 
+                   
+            
         let allToBeDeletedPorts= //for all the wires that are gonna be deleted check if it has error 
             wireToBeDeleted
             |> List.collect (fun w -> [w.SourcePort;w.TargetPort])

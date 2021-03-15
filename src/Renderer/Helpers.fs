@@ -63,6 +63,10 @@ type CreateDU =
     | Duplicate // duplicated
     | Error
 
+type BusWidthDU = 
+    |EnforceStartPort
+    |EnforceEndPort
+
 let posScaled (pos:XYPos) (zoom:float) = {X = pos.X/zoom; Y= pos.Y/zoom} 
 
 let posDiff a b =

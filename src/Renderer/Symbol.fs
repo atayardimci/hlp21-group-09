@@ -57,7 +57,9 @@ type Msg =
     | UpdateOutputOrientation of outputOrientation: PortOrientation 
     | AddErrorToErrorList of  Port list
     | RemoveErrorFromErrorList of Port list
+    | EnforceBusWidth of int*Port*BusWidthDU
     | SelectSymbolsWithinRegion of box: BoundingBox
+    
 
     // | UpdateSymbolModelWithComponent of CommonTypes.Component 
 
@@ -91,6 +93,33 @@ let selectSymbolsInRegion (symModel: Model) (box: BoundingBox) : Model =
     let doesCollide = boxesCollide box
     symModel
     |> List.map (fun sym -> if doesCollide sym.BBox then {sym with IsSelected = true} else sym)
+
+let enforceBusWidth (busWidth : int )(port : Port) (sym : Symbol ) (bwDU : BusWidthDU) =
+    match bwDU with 
+    |EnforceEndPort -> let newInputPortList = 
+                            (sym.InputPorts,[port])||> List.fold (fun inputPortList port -> 
+                                                                List.map(fun (inputPort:Port) -> 
+                                                                    if (inputPort.Id = port.Id) then
+                                                                     {inputPort with BusWidth = Some busWidth}
+                                                                    else 
+                                                                     inputPort
+                                                                    )inputPortList
+                                                              )
+                       {sym with InputPorts =newInputPortList }
+    |EnforceStartPort -> let newOutputPortList =
+                            (sym.OutputPorts,[port])||> List.fold (fun outputPortList port -> 
+                                                                List.map(fun (outputPort:Port) -> 
+                                                                    if (outputPort.Id = port.Id) then      
+                                                                        {outputPort with BusWidth = Some busWidth}
+                                                                    else 
+                                                                    outputPort
+                                                                    ) outputPortList
+                                                              )
+                         {sym with OutputPorts = newOutputPortList }
+
+
+    //{sym with InputPorts = ports}
+// fun (port) (sym) (DU )
 
 /// Render a ruler to assist in assigning the symbols
 // fun (symbollist ) () go throughs the symbol list to find top left X = current topLeft = x 
@@ -472,27 +501,49 @@ let update (msg : Msg) (model : Model): Model*Cmd<'a> =
                                                 |None -> failwithf "No Port Num"
                                             let firstErrorIndex = 
                                                 sym.HasError
-                                                |>List.findIndex ( fun elem  -> (elem = portNum))   
+                                                |>List.tryFindIndex ( fun elem  -> (elem = portNum))   
 
                                             let rec remove i l =   //deletion at specific index. Feels like imperative programming ~~
                                                 match i, l with
                                                 | 0, x::xs -> xs
                                                 | i, x::xs -> x::remove (i - 1) xs
                                                 | i, [] -> failwith "index out of range"
-
-                                            let filteredErrorList = remove firstErrorIndex sym.HasError
+                                            
+                                            let filteredErrorList = 
+                                                match firstErrorIndex with 
+                                                |Some errorindex -> remove errorindex sym.HasError
+                                                |None -> sym.HasError
                                                
+  
                                             {sym with HasError = filteredErrorList}
-                                        else sym )
-                                             mdl )
+                                        else
+                                            sym )
+                                             mdl 
+                           )
         newModel,Cmd.none             
     | SelectSymbolsWithinRegion box ->
         selectSymbolsInRegion model box, Cmd.none
 
+    | EnforceBusWidth (busWidth,port,DU) ->  
+        let newModel = 
+            (model,[port])
+            ||> List.fold (fun mdl port ->List.map (fun sym ->            
+                                             if (sym.Id = port.HostId)
+                                             then                                                
+                                                let newSym: Symbol =
+                                                    match DU with
+                                                    |EnforceStartPort -> enforceBusWidth busWidth port sym EnforceStartPort
+                                                    |EnforceEndPort -> enforceBusWidth busWidth port sym EnforceEndPort
+                                                newSym
+                                             else 
+                                                sym
+                                             )mdl
+                           )
+        newModel,Cmd.none
+
 
 
     | MouseMsg _ -> model, Cmd.none // allow unused mouse messags
-    // | _ -> failwithf "Not implemented"
 
 
 

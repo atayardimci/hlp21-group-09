@@ -488,12 +488,12 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                 {model with 
                     IsPortDragging = false;
                     IdOfPortBeingDragged = "null";
-                 }, Cmd.batch ([Cmd.ofMsg(newMsg); Cmd.ofMsg(RemoveDrawnLine)])
+                 }, Cmd.batch ([Cmd.ofMsg(newMsg); Cmd.ofMsg(RemoveDrawnLine); Cmd.ofMsg(UpdatePorts)])
         | _ -> 
                 {model with 
                     IsPortDragging = false;
                     IdOfPortBeingDragged = "null";
-                }, Cmd.ofMsg (RemoveDrawnLine)
+                }, Cmd.batch ([Cmd.ofMsg(RemoveDrawnLine); Cmd.ofMsg(UpdatePorts)])
       
     | UpdatePorts  ->
         let newPorts = Symbol.getAllPorts (model.Wire.Symbol)
@@ -524,6 +524,27 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             SelectedWire = Some connectionId
         }
         , Cmd.map Wire newCmd
+
+    | DraggingWire (connectionIdOpt, mousePos) -> 
+        let connectionId =   
+            match connectionIdOpt with 
+            |Some x -> x 
+            |None -> failwithf "DraggingWire called but not selecting any wire" 
+        let newBusModel, newCmd = 
+            BusWire.update (BusWire.Msg.DraggingWire (connectionId, mousePos)) model.Wire
+        {model with 
+            Wire = newBusModel
+            IsWireSelected = true
+        }
+        , Cmd.none
+
+    | AddWire (startPort,endPort) -> 
+        let newBusModel, newCmd = 
+            BusWire.update (BusWire.Msg.AddWire (startPort,endPort)) model.Wire
+        {model with
+            Wire = newBusModel
+        }
+        , Cmd.ofMsg (RemoveDrawnLine)
 
     | DeselectWire -> 
         let newBusModel, newCmd = 
@@ -574,27 +595,6 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                                 Wire = newWireModel
                             }   
         newModel, Cmd.none
-
-    | DraggingWire (connectionIdOpt, mousePos) -> 
-        let connectionId =   
-            match connectionIdOpt with 
-            |Some x -> x 
-            |None -> failwithf "DraggingWire called but not selecting any wire" 
-        let newBusModel, newCmd = 
-            BusWire.update (BusWire.Msg.DraggingWire (connectionId, mousePos)) model.Wire
-        {model with 
-            Wire = newBusModel
-            IsWireSelected = true
-        }
-        , Cmd.none
-
-    | AddWire (startPort,endPort) -> 
-        let newBusModel, newCmd = 
-            BusWire.update (BusWire.Msg.AddWire (startPort,endPort)) model.Wire
-        {model with
-            Wire = newBusModel
-        }
-        , Cmd.ofMsg (RemoveDrawnLine)
 
     | StartDraggingSymbol (sIdList, pagePos) ->
         let newSymModel = 
