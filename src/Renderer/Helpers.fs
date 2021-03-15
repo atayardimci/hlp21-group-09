@@ -61,7 +61,7 @@ type PortDU =
 type CreateDU =
     | Init      //initialized
     | Duplicate // duplicated
-    
+    | Error
 
 let posScaled (pos:XYPos) (zoom:float) = {X = pos.X/zoom; Y= pos.Y/zoom} 
 

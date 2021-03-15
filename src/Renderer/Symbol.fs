@@ -37,7 +37,7 @@ type Symbol =
         LastDragPos : XYPos
         IsDragging : bool
         IsSelected : bool
-        HasError : bool
+        HasError : int list
         
         H : float
         W : float
@@ -50,15 +50,13 @@ type Model = Symbol list
 
 type Msg =
     | MouseMsg of MouseT
-    //| StartDragging of sIdList: CommonTypes.ComponentId list * pagePos: XYPos
-    //| Dragging of sIdList : CommonTypes.ComponentId list * pagePos: XYPos
-    //| EndDragging of sIdList : CommonTypes.ComponentId list
     | AddSymbol of sType:CommonTypes.ComponentType * pos:XYPos // used by demo code to add a circle
     | DeleteSymbols
     | DeselectAllSymbols
     | UpdateInputOrientation of inputOrientation: PortOrientation
-    | UpdateOutputOrientation of outputOrientation: PortOrientation
-    | ToggleError
+    | UpdateOutputOrientation of outputOrientation: PortOrientation 
+    | AddErrorToErrorList of  Port list
+    | RemoveErrorFromErrorList of Port list
     | SelectSymbolsWithinRegion of box: BoundingBox
 
     // | UpdateSymbolModelWithComponent of CommonTypes.Component 
@@ -320,7 +318,7 @@ let createNewSymbol (sType:CommonTypes.ComponentType) (name:string) (pos:XYPos) 
         LastDragPos = {X=0. ; Y=0.} 
         IsDragging = false
         IsSelected = if(createDU = Duplicate) then true else false
-        HasError = false
+        HasError = []
         
         H = h
         W = w
@@ -392,57 +390,6 @@ let init () =
     , Cmd.none
 
 
-
-
-
-
-
-
-//let startDraggingSymbol pagePos model sId  =
-//    model
-//    |> List.map (fun sym ->
-//            if sId <> sym.Id then
-//                sym
-//            else
-//                { sym with
-//                    LastDragPos = pagePos
-//                    IsDragging = true
-//                }
-//        )
-//let draggingSymbol pagePos model sId  = 
-//    model
-//    |> List.map (fun sym ->
-//        if sId <> sym.Id then
-//            sym
-//        else
-//            let diff = posDiff pagePos sym.LastDragPos
-                     
-//            { sym with
-//                Pos = posAdd sym.Pos diff
-//                InputPorts = sym.InputPorts |> List.map (fun port -> {port with Pos = posAdd port.Pos diff ; BBox = calcBBoxWithRadius 5. (posAdd port.Pos diff)}) 
-//                OutputPorts = sym.OutputPorts |> List.map (fun port -> {port with Pos = posAdd port.Pos diff ; BBox = calcBBoxWithRadius 5. (posAdd port.Pos diff)})
-//                LastDragPos = pagePos
-//                BBox = {
-//                    TopLeft = (posAdd sym.BBox.TopLeft diff) 
-//                    BottomRight = (posAdd sym.BBox.BottomRight diff)
-//                }
-//            }
-//              // fun (symbollist ) () go throughs the symbol list to find top left X = current topLeft = x 
-
-//    )
-//let endDraggingSymbol model sId =
-//    model
-//    |> List.map (fun sym ->
-//        if sId <> sym.Id then 
-//            sym
-//        else
-//            { sym with
-//                IsDragging = false 
-//            }
-//    )
-
-
-
 let update (msg : Msg) (model : Model): Model*Cmd<'a> =
     match msg with
     | AddSymbol (sType, pos) -> 
@@ -451,7 +398,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<'a> =
 
     | DeleteSymbols -> 
         let selectedIds = getSelectedSymbolIds model
-        model |> List.filter (fun sym -> not (List.contains sym.Id selectedIds))
+        model |> List.filter (fun sym -> not (List.contains sym.Id selectedIds) )
         , Cmd.none
 
     | DeselectAllSymbols ->
@@ -488,17 +435,57 @@ let update (msg : Msg) (model : Model): Model*Cmd<'a> =
         )
         , Cmd.none
 
-    | ToggleError ->
-        let selectedIds = getSelectedSymbolIds model
-        model
-        |> List.map (fun sym ->
-            if List.contains sym.Id selectedIds then 
-                {sym with HasError = if sym.HasError then false else true} 
-            else 
-                sym
-        )
-        , Cmd.none
+    | AddErrorToErrorList (errorPortList) -> 
+        let newModel = 
+            (model, errorPortList)
+            ||>List.fold (fun mdl errorPort ->
+                                    List.map (fun sym -> 
 
+                                    if (sym.Id = errorPort.HostId) 
+                                    then 
+                                        
+                                        printf ($" AddZ {sym.HasError}")
+                                        let portNum = 
+                                            match errorPort.PortNumber with
+                                            |Some portNum -> portNum
+                                            |None -> failwithf "No Port Num"
+                                        {sym with HasError = (portNum :: sym.HasError)} 
+                                                             
+                                        
+                                    else 
+                                        sym ) mdl )
+                                        
+
+        newModel,Cmd.none
+
+                                                     
+    | RemoveErrorFromErrorList (deleteWirePortList) ->
+        let newModel = 
+            (model, deleteWirePortList)
+            ||>List.fold (fun mdl deleteWirePort -> 
+                                        List.map (fun sym -> 
+                                        if (sym.Id = deleteWirePort.HostId) 
+                                        then                                             
+                                            let portNum = 
+                                                match deleteWirePort.PortNumber with
+                                                |Some portNum -> portNum
+                                                |None -> failwithf "No Port Num"
+                                            let firstErrorIndex = 
+                                                sym.HasError
+                                                |>List.findIndex ( fun elem  -> (elem = portNum))   
+
+                                            let rec remove i l =   //deletion at specific index. Feels like imperative programming ~~
+                                                match i, l with
+                                                | 0, x::xs -> xs
+                                                | i, x::xs -> x::remove (i - 1) xs
+                                                | i, [] -> failwith "index out of range"
+
+                                            let filteredErrorList = remove firstErrorIndex sym.HasError
+                                               
+                                            {sym with HasError = filteredErrorList}
+                                        else sym )
+                                             mdl )
+        newModel,Cmd.none             
     | SelectSymbolsWithinRegion box ->
         selectSymbolsInRegion model box, Cmd.none
 
@@ -533,7 +520,7 @@ let symbolShapeStyle (props : RenderSymbolProps) =
         match props.Symbol.IsSelected, props.Symbol.IsDragging, props.Symbol.HasError with
         | true, _, _ 
         | _, true, _ -> dragColor
-        | _, _, true -> errorColor
+        | _, _, list when list <> []-> errorColor
         | _ -> constColor
     Style [
         StrokeWidth 1
@@ -1137,8 +1124,7 @@ let createSymbolFromComponent (comp:CommonTypes.Component) (pos:XYPos) : Symbol 
         LastDragPos = {X=0. ; Y=0.} // initial value can always be this
         IsDragging = false // initial value can always be this
         IsSelected = false
-        HasError = false
-
+        HasError = []
         H = h
         W = w
         BBox = calculateBoundingBox h w pos
