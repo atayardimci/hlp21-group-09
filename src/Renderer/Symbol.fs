@@ -1063,19 +1063,18 @@ let getBoundingBoxOf (symModel: Model) (sId: CommonTypes.ComponentId) : Bounding
     let sym = 
         match (getSymbolWithId symModel sId) with
         | Some sym -> sym
-        | None -> failwithf "Symbol with given Id not found"
+        | None -> failwithf "The symbol with given Id not found"
     
     sym.BBox
     
 // Returns all ports of the symbol with the given Id
-let getPortOf (symModel: Model) (sId: CommonTypes.ComponentId) : Port list =
+let getPortsOf (symModel: Model) (sId: CommonTypes.ComponentId) : Port list =
     let sym = 
         match (getSymbolWithId symModel sId) with
         | Some sym -> sym
-        | None -> failwithf "Symbol with given Id not found"
+        | None -> failwithf "The symbol with given Id not found"
     sym.InputPorts @ sym.OutputPorts
 
-// let getBusWidthOfPortWithId () ->>> we need an interface function 
     
 
 let getOrientationOfPort (symModel: Model) (port:Port) : PortOrientation = 
@@ -1088,6 +1087,8 @@ let getOrientationOfPort (symModel: Model) (port:Port) : PortOrientation =
 /// Update the symbol with matching componentId to comp, or add a new symbol based on comp.
 let updateSymbolModelWithComponent (symModel: Model) (comp:CommonTypes.Component) =
     failwithf "Not Implemented"
+
+
 
 
 // change this to get parametersOfSym
