@@ -168,7 +168,7 @@ let autoCompleteWidths (sym : Symbol)  =
                                                                                                                 {sym with OutputPorts = [out1;newOutPort]}
                                                                                 | _ -> sym
                                                                             tmp
-                                                      | _ -> failwithf "Impossible"
+                                                      | _ -> failwithf "Error : Something wrong with SplitWire"
                                        completedSymbol         
             |CommonTypes.MergeWires    ->  
                                        let completedSymbol = 
@@ -183,7 +183,61 @@ let autoCompleteWidths (sym : Symbol)  =
                                                                                                    {sym with OutputPorts = [newOutPort]}
                                                                    | _ -> sym
                                                                tmp
+                                         | _ -> failwithf "Error : Something wrong with MergeWires"
                                        completedSymbol
+
+            |CommonTypes.IOLabel      ->
+                                      let completedSymbol =
+                                        match (sym.InputPorts,sym.OutputPorts) with 
+                                        | [in1],[out] -> let tmp = 
+                                                            match (in1.BusWidth,out.BusWidth) with
+                                                            | None, Some x -> let newInPort = {in1 with BusWidth = Some (x)} 
+                                                                              {sym with InputPorts = [newInPort]} 
+                                                            | Some x, None -> let newOutPort = {out with BusWidth = Some (x)}
+                                                                              {sym with OutputPorts = [newOutPort]}
+                                                            | _ -> sym
+                                                         tmp
+                                        | _ -> failwithf "Error : Something wrong with MergeWires"
+                                      completedSymbol
+            |CommonTypes.Mux2        ->
+                                     let completedSymbol =
+                                       match (sym.InputPorts,sym.OutputPorts) with 
+                                       | [in1;in2;sel],[out] -> let tmp = 
+                                                                   match (in1.BusWidth,in2.BusWidth,out.BusWidth) with
+                                                                   | None, None, Some x -> let newIn1Port = {in1 with BusWidth = Some (x)} 
+                                                                                           let newIn2Port = {in2 with BusWidth = Some (x)}
+                                                                                           {sym with InputPorts = [newIn1Port;newIn2Port;sel]} 
+
+                                                                   | None, Some x, None -> let newIn1Port = {in1 with BusWidth = Some (x)} 
+                                                                                           let newOutPort = {out with BusWidth = Some (x)}
+                                                                                           {sym with InputPorts = [newIn1Port; in2;sel]; OutputPorts = [newOutPort]}  
+                                                                   | Some x,None, None -> let newIn2Port = {in2 with BusWidth = Some (x)} 
+                                                                                          let newOutPort = {out with BusWidth = Some (x)}
+                                                                                          {sym with InputPorts = [in1 ; newIn2Port; sel]; OutputPorts = [newOutPort]}  
+                                                                   | _ -> sym
+                                                                tmp      
+                                       | _ -> failwithf "Error : Something wrong with Mux2"
+                                     completedSymbol
+            |CommonTypes.Demux2      ->
+                                     let completedSymbol =
+                                       match (sym.InputPorts,sym.OutputPorts) with 
+                                       | [in1;sel],[out1;out2] -> let tmp = 
+                                                                   match (in1.BusWidth,out1.BusWidth,out2.BusWidth) with
+                                                                   | Some x,None, None -> let newOut1Port = {out1 with BusWidth = Some (x)} 
+                                                                                          let newOut2Port = {out2 with BusWidth = Some (x)}
+                                                                                          {sym with  OutputPorts = [newOut1Port;newOut2Port]}  
+                                                                   | None, None, Some x -> let newIn1Port = {in1 with BusWidth = Some (x)} 
+                                                                                           let newOut1Port = {out1 with BusWidth = Some (x)}
+                                                                                           {sym with InputPorts = [newIn1Port;sel] ; OutputPorts = [newOut1Port; out2]} 
+                                                                   | None, Some x, None -> let newIn1Port = {in1 with BusWidth = Some (x)} 
+                                                                                           let newOut2Port = {out2 with BusWidth = Some (x)}
+                                                                                           {sym with InputPorts = [newIn1Port; sel]; OutputPorts = [out1; newOut2Port]}  
+                                                                   
+                                                                   | _ -> sym
+                                                                  tmp      
+                                       | _ -> failwithf "Error : Something wrong with Mux2"
+                                     completedSymbol
+
             | _ -> sym
 
                            
