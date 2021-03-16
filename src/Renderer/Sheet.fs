@@ -116,7 +116,7 @@ let startDraggingSymbol (pagePos: XYPos)  (model : Symbol.Symbol list) sId  =
         )
 let draggingSymbol (pagePos: XYPos)  (model : Symbol.Symbol list) sId  = 
     model
-    |> List.map (fun sym ->
+    |> List.map (fun sym -> 
         if sId <> sym.Id then
             sym
         else
