@@ -90,6 +90,7 @@ let boxesCollide (boxOne: BoundingBox) (boxTwo: BoundingBox) =
     let oneTL, oneBR, twoTL, twoBR = boxOne.TopLeft, boxOne.BottomRight, boxTwo.TopLeft, boxTwo.BottomRight
     not (oneBR.X < twoTL.X || oneBR.Y < twoTL.Y || oneTL.X > twoBR.X || oneTL.Y > twoBR.Y)
 
+///Updates the number of connections of the Port and Symbol
 let changePortStateIsConnected (port : Port) (sym : Symbol)(smallChangeDU : SmallChangeDU) : Symbol = 
     let mutable numConnections = sym.NumberOfConnections
     let newInputPorts =
@@ -153,6 +154,7 @@ let selectSymbolsInRegion (symModel: Model) (box: BoundingBox) : Model =
     symModel
     |> List.map (fun sym -> if doesCollide sym.BBox then {sym with IsSelected = true} else sym)
 
+
 let enforceBusWidth (busWidth : int )(port : Port) (sym : Symbol ) (bwDU : BusWidthDU) =
     match bwDU with 
     |EnforceEndPort -> let newInputPortList = 
@@ -177,80 +179,89 @@ let enforceBusWidth (busWidth : int )(port : Port) (sym : Symbol ) (bwDU : BusWi
                          {sym with OutputPorts = newOutputPortList }
 
 
+///Auto Completed Widths of 5 special components
 let autoCompleteWidths (sym : Symbol)  = 
         let newSym = 
             match (sym.Type) with 
             |CommonTypes.SplitWire num ->  
-                                       printf($"MASKCLAMSLDKCMASKLD {sym.NumberOfConnections}" )
-                                       let completedSymbol =  
-                                                      match (sym.InputPorts,sym.OutputPorts) with 
-                                                      | [in1],[out1;out2] when sym.NumberOfConnections = 0 -> {sym with InputPorts = [{in1 with BusWidth = None}] ; OutputPorts = [{out1 with BusWidth = None}; {out2 with BusWidth = None}]}
-                                                      | [in1],[out1;out2] ->let tmp = 
-                                                                                match in1.BusWidth,out1.BusWidth,out2.BusWidth with
-                                                                                | None, Some given, Some x ->   let newInPort = {in1 with BusWidth = Some (given + x) } 
-                                                                                                                {sym with InputPorts = [newInPort]}
-                                                                                | Some x , Some given, None ->  let newOutPort = {out2 with BusWidth = Some (x - given) }
-                                                                                                                {sym with OutputPorts = [out1;newOutPort]}
-                                                                                | _ -> sym
-                                                                            tmp
-                                                      | _ -> failwithf "Error : Something wrong with SplitWire"
-                                       completedSymbol         
-            |CommonTypes.MergeWires    ->  
-                                       printf($"MASKCLAMSLDKCMASKLD {sym.NumberOfConnections}" )
-                                       let completedSymbol = 
-                                         match (sym.InputPorts,sym.OutputPorts) with 
-                                         | [in1;in2],[out1] when sym.NumberOfConnections = 0 -> {sym with InputPorts = [{in1 with BusWidth = None}; {in2 with BusWidth = None}] ; OutputPorts = [{out1 with BusWidth = None}]}
-                                         | [in1;in2],[out1] -> let tmp =
-                                                                   match (in1.BusWidth,in2.BusWidth,out1.BusWidth) with
-                                                                   | None, Some given, Some x ->   let newInPort = {in1 with BusWidth = Some (x- given)} 
-                                                                                                   {sym with InputPorts = [newInPort; in2]}
-                                                                   | Some given , None, Some x ->  let newIn2Port = {in2 with BusWidth = Some (x - given)}
-                                                                                                   {sym with InputPorts = [in1; newIn2Port]}
-                                                                   | Some x , Some given, None ->  let newOutPort = {out1 with BusWidth = Some (x + given) }
-                                                                                                   {sym with OutputPorts = [newOutPort]}
-                                                                   | _ -> sym
-                                                               tmp
-                                         | _ -> failwithf "Error : Something wrong with MergeWires"
-                                       completedSymbol
-
-            |CommonTypes.IOLabel      ->
-                                      let completedSymbol =
+                                    let completedSymbol =  
                                         match (sym.InputPorts,sym.OutputPorts) with 
-                                        | [in1],[out1] when sym.NumberOfConnections = 0 -> {sym with InputPorts = [{in1 with BusWidth = None}] ; OutputPorts = [{out1 with BusWidth = None}]}
-                                        | [in1],[out1] -> let tmp = 
-                                                            match (in1.BusWidth,out1.BusWidth) with
-                                                            | None, Some x -> let newInPort = {in1 with BusWidth = Some (x)} 
-                                                                              {sym with InputPorts = [newInPort]} 
-                                                            | Some x, None -> let newOutPort = {out1 with BusWidth = Some (x)}
-                                                                              {sym with OutputPorts = [newOutPort]}
-                                                            | _ -> sym
-                                                          tmp
+                                        | [in1],[out1;out2] when sym.NumberOfConnections = 0 -> 
+                                                                {sym with InputPorts = [{in1 with BusWidth = None}] ; 
+                                                                          OutputPorts = [{out1 with BusWidth = None}; {out2 with BusWidth = None}]}
+                                        | [in1],[out1;out2] -> let tmp = 
+                                                                match (in1.BusWidth,out1.BusWidth,out2.BusWidth) with
+                                                                | None, Some given, Some x ->   let newInPort = {in1 with BusWidth = Some (given + x) } 
+                                                                                                {sym with InputPorts = [newInPort]}
+                                                                | Some x , Some given, None ->  let newOutPort = {out2 with BusWidth = Some (x - given) }
+                                                                                                {sym with OutputPorts = [out1;newOutPort]}
+                                                                | _ -> sym
+                                                               tmp
+                                        | _ -> failwithf "Error : Something wrong with SplitWire"
+                                    completedSymbol         
+            |CommonTypes.MergeWires  ->  
+                                    let completedSymbol = 
+                                        match (sym.InputPorts,sym.OutputPorts) with 
+                                        | [in1;in2],[out1] when sym.NumberOfConnections = 0 -> 
+                                                                {sym with InputPorts = [{in1 with BusWidth = None}; {in2 with BusWidth = None}] ; 
+                                                                          OutputPorts = [{out1 with BusWidth = None}]}
+                                        | [in1;in2],[out1] -> let tmp =
+                                                                match (in1.BusWidth,in2.BusWidth,out1.BusWidth) with
+                                                                | None, Some given, Some x ->   let newInPort = {in1 with BusWidth = Some (x- given)} 
+                                                                                                {sym with InputPorts = [newInPort; in2]}
+                                                                | Some given , None, Some x ->  let newIn2Port = {in2 with BusWidth = Some (x - given)}
+                                                                                                {sym with InputPorts = [in1; newIn2Port]}
+                                                                | Some x , Some given, None ->  let newOutPort = {out1 with BusWidth = Some (x + given) }
+                                                                                                {sym with OutputPorts = [newOutPort]}
+                                                                | _ -> sym
+                                                              tmp
                                         | _ -> failwithf "Error : Something wrong with MergeWires"
-                                      completedSymbol
-            |CommonTypes.Mux2        ->
-                                     let completedSymbol =
-                                       match (sym.InputPorts,sym.OutputPorts) with 
-                                       | [in1;in2;sel],[out1] when sym.NumberOfConnections = 0 -> {sym with InputPorts = [{in1 with BusWidth = None};{in2 with BusWidth = None}; sel] ; OutputPorts = [{out1 with BusWidth = None}]}
-                                       | [in1;in2;sel],[out1] -> let tmp = 
-                                                                   match (in1.BusWidth,in2.BusWidth,out1.BusWidth) with
-                                                                   | None, None, Some x -> let newIn1Port = {in1 with BusWidth = Some (x)} 
-                                                                                           let newIn2Port = {in2 with BusWidth = Some (x)}
-                                                                                           {sym with InputPorts = [newIn1Port;newIn2Port;sel]} 
+                                    completedSymbol
 
-                                                                   | None, Some x, None -> let newIn1Port = {in1 with BusWidth = Some (x)} 
-                                                                                           let newOutPort = {out1 with BusWidth = Some (x)}
-                                                                                           {sym with InputPorts = [newIn1Port; in2;sel]; OutputPorts = [newOutPort]}  
-                                                                   | Some x,None, None -> let newIn2Port = {in2 with BusWidth = Some (x)} 
-                                                                                          let newOutPort = {out1 with BusWidth = Some (x)}
-                                                                                          {sym with InputPorts = [in1 ; newIn2Port; sel]; OutputPorts = [newOutPort]}  
-                                                                   | _ -> sym
-                                                                 tmp      
-                                       | _ -> failwithf "Error : Something wrong with Mux2"
-                                     completedSymbol
+            |CommonTypes.IOLabel  ->
+                                   let completedSymbol =
+                                     match (sym.InputPorts,sym.OutputPorts) with 
+                                     | [in1],[out1] when sym.NumberOfConnections = 0 -> 
+                                                        {sym with InputPorts = [{in1 with BusWidth = None}] ; 
+                                                                  OutputPorts = [{out1 with BusWidth = None}]}
+                                     | [in1],[out1] -> let tmp = 
+                                                         match (in1.BusWidth,out1.BusWidth) with
+                                                         | None, Some x -> let newInPort = {in1 with BusWidth = Some (x)} 
+                                                                           {sym with InputPorts = [newInPort]} 
+                                                         | Some x, None -> let newOutPort = {out1 with BusWidth = Some (x)}
+                                                                           {sym with OutputPorts = [newOutPort]}
+                                                         | _ -> sym
+                                                       tmp
+                                     | _ -> failwithf "Error : Something wrong with MergeWires"
+                                   completedSymbol
+            |CommonTypes.Mux2     ->
+                                  let completedSymbol =
+                                    match (sym.InputPorts,sym.OutputPorts) with 
+                                    | [in1;in2;sel],[out1] when sym.NumberOfConnections = 0 -> 
+                                                                {sym with InputPorts = [{in1 with BusWidth = None};{in2 with BusWidth = None}; sel] ; 
+                                                                          OutputPorts = [{out1 with BusWidth = None}]}
+                                    | [in1;in2;sel],[out1] -> let tmp = 
+                                                               match (in1.BusWidth,in2.BusWidth,out1.BusWidth) with
+                                                               | None, None, Some x -> let newIn1Port = {in1 with BusWidth = Some (x)} 
+                                                                                       let newIn2Port = {in2 with BusWidth = Some (x)}
+                                                                                       {sym with InputPorts = [newIn1Port;newIn2Port;sel]} 
+
+                                                               | None, Some x, None -> let newIn1Port = {in1 with BusWidth = Some (x)} 
+                                                                                       let newOutPort = {out1 with BusWidth = Some (x)}
+                                                                                       {sym with InputPorts = [newIn1Port; in2;sel]; OutputPorts = [newOutPort]}  
+                                                               | Some x,None, None ->  let newIn2Port = {in2 with BusWidth = Some (x)} 
+                                                                                       let newOutPort = {out1 with BusWidth = Some (x)}
+                                                                                       {sym with InputPorts = [in1 ; newIn2Port; sel]; OutputPorts = [newOutPort]}  
+                                                               | _ -> sym
+                                                              tmp      
+                                    | _ -> failwithf "Error : Something wrong with Mux2"
+                                  completedSymbol
             |CommonTypes.Demux2      ->
                                      let completedSymbol =
                                        match (sym.InputPorts,sym.OutputPorts) with 
-                                       | [in1;sel],[out1;out2] when sym.NumberOfConnections = 0 -> {sym with InputPorts = [{in1 with BusWidth = None};{sel with BusWidth = None}] ; OutputPorts = [{out1 with BusWidth = None};{out2 with BusWidth = None}]}
+                                       | [in1;sel],[out1;out2] when sym.NumberOfConnections = 0 -> 
+                                                                {sym with InputPorts = [{in1 with BusWidth = None};{sel with BusWidth = None}] ; 
+                                                                          OutputPorts = [{out1 with BusWidth = None};{out2 with BusWidth = None}]}
                                        | [in1;sel],[out1;out2] -> let tmp = 
                                                                    match (in1.BusWidth,out1.BusWidth,out2.BusWidth) with
                                                                    | Some x,None, None -> let newOut1Port = {out1 with BusWidth = Some (x)} 
@@ -265,7 +276,7 @@ let autoCompleteWidths (sym : Symbol)  =
                                                                    
                                                                    | _ -> sym
                                                                   tmp      
-                                       | _ -> failwithf "Error : Something wrong with Mux2"
+                                       | _ -> failwithf "Error : Something wrong with DeMux2"
                                      completedSymbol
 
             | _ -> sym
@@ -671,30 +682,24 @@ let update (msg : Msg) (model : Model): Model*Cmd<'a> =
     | EnforceBusWidth (busWidth,port,DU) ->  
         let newModel = 
             (model,[port])
-            ||> List.fold (fun mdl port ->List.map (fun sym ->            
-                                             if (sym.Id = port.HostId)
-                                             then                                                
-                                                let newSym: Symbol =
-                                                    match DU with
-                                                    |EnforceStartPort -> enforceBusWidth busWidth port sym EnforceStartPort
-                                                    |EnforceEndPort -> enforceBusWidth busWidth port sym EnforceEndPort
-                                                newSym
-                                                |>autoCompleteWidths
+            ||> List.fold (fun mdl port ->
+                            List.map (fun sym ->            
+                                        if (sym.Id = port.HostId)
+                                        then                                                
+                                            let newSym: Symbol =
+                                                match DU with
+                                                |EnforceStartPort -> enforceBusWidth busWidth port sym EnforceStartPort
+                                                |EnforceEndPort -> enforceBusWidth busWidth port sym EnforceEndPort
+                                            newSym
+                                            |>autoCompleteWidths
 
-                                             else 
-                                                sym
-                                             ) mdl
-                           )
+                                        else 
+                                            sym
+                                        ) mdl
+                        )
         newModel,Cmd.none
 
     | MouseMsg _ -> model, Cmd.none // allow unused mouse messags
-
-
-
-
-
-
-
 
 
 

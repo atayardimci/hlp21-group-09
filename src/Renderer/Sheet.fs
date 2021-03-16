@@ -40,35 +40,37 @@ type Msg =
     | MouseMsg of MouseT
     | Msg of string
 
+    //Symbols
     | StartDraggingSymbol of sId : CommonTypes.ComponentId list * pagePos: XYPos
     | DraggingSymbol of sId : CommonTypes.ComponentId list * pagePos: XYPos 
     | EndDraggingSymbol of sId : CommonTypes.ComponentId list
+    | DeselectAllSymbols
 
+    //Ports
     | StartDraggingPort of Symbol.Port
     | DraggingPort of pagePos : XYPos
     | EndDraggingPort of XYPos
     | DrawFromPortToCursor of XYPos*XYPos * Symbol.Port option
-
+    | RemoveDrawnLine 
     | RenderPorts of sId : (float * Symbol.Port list) list * isHovering : bool
     | RenderOnePort of mousePos : XYPos* Symbol.Port option
     | UpdatePorts
 
+    //Highlight Region
     | StartDrawingRegion of XYPos
     | DrawingRegion of pagePos : XYPos
     | EndDrawingRegion of pagePos : XYPos
-
     | SelectComponentsWithinRegion of Helpers.BoundingBox
-    | DeselectAllSymbols
+    
 
-    | RemoveDrawnLine 
-
+    
+    // Wire
     | StartDraggingWire of CommonTypes.ConnectionId*XYPos
     | DraggingWire of CommonTypes.ConnectionId option *XYPos
     | EndDraggingWire of CommonTypes.ConnectionId
     | DuplicateWire of displacementPos : XYPos
     | DeselectWire 
-    | AddWire of Symbol.Port*Symbol.Port
-    //| SelectWire of CommonTypes.ConnectionId * XYPos    
+    | AddWire of Symbol.Port*Symbol.Port    
 
     
 
@@ -124,8 +126,10 @@ let draggingSymbol (pagePos: XYPos)  (model : Symbol.Symbol list) sId  =
                      
             { sym with
                 Pos = posAdd sym.Pos diff
-                InputPorts = sym.InputPorts |> List.map (fun port -> {port with Pos = posAdd port.Pos diff ; BBox = calcBBoxWithRadius 5. (posAdd port.Pos diff)}) 
-                OutputPorts = sym.OutputPorts |> List.map (fun port -> {port with Pos = posAdd port.Pos diff ; BBox = calcBBoxWithRadius 5. (posAdd port.Pos diff)})
+                InputPorts = sym.InputPorts 
+                             |> List.map (fun port -> {port with Pos = posAdd port.Pos diff ; BBox = calcBBoxWithRadius 5. (posAdd port.Pos diff)}) 
+                OutputPorts = sym.OutputPorts 
+                              |> List.map (fun port -> {port with Pos = posAdd port.Pos diff ; BBox = calcBBoxWithRadius 5. (posAdd port.Pos diff)})
                 LastDragPos = pagePos
                 BBox = {
                     TopLeft = (posAdd sym.BBox.TopLeft diff) 
@@ -147,9 +151,12 @@ let endDraggingSymbol (model : Symbol.Symbol list) sId =
     )
 
 
-let findPortsMatchingHostId (portList: Symbol.Port list) (portDU : Helpers.PortDU) (dist : float , hostId : CommonTypes.ComponentId)  : (float * Symbol.Port list) =  //input output or both
-
-    let findOnePortMatchingHostId (dist : float, hostId : CommonTypes.ComponentId) (portDU : Helpers.PortDU) (port : Symbol.Port) : bool  =  //returns all ports of HostID
+let findPortsMatchingHostId (portList: Symbol.Port list) (portDU : Helpers.PortDU) 
+                            (dist : float , hostId : CommonTypes.ComponentId)  
+                                : (float * Symbol.Port list) = 
+    let newPortList =
+        portList
+        |>List.filter(fun port ->     
             match portDU with 
             | In -> match port with 
                     |{HostId = hId; PortType = pType} when (hostId = hId && pType = CommonTypes.Input) -> true //if hostId matches with portHostId      
@@ -160,9 +167,8 @@ let findPortsMatchingHostId (portList: Symbol.Port list) (portDU : Helpers.PortD
             | All -> match port with 
                      |{HostId = hId} when (hostId = hId) -> true //if hostId matches with portHostId
                      | _ -> false
-     //findOnePortMatchingHostID func ends here
-    let newPortList = List.filter (findOnePortMatchingHostId (dist,hostId) portDU) portList   //return ports that are only matching HostID
-    
+        )
+
     (dist,newPortList)
 
 let getPortsWithinMinRange (mousePos : XYPos ) (model : Model) (minDist : float) (portDU : PortDU)  = 
@@ -263,15 +269,6 @@ let private renderGrid =  //Canvas Grid
                             SVGAttr.Height 24.0;
                             SVGAttr.PatternUnits "userSpaceOnUse"
                         ] [path [SVGAttr.D "M 24 0 L 0 0 0 24" ; SVGAttr.Fill "none" ; SVGAttr.Stroke "silver"; SVGAttr.StrokeWidth 0.5] []]
-
-                        pattern [
-                            Id "grid"
-                            SVGAttr.Width 120;
-                            SVGAttr.Height 120;
-                            SVGAttr.PatternUnits "userSpaceOnUse"        
-                        ][rect [SVGAttr.Width 120.0; SVGAttr.Height 120.0; SVGAttr.Fill "url(#smallGrid)"; SVGAttr.Stroke "gray"; SVGAttr.StrokeWidth 1.0][]
-                          path [SVGAttr.D "M 120 0 L 0 0 0 120"; SVGAttr.Fill "none"; SVGAttr.Stroke "gray"; SVGAttr.StrokeWidth 1.0][]  
-                         ]
                    ]
                
                rect [
@@ -289,7 +286,9 @@ let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispat
         if ev.buttons <> 0. then true else false
 
     let mouseOp op (ev:Types.MouseEvent) (scrollPos : (float*float)) = 
-        dispatch <| MouseMsg {Op = op ; Pos = { X = (ev.clientX  + (fst scrollPos))/(model.Canvas.zoom) ;  Y = ( ev.clientY + (snd scrollPos))/ (model.Canvas.zoom)}}
+        dispatch <| MouseMsg {Op = op ; 
+                              Pos = { X = (ev.clientX  + (fst scrollPos))/(model.Canvas.zoom) ;  
+                                      Y = ( ev.clientY + (snd scrollPos))/ (model.Canvas.zoom)}}
         
     let wheelOp op (ev:Types.WheelEvent) =   
         let newZoom = model.Canvas.zoom - (model.Canvas.zoom*ev.deltaY*0.0007)
@@ -331,11 +330,11 @@ let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispat
                     ]
                 ]
 
-                [ g // group list of elements with list of attributes
-                    [ Style [Transform  (sprintf "scale(%f)" model.Canvas.zoom)]] // top-level transform style attribute for zoom
+                [ g 
+                    [ Style [Transform  (sprintf "scale(%f)" model.Canvas.zoom)]] 
                     [   
-                        renderGrid // adds the background Grid canvas to current svg
-                        svgReact  
+                        renderGrid //background
+                        svgReact   
                         renderDraggingPortsByDistance
                         renderHoveringPortsByDistance
                         renderHighlightRegion model.RegionToBeRendered
@@ -377,8 +376,9 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                 SymIdList = []
             }
         newModel, Cmd.batch [Cmd.ofMsg (UpdatePorts); Cmd.ofMsg (RenderPorts ([],true))]
-       
-    | KeyPress AltC  ->  //Duplicate of Symbols which then calls duplicateWire
+    
+    ///Duplication : Duplicate Symbols first then duplciate Wires.
+    | KeyPress AltC  ->  
         let symbolsToBeDup = Symbol.getSelectedSymbols(model.Wire.Symbol)
         let dupSymbol = Symbol.duplicateSymbol (symbolsToBeDup)
         let newSymModel =
@@ -393,7 +393,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                 Wire = {model.Wire with Symbol = newSymModel}
             }
 
-        newModel,Cmd.batch[Cmd.ofMsg(UpdatePorts); Cmd.ofMsg(DuplicateWire displacement)] //sends a message to BusWire to duplicate Wires
+        newModel,Cmd.batch[Cmd.ofMsg(UpdatePorts); Cmd.ofMsg(DuplicateWire displacement)] 
 
     | DuplicateWire displacementPos -> 
         let selectedWireList =

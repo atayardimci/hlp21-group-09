@@ -389,14 +389,14 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                                                                  )symModel
 
                                                 (wire,sym)
-            | Some startWidth, None  -> let wire = createWire startPort endPort Init //enforce the Port with BusWidth None to be a BusWidth 
+            | Some startWidth, None  -> let wire = createWire startPort endPort Init     //change BusWidth None to BusWidth of newly connected port
                                         let sym,symMsg  = Symbol.update (Symbol.Msg.EnforceBusWidth 
                                                             (startWidth,endPort,EnforceEndPort)
                                                           )symModel
 
 
                                         (wire,sym)
-            | None , Some endWidth  -> let wire = createWire startPort endPort Init
+            | None , Some endWidth  -> let wire = createWire startPort endPort Init     //change BusWidth None to BusWidth of newly connected port
                                        let sym,symMsg  = Symbol.update (Symbol.Msg.EnforceBusWidth 
                                                             (endWidth,startPort,EnforceStartPort)
                                                           )symModel
