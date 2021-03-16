@@ -18,7 +18,9 @@ type Port =
         Pos : XYPos
         BBox : BoundingBox
         IsDragging : bool
+        NumberOfConnections : int
         BusWidth : int Option
+        
     }
 
 type Symbol =
@@ -37,7 +39,8 @@ type Symbol =
         LastDragPos : XYPos
         IsDragging : bool
         IsSelected : bool
-        HasError : bool
+        HasError : int list
+        NumberOfConnections : int 
         
         H : float
         W : float
@@ -50,15 +53,14 @@ type Model = Symbol list
 
 type Msg =
     | MouseMsg of MouseT
-    | StartDragging of sIdList: CommonTypes.ComponentId list * pagePos: XYPos
-    | Dragging of sIdList : CommonTypes.ComponentId list * pagePos: XYPos
-    | EndDragging of sIdList : CommonTypes.ComponentId list
     | AddSymbol of sType:CommonTypes.ComponentType * pos:XYPos // used by demo code to add a circle
     | DeleteSymbols
     | DeselectAllSymbols
     | UpdateInputOrientation of inputOrientation: PortOrientation
-    | UpdateOutputOrientation of outputOrientation: PortOrientation
-    | ToggleError
+    | UpdateOutputOrientation of outputOrientation: PortOrientation 
+    | AddErrorToErrorList of  Port list
+    | RemoveErrorFromErrorList of Port list
+    | EnforceBusWidth of int*Port*BusWidthDU
     | SelectSymbolsWithinRegion of box: BoundingBox
 
     // | UpdateSymbolModelWithComponent of CommonTypes.Component 
@@ -88,12 +90,205 @@ let boxesCollide (boxOne: BoundingBox) (boxTwo: BoundingBox) =
     let oneTL, oneBR, twoTL, twoBR = boxOne.TopLeft, boxOne.BottomRight, boxTwo.TopLeft, boxTwo.BottomRight
     not (oneBR.X < twoTL.X || oneBR.Y < twoTL.Y || oneTL.X > twoBR.X || oneTL.Y > twoBR.Y)
 
+///Updates the number of connections of the Port and Symbol
+let changePortStateIsConnected (port : Port) (sym : Symbol)(smallChangeDU : SmallChangeDU) : Symbol = 
+    let mutable numConnections = sym.NumberOfConnections
+    let newInputPorts =
+        sym.InputPorts
+        |>List.map (fun inPort -> if (inPort.Id = port.Id) then 
+                                     if(smallChangeDU = Increment) then 
+                                        numConnections <- numConnections + 1         
+                                        {inPort with NumberOfConnections = inPort.NumberOfConnections + 1 }
+                                        
+                                     else
+                                        numConnections <- numConnections - 1
+                                        {inPort with NumberOfConnections = inPort.NumberOfConnections - 1 } 
+                                  else inPort)
+    let newOutputPorts = 
+        sym.OutputPorts
+        |>List.map (fun outPort -> if (outPort.Id = port.Id) then 
+                                     if(smallChangeDU = Increment) then 
+                                        numConnections <- numConnections + 1
+                                        {outPort with NumberOfConnections = outPort.NumberOfConnections + 1 } 
+                                     else
+                                        numConnections <- numConnections - 1
+                                        {outPort with NumberOfConnections = outPort.NumberOfConnections - 1 } 
+                                   else outPort)
+
+    {sym with InputPorts = newInputPorts ; OutputPorts = newOutputPorts; NumberOfConnections = numConnections}
+
+//let resetPortBusWidth (newPortList : Port list ) : Port list = 
+//    (newPortList)
+//    |>List.map (fun newPort -> {newPort with BusWidth = None})
+
+//let resetSymbolBusWidth (sym : Symbol) : Symbol = 
+//    {sym with InputPorts = resetPortBusWidth sym.InputPorts; OutputPorts = resetPortBusWidth sym.OutputPorts }
+
+
+let addErrorToErrorList (newSymZ : Symbol) (deleteWirePort : Port) : Symbol = 
+    let newSym = changePortStateIsConnected deleteWirePort newSymZ Decrement
+    let portNum = 
+        match deleteWirePort.PortNumber with
+        |Some portNum -> portNum
+        |None -> failwithf "No Port Num"
+    let firstErrorIndex = 
+        newSym.HasError
+        |>List.tryFindIndex ( fun elem  -> (elem = portNum))   
+
+    let rec remove i l =   //deletion at specific index. Feels like imperative programming ~~
+        match i, l with
+        | 0, x::xs -> xs
+        | i, x::xs -> x::remove (i - 1) xs
+        | i, [] -> failwith "index out of range"
+                                            
+    let filteredErrorList = 
+        match firstErrorIndex with 
+        |Some errorindex -> remove errorindex newSym.HasError
+        |None -> newSym.HasError
+    {newSym with HasError = filteredErrorList}
+
+
 /// Selects all symbols which have their bounding box collide with the given box and returns the updated model
 let selectSymbolsInRegion (symModel: Model) (box: BoundingBox) : Model =
     let doesCollide = boxesCollide box
     symModel
     |> List.map (fun sym -> if doesCollide sym.BBox then {sym with IsSelected = true} else sym)
 
+
+let enforceBusWidth (busWidth : int )(port : Port) (sym : Symbol ) (bwDU : BusWidthDU) =
+    match bwDU with 
+    |EnforceEndPort -> let newInputPortList = 
+                            (sym.InputPorts,[port])||> List.fold (fun inputPortList port -> 
+                                                                List.map(fun (inputPort:Port) -> 
+                                                                    if (inputPort.Id = port.Id) then
+                                                                     {inputPort with BusWidth = Some busWidth}
+                                                                    else 
+                                                                     inputPort
+                                                                    )inputPortList
+                                                              )
+                       {sym with InputPorts =newInputPortList }
+    |EnforceStartPort -> let newOutputPortList =
+                            (sym.OutputPorts,[port])||> List.fold (fun outputPortList port -> 
+                                                                List.map(fun (outputPort:Port) -> 
+                                                                    if (outputPort.Id = port.Id) then      
+                                                                        {outputPort with BusWidth = Some busWidth}
+                                                                    else 
+                                                                    outputPort
+                                                                    ) outputPortList
+                                                              )
+                         {sym with OutputPorts = newOutputPortList }
+
+
+///Auto Completed Widths of 5 special components
+let autoCompleteWidths (sym : Symbol)  = 
+        let newSym = 
+            match (sym.Type) with 
+            |CommonTypes.SplitWire num ->  
+                                    let completedSymbol =  
+                                        match (sym.InputPorts,sym.OutputPorts) with 
+                                        | [in1],[out1;out2] when sym.NumberOfConnections = 0 -> 
+                                                                {sym with InputPorts = [{in1 with BusWidth = None}] ; 
+                                                                          OutputPorts = [{out1 with BusWidth = None}; {out2 with BusWidth = None}]}
+                                        | [in1],[out1;out2] -> let tmp = 
+                                                                match (in1.BusWidth,out1.BusWidth,out2.BusWidth) with
+                                                                | None, Some given, Some x ->   let newInPort = {in1 with BusWidth = Some (given + x) } 
+                                                                                                {sym with InputPorts = [newInPort]}
+                                                                | Some x , Some given, None ->  let newOutPort = {out2 with BusWidth = Some (x - given) }
+                                                                                                {sym with OutputPorts = [out1;newOutPort]}
+                                                                | _ -> sym
+                                                               tmp
+                                        | _ -> failwithf "Error : Something wrong with SplitWire"
+                                    completedSymbol         
+            |CommonTypes.MergeWires  ->  
+                                    let completedSymbol = 
+                                        match (sym.InputPorts,sym.OutputPorts) with 
+                                        | [in1;in2],[out1] when sym.NumberOfConnections = 0 -> 
+                                                                {sym with InputPorts = [{in1 with BusWidth = None}; {in2 with BusWidth = None}] ; 
+                                                                          OutputPorts = [{out1 with BusWidth = None}]}
+                                        | [in1;in2],[out1] -> let tmp =
+                                                                match (in1.BusWidth,in2.BusWidth,out1.BusWidth) with
+                                                                | None, Some given, Some x ->   let newInPort = {in1 with BusWidth = Some (x- given)} 
+                                                                                                {sym with InputPorts = [newInPort; in2]}
+                                                                | Some given , None, Some x ->  let newIn2Port = {in2 with BusWidth = Some (x - given)}
+                                                                                                {sym with InputPorts = [in1; newIn2Port]}
+                                                                | Some x , Some given, None ->  let newOutPort = {out1 with BusWidth = Some (x + given) }
+                                                                                                {sym with OutputPorts = [newOutPort]}
+                                                                | _ -> sym
+                                                              tmp
+                                        | _ -> failwithf "Error : Something wrong with MergeWires"
+                                    completedSymbol
+
+            |CommonTypes.IOLabel  ->
+                                   let completedSymbol =
+                                     match (sym.InputPorts,sym.OutputPorts) with 
+                                     | [in1],[out1] when sym.NumberOfConnections = 0 -> 
+                                                        {sym with InputPorts = [{in1 with BusWidth = None}] ; 
+                                                                  OutputPorts = [{out1 with BusWidth = None}]}
+                                     | [in1],[out1] -> let tmp = 
+                                                         match (in1.BusWidth,out1.BusWidth) with
+                                                         | None, Some x -> let newInPort = {in1 with BusWidth = Some (x)} 
+                                                                           {sym with InputPorts = [newInPort]} 
+                                                         | Some x, None -> let newOutPort = {out1 with BusWidth = Some (x)}
+                                                                           {sym with OutputPorts = [newOutPort]}
+                                                         | _ -> sym
+                                                       tmp
+                                     | _ -> failwithf "Error : Something wrong with MergeWires"
+                                   completedSymbol
+            |CommonTypes.Mux2     ->
+                                  let completedSymbol =
+                                    match (sym.InputPorts,sym.OutputPorts) with 
+                                    | [in1;in2;sel],[out1] when sym.NumberOfConnections = 0 -> 
+                                                                {sym with InputPorts = [{in1 with BusWidth = None};{in2 with BusWidth = None}; sel] ; 
+                                                                          OutputPorts = [{out1 with BusWidth = None}]}
+                                    | [in1;in2;sel],[out1] -> let tmp = 
+                                                               match (in1.BusWidth,in2.BusWidth,out1.BusWidth) with
+                                                               | None, None, Some x -> let newIn1Port = {in1 with BusWidth = Some (x)} 
+                                                                                       let newIn2Port = {in2 with BusWidth = Some (x)}
+                                                                                       {sym with InputPorts = [newIn1Port;newIn2Port;sel]} 
+
+                                                               | None, Some x, None -> let newIn1Port = {in1 with BusWidth = Some (x)} 
+                                                                                       let newOutPort = {out1 with BusWidth = Some (x)}
+                                                                                       {sym with InputPorts = [newIn1Port; in2;sel]; OutputPorts = [newOutPort]}  
+                                                               | Some x,None, None ->  let newIn2Port = {in2 with BusWidth = Some (x)} 
+                                                                                       let newOutPort = {out1 with BusWidth = Some (x)}
+                                                                                       {sym with InputPorts = [in1 ; newIn2Port; sel]; OutputPorts = [newOutPort]}  
+                                                               | _ -> sym
+                                                              tmp      
+                                    | _ -> failwithf "Error : Something wrong with Mux2"
+                                  completedSymbol
+            |CommonTypes.Demux2      ->
+                                     let completedSymbol =
+                                       match (sym.InputPorts,sym.OutputPorts) with 
+                                       | [in1;sel],[out1;out2] when sym.NumberOfConnections = 0 -> 
+                                                                {sym with InputPorts = [{in1 with BusWidth = None};{sel with BusWidth = None}] ; 
+                                                                          OutputPorts = [{out1 with BusWidth = None};{out2 with BusWidth = None}]}
+                                       | [in1;sel],[out1;out2] -> let tmp = 
+                                                                   match (in1.BusWidth,out1.BusWidth,out2.BusWidth) with
+                                                                   | Some x,None, None -> let newOut1Port = {out1 with BusWidth = Some (x)} 
+                                                                                          let newOut2Port = {out2 with BusWidth = Some (x)}
+                                                                                          {sym with  OutputPorts = [newOut1Port;newOut2Port]}  
+                                                                   | None, None, Some x -> let newIn1Port = {in1 with BusWidth = Some (x)} 
+                                                                                           let newOut1Port = {out1 with BusWidth = Some (x)}
+                                                                                           {sym with InputPorts = [newIn1Port;sel] ; OutputPorts = [newOut1Port; out2]} 
+                                                                   | None, Some x, None -> let newIn1Port = {in1 with BusWidth = Some (x)} 
+                                                                                           let newOut2Port = {out2 with BusWidth = Some (x)}
+                                                                                           {sym with InputPorts = [newIn1Port; sel]; OutputPorts = [out1; newOut2Port]}  
+                                                                   
+                                                                   | _ -> sym
+                                                                  tmp      
+                                       | _ -> failwithf "Error : Something wrong with DeMux2"
+                                     completedSymbol
+
+            | _ -> sym
+
+                           
+        newSym
+                        
+
+/// Render a ruler to assist in assigning the symbols
+// fun (symbollist ) () go throughs the symbol list to find top left X = current topLeft = x 
+//let renderRuler (symList : Symbol list) (BBox : BoundingBox) 
+//    //
 
 //---------------------------------helper types and functions----------------//
 
@@ -242,6 +437,7 @@ let getPorts (sType:CommonTypes.ComponentType) hostId inputPortsPosList outputPo
                 Pos = pos
                 BBox = calcBBoxWithRadius 6.0 pos
                 IsDragging = false
+                NumberOfConnections = 0
                 BusWidth = getBusWidthOfPort sType CommonTypes.PortType.Input idx
             }
         )
@@ -256,6 +452,7 @@ let getPorts (sType:CommonTypes.ComponentType) hostId inputPortsPosList outputPo
                 Pos = pos
                 BBox = calcBBoxWithRadius 6.0 pos
                 IsDragging = false
+                NumberOfConnections = 0
                 BusWidth = getBusWidthOfPort sType CommonTypes.PortType.Output idx
             }
         )
@@ -315,8 +512,9 @@ let createNewSymbol (sType:CommonTypes.ComponentType) (name:string) (pos:XYPos) 
         Pos = pos
         LastDragPos = {X=0. ; Y=0.} 
         IsDragging = false
-        IsSelected = if(createDU = Duplicate) then true else false
-        HasError = false
+        IsSelected = if(createDU = Duplicate || createDU = DuplicateError) then true else false
+        HasError = []
+        NumberOfConnections = 0
         
         H = h
         W = w
@@ -324,29 +522,25 @@ let createNewSymbol (sType:CommonTypes.ComponentType) (name:string) (pos:XYPos) 
     }
 
 let duplicateSymbol (symList : Symbol list) : XYPos*Symbol list = 
-    //let minX =
-    //    symList
-    //    |>List.minBy (fun sym -> sym.BBox.TopLeft.X)
-    //    |>(fun sym -> sym.BBox.TopLeft.X)
     let minY = 
         symList
         |>List.minBy (fun sym -> sym.BBox.TopLeft.Y)
         |>(fun sym -> sym.BBox.TopLeft.Y)
-    //let maxX = 
-    //    symList
-    //    |>List.minBy (fun sym -> (-1.0)*(sym.BBox.TopLeft.X))
-    //    |>(fun sym -> sym.BBox.BottomRight.X)
+
     let maxY = 
         symList
         |>List.minBy (fun sym -> (-1.0)*(sym.BBox.TopLeft.Y))
         |>(fun sym -> sym.BBox.BottomRight.Y)
 
-    let posDisplacement = {X = 0.0; Y = maxY- minY}
+    let posDisplacement = {X = 0.0; Y = maxY- minY + 80.0}
     
     let dupList = 
         symList
         |>List.map (fun sym -> 
-                            createNewSymbol sym.Type sym.Label (posAdd sym.Pos posDisplacement) Duplicate)
+                            let newSym = createNewSymbol sym.Type sym.Label (posAdd sym.Pos posDisplacement) Duplicate
+                            
+                            {newSym with HasError = sym.HasError}
+                   )
     (posDisplacement,dupList)
                            
 
@@ -395,54 +589,6 @@ let init () =
     , Cmd.none
 
 
-
-
-
-
-
-
-let startDraggingSymbol pagePos model sId  =
-    model
-    |> List.map (fun sym ->
-            if sId <> sym.Id then
-                sym
-            else
-                { sym with
-                    LastDragPos = pagePos
-                    IsDragging = true
-                }
-        )
-let draggingSymbol pagePos model sId  = 
-    model
-    |> List.map (fun sym ->
-        if sId <> sym.Id then
-            sym
-        else
-            let diff = posDiff pagePos sym.LastDragPos
-            { sym with
-                Pos = posAdd sym.Pos diff
-                InputPorts = sym.InputPorts |> List.map (fun port -> {port with Pos = posAdd port.Pos diff ; BBox = calcBBoxWithRadius 5. (posAdd port.Pos diff)}) 
-                OutputPorts = sym.OutputPorts |> List.map (fun port -> {port with Pos = posAdd port.Pos diff ; BBox = calcBBoxWithRadius 5. (posAdd port.Pos diff)})
-                LastDragPos = pagePos
-                BBox = {
-                    TopLeft = (posAdd sym.BBox.TopLeft diff) 
-                    BottomRight = (posAdd sym.BBox.BottomRight diff)
-                }
-            }
-    )
-let endDraggingSymbol model sId =
-    model
-    |> List.map (fun sym ->
-        if sId <> sym.Id then 
-            sym
-        else
-            { sym with
-                IsDragging = false 
-            }
-    )
-
-
-
 let update (msg : Msg) (model : Model): Model*Cmd<'a> =
     match msg with
     | AddSymbol (sType, pos) -> 
@@ -451,25 +597,9 @@ let update (msg : Msg) (model : Model): Model*Cmd<'a> =
 
     | DeleteSymbols -> 
         let selectedIds = getSelectedSymbolIds model
-        model |> List.filter (fun sym -> not (List.contains sym.Id selectedIds))
+        model |> List.filter (fun sym -> not (List.contains sym.Id selectedIds) )
         , Cmd.none
 
-    | StartDragging (sIdList, pagePos) ->
-        (model, sIdList)
-        ||> List.fold (startDraggingSymbol pagePos)
-        |> List.map (fun sym -> if List.contains sym.Id sIdList then {sym with IsSelected = true} else sym)
-        , Cmd.none
-
-    | Dragging (sIdList, pagePos) ->
-        (model, sIdList)
-        ||> List.fold (draggingSymbol pagePos)
-        , Cmd.none
-        
-    | EndDragging sIdList ->
-        (model, sIdList)
-        ||> List.fold (endDraggingSymbol)
-        , Cmd.none
-    
     | DeselectAllSymbols ->
         model
         |> List.map (fun sym -> {sym with IsSelected = false})
@@ -504,31 +634,72 @@ let update (msg : Msg) (model : Model): Model*Cmd<'a> =
         )
         , Cmd.none
 
-    | ToggleError ->
-        let selectedIds = getSelectedSymbolIds model
-        model
-        |> List.map (fun sym ->
-            if List.contains sym.Id selectedIds then 
-                {sym with HasError = if sym.HasError then false else true} 
-            else 
-                sym
-        )
-        , Cmd.none
+    | AddErrorToErrorList (errorPortList) -> 
+        let newModel = 
+            (model, errorPortList)
+            ||>List.fold (fun mdl errorPort ->
+                                    List.map (fun sym -> 
 
+                                    if (sym.Id = errorPort.HostId) 
+                                    then 
+                                        
+                                        printf ($" AddZ {sym.HasError}")
+                                        let portNum = 
+                                            match errorPort.PortNumber with
+                                            |Some portNum -> portNum
+                                            |None -> failwithf "No Port Num"
+                                        {sym with HasError = (portNum :: sym.HasError)} 
+                                                             
+                                        
+                                    else 
+                                        sym ) mdl )
+                                        
+
+        newModel,Cmd.none
+
+                                                     
+    | RemoveErrorFromErrorList (deleteWirePortList) -> //remove error portNumbers 
+        let newModel = 
+            (model, deleteWirePortList)
+            ||>List.fold (fun mdl deleteWirePort -> 
+                                        List.map (fun (sym : Symbol)->  
+                                                    if (sym.Id = deleteWirePort.HostId) then  
+                                                        if ( sym.NumberOfConnections = 1 ) then
+                                                            printf ("GOD SEND")
+                                                            
+                                                            let newSymZ = addErrorToErrorList sym deleteWirePort
+                                                            autoCompleteWidths newSymZ
+                                                        else 
+                                                            addErrorToErrorList sym deleteWirePort
+                                                    else
+                                                        sym )
+                                                    mdl 
+                                   )
+        newModel,Cmd.none             
     | SelectSymbolsWithinRegion box ->
         selectSymbolsInRegion model box, Cmd.none
 
+    | EnforceBusWidth (busWidth,port,DU) ->  
+        let newModel = 
+            (model,[port])
+            ||> List.fold (fun mdl port ->
+                            List.map (fun sym ->            
+                                        if (sym.Id = port.HostId)
+                                        then                                                
+                                            let newSym: Symbol =
+                                                match DU with
+                                                |EnforceStartPort -> enforceBusWidth busWidth port sym EnforceStartPort
+                                                |EnforceEndPort -> enforceBusWidth busWidth port sym EnforceEndPort
+                                            newSym
+                                            |>autoCompleteWidths
 
+                                        else 
+                                            sym
+                                        ) mdl
+                        )
+        newModel,Cmd.none
 
     | MouseMsg _ -> model, Cmd.none // allow unused mouse messags
-    // | _ -> failwithf "Not implemented"
-
-
-
-
-
-
-
 
 
 
@@ -549,7 +720,7 @@ let symbolShapeStyle (props : RenderSymbolProps) =
         match props.Symbol.IsSelected, props.Symbol.IsDragging, props.Symbol.HasError with
         | true, _, _ 
         | _, true, _ -> dragColor
-        | _, _, true -> errorColor
+        | _, _, list when list <> []-> errorColor
         | _ -> constColor
     Style [
         StrokeWidth 1
@@ -1039,9 +1210,6 @@ let view (model : Model) (dispatch : Msg -> unit) =
 
 
 
-
-
-
 //---------------Other interface functions--------------------//
 
 let symbolPos (symModel: Model) (sId: CommonTypes.ComponentId) : XYPos = 
@@ -1157,7 +1325,9 @@ let createSymbolFromComponent (comp:CommonTypes.Component) (pos:XYPos) : Symbol 
         LastDragPos = {X=0. ; Y=0.} // initial value can always be this
         IsDragging = false // initial value can always be this
         IsSelected = false
-        HasError = false
+        HasError = []
+        NumberOfConnections = 0
+
 
         H = h
         W = w

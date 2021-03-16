@@ -15,10 +15,7 @@
     
     
     open Sheet
-
-    
-
-    
+ 
     // Editor Keybindings (also items on Edit menu)
     // Use Elmish subscriptions to attach external source of events such as keyboard
     // shortcuts. According to electron documentation, the way to configure keyboard

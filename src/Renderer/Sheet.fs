@@ -29,7 +29,7 @@ type Model = {
     }
 
 type KeyboardMsg =
-    | CtrlS | AltC | AltV | AltZ | AltShiftZ | DEL | AltQ
+    | CtrlS | AltC | AltV | AltZ | AltShiftZ | DEL |AltQ
     | AltW | AltA | AltS | AltD
     | AltShiftW | AltShiftA | AltShiftS | AltShiftD
 
@@ -40,33 +40,38 @@ type Msg =
     | MouseMsg of MouseT
     | Msg of string
 
-    | StartDragging of sId : CommonTypes.ComponentId list * pagePos: XYPos
-    | Dragging of sId : CommonTypes.ComponentId list * pagePos: XYPos 
-    | EndDragging of sId : CommonTypes.ComponentId list
+    //Symbols
+    | StartDraggingSymbol of sId : CommonTypes.ComponentId list * pagePos: XYPos
+    | DraggingSymbol of sId : CommonTypes.ComponentId list * pagePos: XYPos 
+    | EndDraggingSymbol of sId : CommonTypes.ComponentId list
+    | DeselectAllSymbols
 
-    | StartPortDragging of Symbol.Port
+    //Ports
+    | StartDraggingPort of Symbol.Port
     | DraggingPort of pagePos : XYPos
-    | EndPortDragging of XYPos
+    | EndDraggingPort of XYPos
     | DrawFromPortToCursor of XYPos*XYPos * Symbol.Port option
-
+    | RemoveDrawnLine 
     | RenderPorts of sId : (float * Symbol.Port list) list * isHovering : bool
     | RenderOnePort of mousePos : XYPos* Symbol.Port option
     | UpdatePorts
 
+    //Highlight Region
     | StartDrawingRegion of XYPos
     | DrawingRegion of pagePos : XYPos
     | EndDrawingRegion of pagePos : XYPos
-
     | SelectComponentsWithinRegion of Helpers.BoundingBox
-    | DeselectAllSymbols
+    
 
-    | RemoveDrawnLine 
-
+    
+    // Wire
+    | StartDraggingWire of CommonTypes.ConnectionId*XYPos
+    | DraggingWire of CommonTypes.ConnectionId option *XYPos
+    | EndDraggingWire of CommonTypes.ConnectionId
     | DuplicateWire of displacementPos : XYPos
     | DeselectWire 
-    | AddWire of Symbol.Port*Symbol.Port
-    | SelectWire of CommonTypes.ConnectionId * XYPos    
-    | DraggingWire of CommonTypes.ConnectionId option *XYPos
+    | AddWire of Symbol.Port*Symbol.Port    
+
     
 
 
@@ -100,10 +105,58 @@ let tryFindPortByPortId (id : string) (ports : Symbol.Port list) : Symbol.Port o
 
     List.tryFind(findPortByPortId id) ports
 
+let startDraggingSymbol (pagePos: XYPos)  (model : Symbol.Symbol list) sId  =
+    model
+    |> List.map (fun sym ->
+            if sId <> sym.Id then
+                sym
+            else
+                { sym with
+                    LastDragPos = pagePos
+                    IsDragging = true
+                }
+        )
+let draggingSymbol (pagePos: XYPos)  (model : Symbol.Symbol list) sId  = 
+    model
+    |> List.map (fun sym -> 
+        if sId <> sym.Id then
+            sym
+        else
+            let diff = posDiff pagePos sym.LastDragPos
+                     
+            { sym with
+                Pos = posAdd sym.Pos diff
+                InputPorts = sym.InputPorts 
+                             |> List.map (fun port -> {port with Pos = posAdd port.Pos diff ; BBox = calcBBoxWithRadius 5. (posAdd port.Pos diff)}) 
+                OutputPorts = sym.OutputPorts 
+                              |> List.map (fun port -> {port with Pos = posAdd port.Pos diff ; BBox = calcBBoxWithRadius 5. (posAdd port.Pos diff)})
+                LastDragPos = pagePos
+                BBox = {
+                    TopLeft = (posAdd sym.BBox.TopLeft diff) 
+                    BottomRight = (posAdd sym.BBox.BottomRight diff)
+                }
+            }
+              // fun (symbollist ) () go throughs the symbol list to find top left X = current topLeft = x 
 
-let findPortsMatchingHostId (portList: Symbol.Port list) (portDU : Helpers.PortDU) (dist : float , hostId : CommonTypes.ComponentId)  : (float * Symbol.Port list) =  //input output or both
+    )
+let endDraggingSymbol (model : Symbol.Symbol list) sId =
+    model
+    |> List.map (fun sym ->
+        if sId <> sym.Id then 
+            sym
+        else
+            { sym with
+                IsDragging = false 
+            }
+    )
 
-    let findOnePortMatchingHostId (dist : float, hostId : CommonTypes.ComponentId) (portDU : Helpers.PortDU) (port : Symbol.Port) : bool  =  //returns all ports of HostID
+
+let findPortsMatchingHostId (portList: Symbol.Port list) (portDU : Helpers.PortDU) 
+                            (dist : float , hostId : CommonTypes.ComponentId)  
+                                : (float * Symbol.Port list) = 
+    let newPortList =
+        portList
+        |>List.filter(fun port ->     
             match portDU with 
             | In -> match port with 
                     |{HostId = hId; PortType = pType} when (hostId = hId && pType = CommonTypes.Input) -> true //if hostId matches with portHostId      
@@ -114,9 +167,8 @@ let findPortsMatchingHostId (portList: Symbol.Port list) (portDU : Helpers.PortD
             | All -> match port with 
                      |{HostId = hId} when (hostId = hId) -> true //if hostId matches with portHostId
                      | _ -> false
-     //findOnePortMatchingHostID func ends here
-    let newPortList = List.filter (findOnePortMatchingHostId (dist,hostId) portDU) portList   //return ports that are only matching HostID
-    
+        )
+
     (dist,newPortList)
 
 let getPortsWithinMinRange (mousePos : XYPos ) (model : Model) (minDist : float) (portDU : PortDU)  = 
@@ -217,15 +269,6 @@ let private renderGrid =  //Canvas Grid
                             SVGAttr.Height 24.0;
                             SVGAttr.PatternUnits "userSpaceOnUse"
                         ] [path [SVGAttr.D "M 24 0 L 0 0 0 24" ; SVGAttr.Fill "none" ; SVGAttr.Stroke "silver"; SVGAttr.StrokeWidth 0.5] []]
-
-                        pattern [
-                            Id "grid"
-                            SVGAttr.Width 120;
-                            SVGAttr.Height 120;
-                            SVGAttr.PatternUnits "userSpaceOnUse"        
-                        ][rect [SVGAttr.Width 120.0; SVGAttr.Height 120.0; SVGAttr.Fill "url(#smallGrid)"; SVGAttr.Stroke "gray"; SVGAttr.StrokeWidth 1.0][]
-                          path [SVGAttr.D "M 120 0 L 0 0 0 120"; SVGAttr.Fill "none"; SVGAttr.Stroke "gray"; SVGAttr.StrokeWidth 1.0][]  
-                         ]
                    ]
                
                rect [
@@ -243,7 +286,9 @@ let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispat
         if ev.buttons <> 0. then true else false
 
     let mouseOp op (ev:Types.MouseEvent) (scrollPos : (float*float)) = 
-        dispatch <| MouseMsg {Op = op ; Pos = { X = (ev.clientX  + (fst scrollPos))/(model.Canvas.zoom) ;  Y = ( ev.clientY + (snd scrollPos))/ (model.Canvas.zoom)}}
+        dispatch <| MouseMsg {Op = op ; 
+                              Pos = { X = (ev.clientX  + (fst scrollPos))/(model.Canvas.zoom) ;  
+                                      Y = ( ev.clientY + (snd scrollPos))/ (model.Canvas.zoom)}}
         
     let wheelOp op (ev:Types.WheelEvent) =   
         let newZoom = model.Canvas.zoom - (model.Canvas.zoom*ev.deltaY*0.0007)
@@ -285,11 +330,11 @@ let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispat
                     ]
                 ]
 
-                [ g // group list of elements with list of attributes
-                    [ Style [Transform  (sprintf "scale(%f)" model.Canvas.zoom)]] // top-level transform style attribute for zoom
+                [ g 
+                    [ Style [Transform  (sprintf "scale(%f)" model.Canvas.zoom)]] 
                     [   
-                        renderGrid // adds the background Grid canvas to current svg
-                        svgReact  
+                        renderGrid //background
+                        svgReact   
                         renderDraggingPortsByDistance
                         renderHoveringPortsByDistance
                         renderHighlightRegion model.RegionToBeRendered
@@ -331,8 +376,9 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                 SymIdList = []
             }
         newModel, Cmd.batch [Cmd.ofMsg (UpdatePorts); Cmd.ofMsg (RenderPorts ([],true))]
-       
-    | KeyPress AltC  ->  //Duplicate of Symbols which then calls duplicateWire
+    
+    ///Duplication : Duplicate Symbols first then duplciate Wires.
+    | KeyPress AltC  ->  
         let symbolsToBeDup = Symbol.getSelectedSymbols(model.Wire.Symbol)
         let dupSymbol = Symbol.duplicateSymbol (symbolsToBeDup)
         let newSymModel =
@@ -342,22 +388,29 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
 
         let displacement = fst dupSymbol
 
-
         let newModel =  //Sym duplicated
             { model with 
                 Wire = {model.Wire with Symbol = newSymModel}
             }
 
-        newModel,Cmd.batch[Cmd.ofMsg(UpdatePorts); Cmd.ofMsg(DuplicateWire displacement)] //sends a message to BusWire to duplicate Wires
+        newModel,Cmd.batch[Cmd.ofMsg(UpdatePorts); Cmd.ofMsg(DuplicateWire displacement)] 
 
     | DuplicateWire displacementPos -> 
-        let newBusModel, newMsg =
-            BusWire.update (BusWire.Msg.DuplicateWire (displacementPos,model.Ports)) model.Wire
-        let newModel =
-            { model with    
-                Wire = newBusModel
-            }
-        newModel,Cmd.none
+        let selectedWireList =
+            BusWire.getSelectedWireList model.Wire.WX
+
+
+        let dupWireList = BusWire.getWiresToBeDuplicated displacementPos selectedWireList model.Ports 
+
+        let createDupWireList = 
+            dupWireList
+            |> List.map (fun tuple -> 
+                match tuple  with
+                | Some sourcePort , Some targetPort, w  ->  Cmd.ofMsg (AddWire (sourcePort,targetPort)) 
+                | _ , _ , _-> failwithf "Shouldn't happen")
+
+        
+        model,Cmd.batch createDupWireList
    
     | KeyPress s -> // Updates Orientation Key Presses
         let newSymModel,newCmd =
@@ -368,7 +421,6 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             | AltShiftW -> Symbol.update (Symbol.Msg.UpdateOutputOrientation Top) model.Wire.Symbol
             | AltShiftS -> Symbol.update (Symbol.Msg.UpdateOutputOrientation Bottom) model.Wire.Symbol
             | AltShiftD -> Symbol.update (Symbol.Msg.UpdateOutputOrientation Right) model.Wire.Symbol
-            | AltQ -> Symbol.update (Symbol.Msg.ToggleError) model.Wire.Symbol
         
         let newModel = {
             model with
@@ -389,7 +441,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
       
          {model with OnePortToBeRendered = (mousePos, portOption)},Cmd.none   
 
-    | StartPortDragging (startPort) -> 
+    | StartDraggingPort (startPort) -> 
         {model with
             IsPortDragging = true 
             IdOfPortBeingDragged = startPort.Id
@@ -427,7 +479,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
          }
          , Cmd.none
 
-    | EndPortDragging mousePos->
+    | EndDraggingPort mousePos->
 
         let endOutcome = List.tryFind (isWithinDistanceToPort mousePos 10.0) model.Ports
   
@@ -443,12 +495,12 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                 {model with 
                     IsPortDragging = false;
                     IdOfPortBeingDragged = "null";
-                 }, Cmd.batch ([Cmd.ofMsg(newMsg); Cmd.ofMsg(RemoveDrawnLine)])
+                 }, Cmd.batch ([Cmd.ofMsg(newMsg); Cmd.ofMsg(RemoveDrawnLine); Cmd.ofMsg(UpdatePorts)])
         | _ -> 
                 {model with 
                     IsPortDragging = false;
                     IdOfPortBeingDragged = "null";
-                }, Cmd.ofMsg (RemoveDrawnLine)
+                }, Cmd.batch ([Cmd.ofMsg(RemoveDrawnLine); Cmd.ofMsg(UpdatePorts)])
       
     | UpdatePorts  ->
         let newPorts = Symbol.getAllPorts (model.Wire.Symbol)
@@ -469,15 +521,37 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             DraggingPortsToBeRendered = [];
         }, Cmd.none
 
-    | SelectWire (connectionId, mousePos) -> 
+    | StartDraggingWire (connectionId, mousePos) -> 
         let newBusModel, newCmd = 
-            BusWire.update (BusWire.Msg.SelectWire (connectionId,mousePos)) model.Wire
+            BusWire.update (BusWire.Msg.StartDraggingWire (connectionId,mousePos)) model.Wire  
+        
         {model with 
             Wire = newBusModel
             IsWireSelected = true
             SelectedWire = Some connectionId
         }
+        , Cmd.map Wire newCmd
+
+    | DraggingWire (connectionIdOpt, mousePos) -> 
+        let connectionId =   
+            match connectionIdOpt with 
+            |Some x -> x 
+            |None -> failwithf "DraggingWire called but not selecting any wire" 
+        let newBusModel, newCmd = 
+            BusWire.update (BusWire.Msg.DraggingWire (connectionId, mousePos)) model.Wire
+        {model with 
+            Wire = newBusModel
+            IsWireSelected = true
+        }
         , Cmd.none
+
+    | AddWire (startPort,endPort) -> 
+        let newBusModel, newCmd = 
+            BusWire.update (BusWire.Msg.AddWire (startPort,endPort)) model.Wire
+        {model with
+            Wire = newBusModel
+        }
+        , Cmd.batch [Cmd.ofMsg (RemoveDrawnLine); Cmd.ofMsg(UpdatePorts)]
 
     | DeselectWire -> 
         let newBusModel, newCmd = 
@@ -529,53 +603,36 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                             }   
         newModel, Cmd.none
 
-    | DraggingWire (connectionIdOpt, mousePos) -> 
-        let connectionId =   
-            match connectionIdOpt with 
-            |Some x -> x 
-            |None -> failwithf "DraggingWire called but not selecting any wire" 
-        let newBusModel, newCmd = 
-            BusWire.update (BusWire.Msg.DraggingWire (connectionId, mousePos)) model.Wire
-        {model with 
-            Wire = newBusModel
-            IsWireSelected = true
-        }
-        , Cmd.none
+    | StartDraggingSymbol (sIdList, pagePos) ->
+        let newSymModel = 
+            (model.Wire.Symbol, sIdList)
+            ||> List.fold (startDraggingSymbol pagePos)
+            |> List.map (fun sym -> if List.contains sym.Id sIdList then {sym with IsSelected = true} else sym)
 
-    | AddWire (startPort,endPort) -> 
-        let newBusModel, newCmd = 
-            BusWire.update (BusWire.Msg.AddWire (startPort,endPort)) model.Wire
-        {model with
-            Wire = newBusModel
-        }
-        , Cmd.ofMsg (RemoveDrawnLine)
-
-    | StartDragging (sIdList, pagePos) ->
-        let newSymModel, newCmd = 
-            Symbol.update (Symbol.Msg.StartDragging (sIdList, pagePos)) model.Wire.Symbol
-        
         { model with 
             Wire = {model.Wire with Symbol = newSymModel}
             SymIdList = sIdList
         }
         , Cmd.batch [Cmd.ofMsg(RenderPorts ([],false) );] //render no ports
 
-    | Dragging (rank, pagePos) ->
-        let newSymModel, newCmd = 
-            Symbol.update (Symbol.Msg.Dragging (rank, pagePos)) model.Wire.Symbol
+    | DraggingSymbol (sIdList, pagePos) ->
+        let newSymModel = 
+            (model.Wire.Symbol, sIdList)
+            ||> List.fold (draggingSymbol pagePos)
         { model with 
             Wire = {model.Wire with Symbol = newSymModel}
         }
         , Cmd.ofMsg (UpdatePorts)
 
-    | EndDragging sId ->
-        let newSymModel, newCmd = 
-            Symbol.update (Symbol.Msg.EndDragging sId) model.Wire.Symbol
+    | EndDraggingSymbol sIdList ->
+        let newSymModel = 
+             (model.Wire.Symbol, sIdList)
+             ||> List.fold (endDraggingSymbol)
         { model with 
             Wire = {model.Wire with Symbol = newSymModel}
             SymIdList = []
         }
-        , newCmd
+        ,Cmd.none
 
     | DeselectAllSymbols  ->
         let newSymModel, newCmd = 
@@ -590,23 +647,23 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         let command = 
             match mMsg.Op with 
             | Move -> 
-                let portsWithinMinRange = getPortsWithinMinRange mMsg.Pos model 100.0 All
+                let portsWithinMinRange = getPortsWithinMinRange mMsg.Pos model 90.0 All
                 [RenderPorts (portsWithinMinRange, true)] //isHovering
-                    
+            ///Clicking order : Ports -> Wire -> Symbol         
             | Down -> 
                 let ClickedPort = List.tryFind (isPortClicked mMsg.Pos) model.Ports  
                 match ClickedPort with 
-                | Some port -> [DeselectAllSymbols; DeselectWire; StartPortDragging (port)]
+                | Some port -> [DeselectAllSymbols; DeselectWire; StartDraggingPort (port)]
                 | None  -> 
                     let ClickedWire = BusWire.wireToSelectOpt model.Wire mMsg.Pos
                     match ClickedWire with 
-                    | Some wireId -> [DeselectAllSymbols;DeselectWire; SelectWire (wireId,mMsg.Pos)]
+                    | Some wireId -> [DeselectAllSymbols;DeselectWire; StartDraggingWire (wireId,mMsg.Pos)]
                     | None ->
                         let ClickedSym = List.tryFind (Symbol.isSymClicked mMsg.Pos) model.Wire.Symbol
                         let sIdList = Symbol.getSelectedSymbolIds model.Wire.Symbol
                         match ClickedSym with
-                        | Some sym when (sym.IsSelected = false) -> [DeselectAllSymbols;DeselectWire; StartDragging ([sym.Id], mMsg.Pos)] 
-                        | Some sym when (sym.IsSelected = true) -> [StartDragging (sIdList, mMsg.Pos)]
+                        | Some sym when (sym.IsSelected = false) -> [DeselectAllSymbols;DeselectWire; StartDraggingSymbol ([sym.Id], mMsg.Pos)] 
+                        | Some sym when (sym.IsSelected = true) -> [StartDraggingSymbol (sIdList, mMsg.Pos)]
                         | None -> [StartDrawingRegion mMsg.Pos]          
                         | _ -> failwithf "Won't Happen"
             
@@ -614,17 +671,17 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             
             | Drag when (Symbol.getSelectedSymbolIds model.Wire.Symbol <> []) -> 
                     let sIdList = Symbol.getSelectedSymbolIds model.Wire.Symbol
-                    [Dragging (sIdList, mMsg.Pos)]
+                    [DraggingSymbol (sIdList, mMsg.Pos)]
                              
             | Drag when (model.IsDrawingRegion = true) -> [DrawingRegion (mMsg.Pos)]
 
             | Drag when (model.IsWireSelected = true) -> [DraggingWire (model.SelectedWire,mMsg.Pos)]
             
-            | Up when (model.IsPortDragging = true )-> [EndPortDragging (mMsg.Pos)] 
+            | Up when (model.IsPortDragging = true )-> [EndDraggingPort (mMsg.Pos)] 
             
             | Up when (model.IsDrawingRegion = true) -> [EndDrawingRegion (mMsg.Pos)]
             
-            | Up ->[EndDragging (model.SymIdList)]
+            | Up ->[EndDraggingSymbol (model.SymIdList)]
             
             | _ -> failwithf ""
 
