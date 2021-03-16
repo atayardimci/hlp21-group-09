@@ -436,17 +436,14 @@ let duplicateSymbol (symList : Symbol list) : XYPos*Symbol list =
         |>List.minBy (fun sym -> (-1.0)*(sym.BBox.TopLeft.Y))
         |>(fun sym -> sym.BBox.BottomRight.Y)
 
-    let posDisplacement = {X = 0.0; Y = maxY- minY}
+    let posDisplacement = {X = 0.0; Y = maxY- minY + 80.0}
     
     let dupList = 
         symList
         |>List.map (fun sym -> 
                             let newSym = createNewSymbol sym.Type sym.Label (posAdd sym.Pos posDisplacement) Duplicate
-                            let newSymUpdatedPorts = { newSym with InputPorts = changePortListState newSym.InputPorts sym.InputPorts;
-                                                                   OutputPorts = changePortListState newSym.OutputPorts sym.OutputPorts;
-                                                     }
-                     
-                            {newSymUpdatedPorts with HasError = sym.HasError}
+                            
+                            {newSym with HasError = sym.HasError}
                    )
     (posDisplacement,dupList)
                            

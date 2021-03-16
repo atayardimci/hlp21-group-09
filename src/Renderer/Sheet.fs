@@ -388,7 +388,6 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
 
         let displacement = fst dupSymbol
 
-
         let newModel =  //Sym duplicated
             { model with 
                 Wire = {model.Wire with Symbol = newSymModel}
@@ -397,13 +396,21 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         newModel,Cmd.batch[Cmd.ofMsg(UpdatePorts); Cmd.ofMsg(DuplicateWire displacement)] //sends a message to BusWire to duplicate Wires
 
     | DuplicateWire displacementPos -> 
-        let newBusModel, newMsg =
-            BusWire.update (BusWire.Msg.DuplicateWire (displacementPos,model.Ports)) model.Wire
-        let newModel =
-            { model with    
-                Wire = newBusModel
-            }
-        newModel,Cmd.none
+        let selectedWireList =
+            BusWire.getSelectedWireList model.Wire.WX
+
+
+        let dupWireList = BusWire.getWiresToBeDuplicated displacementPos selectedWireList model.Ports 
+
+        let createDupWireList = 
+            dupWireList
+            |> List.map (fun tuple -> 
+                match tuple  with
+                | Some sourcePort , Some targetPort, w  ->  Cmd.ofMsg (AddWire (sourcePort,targetPort)) 
+                | _ , _ , _-> failwithf "Shouldn't happen")
+
+        
+        model,Cmd.batch createDupWireList
    
     | KeyPress s -> // Updates Orientation Key Presses
         let newSymModel,newCmd =
@@ -541,16 +548,8 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
     | AddWire (startPort,endPort) -> 
         let newBusModel, newCmd = 
             BusWire.update (BusWire.Msg.AddWire (startPort,endPort)) model.Wire
-        
-        let newSymModel = 
-            newBusModel.Symbol
-            |>List.map (fun sym -> Symbol.changePortStateIsConnected startPort sym Increment)
-            |>List.map (fun sym -> Symbol.changePortStateIsConnected endPort sym Increment)
-
-        let newerBusModel = 
-            {newBusModel with Symbol = newSymModel}
         {model with
-            Wire = newerBusModel
+            Wire = newBusModel
         }
         , Cmd.batch [Cmd.ofMsg (RemoveDrawnLine); Cmd.ofMsg(UpdatePorts)]
 
