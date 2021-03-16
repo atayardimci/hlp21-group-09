@@ -18,7 +18,7 @@ type Port =
         Pos : XYPos
         BBox : BoundingBox
         IsDragging : bool
-        IsConnected : bool 
+        NumberOfConnections : int
         BusWidth : int Option
         
     }
@@ -61,7 +61,6 @@ type Msg =
     | RemoveErrorFromErrorList of Port list
     | EnforceBusWidth of int*Port*BusWidthDU
     | SelectSymbolsWithinRegion of box: BoundingBox
-    
 
     // | UpdateSymbolModelWithComponent of CommonTypes.Component 
 
@@ -90,14 +89,38 @@ let boxesCollide (boxOne: BoundingBox) (boxTwo: BoundingBox) =
     let oneTL, oneBR, twoTL, twoBR = boxOne.TopLeft, boxOne.BottomRight, boxTwo.TopLeft, boxTwo.BottomRight
     not (oneBR.X < twoTL.X || oneBR.Y < twoTL.Y || oneTL.X > twoBR.X || oneTL.Y > twoBR.Y)
 
-let changePortStateIsConnected (port : Port) (sym : Symbol) : Symbol = 
+let changePortStateIsConnected (port : Port) (sym : Symbol)(smallChangeDU : SmallChangeDU) : Symbol = 
     let newInputPorts =
         sym.InputPorts
-        |>List.map (fun inPort -> if (inPort.Id = port.Id) then {inPort with IsConnected = true} else inPort)
+        |>List.map (fun inPort -> if (inPort.Id = port.Id) then 
+                                     if(smallChangeDU = Increment) then 
+                                        let x ={inPort with NumberOfConnections = inPort.NumberOfConnections + 1 }
+                                        printf($"Num connections  {inPort.NumberOfConnections}")
+                                        x
+                                     else
+                                        let x ={inPort with NumberOfConnections = inPort.NumberOfConnections - 1 } 
+                                        printf($"Num connections  {inPort.NumberOfConnections}")
+                                        x
+                                  else inPort)
     let newOutputPorts = 
         sym.OutputPorts
-        |>List.map (fun outPort -> if (outPort.Id = port.Id) then {outPort with IsConnected = true} else outPort)
+        |>List.map (fun outPort -> if (outPort.Id = port.Id) then 
+                                     if(smallChangeDU = Increment) then 
+                                        {outPort with NumberOfConnections = outPort.NumberOfConnections + 1 } 
+                                     else
+                                        {outPort with NumberOfConnections = outPort.NumberOfConnections - 1 } 
+                                   else outPort)
     {sym with InputPorts = newInputPorts ; OutputPorts = newOutputPorts}
+
+let changePortListState (newPortList : Port list ) (oldPortList : Port list) : Port list = 
+    (newPortList,oldPortList)
+    ||>List.map2 (fun newPort oldPort -> {newPort with NumberOfConnections = oldPort.NumberOfConnections;
+                                                       BusWidth = oldPort.BusWidth;
+                                         } )
+    
+
+    
+
 
     
 
@@ -157,7 +180,7 @@ let autoCompleteWidths (sym : Symbol)  =
                                                                    | Some given , None, Some x ->  let newIn2Port = {in2 with BusWidth = Some (x - given)}
                                                                                                    {sym with InputPorts = [in1; newIn2Port]}
                                                                    | Some x , Some given, None ->  let newOutPort = {out1 with BusWidth = Some (x + given) }
-                                                                                                   {sym with OutputPorts = [out1;newOutPort]}
+                                                                                                   {sym with OutputPorts = [newOutPort]}
                                                                    | _ -> sym
                                                                tmp
                                        completedSymbol
@@ -319,7 +342,7 @@ let getPorts (sType:CommonTypes.ComponentType) hostId inputPortsPosList outputPo
                 Pos = pos
                 BBox = calcBBoxWithRadius 6.0 pos
                 IsDragging = false
-                IsConnected = false
+                NumberOfConnections = 0
                 BusWidth = getBusWidthOfPort sType CommonTypes.PortType.Input idx
             }
         )
@@ -334,7 +357,7 @@ let getPorts (sType:CommonTypes.ComponentType) hostId inputPortsPosList outputPo
                 Pos = pos
                 BBox = calcBBoxWithRadius 6.0 pos
                 IsDragging = false
-                IsConnected = false
+                NumberOfConnections = 0
                 BusWidth = getBusWidthOfPort sType CommonTypes.PortType.Output idx
             }
         )
@@ -394,7 +417,7 @@ let createNewSymbol (sType:CommonTypes.ComponentType) (name:string) (pos:XYPos) 
         Pos = pos
         LastDragPos = {X=0. ; Y=0.} 
         IsDragging = false
-        IsSelected = if(createDU = Duplicate) then true else false
+        IsSelected = if(createDU = Duplicate || createDU = DuplicateError) then true else false
         HasError = []
         
         H = h
@@ -418,7 +441,13 @@ let duplicateSymbol (symList : Symbol list) : XYPos*Symbol list =
     let dupList = 
         symList
         |>List.map (fun sym -> 
-                            createNewSymbol sym.Type sym.Label (posAdd sym.Pos posDisplacement) Duplicate)
+                            let newSym = createNewSymbol sym.Type sym.Label (posAdd sym.Pos posDisplacement) Duplicate
+                            let newSymUpdatedPorts = { newSym with InputPorts = changePortListState newSym.InputPorts sym.InputPorts;
+                                                                   OutputPorts = changePortListState newSym.OutputPorts sym.OutputPorts;
+                                                     }
+                     
+                            {newSymUpdatedPorts with HasError = sym.HasError}
+                   )
     (posDisplacement,dupList)
                            
 
@@ -536,19 +565,20 @@ let update (msg : Msg) (model : Model): Model*Cmd<'a> =
         newModel,Cmd.none
 
                                                      
-    | RemoveErrorFromErrorList (deleteWirePortList) ->
+    | RemoveErrorFromErrorList (deleteWirePortList) -> //remove error portNumbers 
         let newModel = 
             (model, deleteWirePortList)
             ||>List.fold (fun mdl deleteWirePort -> 
                                         List.map (fun sym -> 
                                         if (sym.Id = deleteWirePort.HostId) 
-                                        then                                             
+                                        then                    
+                                            let newSym = changePortStateIsConnected deleteWirePort sym Decrement
                                             let portNum = 
                                                 match deleteWirePort.PortNumber with
                                                 |Some portNum -> portNum
                                                 |None -> failwithf "No Port Num"
                                             let firstErrorIndex = 
-                                                sym.HasError
+                                                newSym.HasError
                                                 |>List.tryFindIndex ( fun elem  -> (elem = portNum))   
 
                                             let rec remove i l =   //deletion at specific index. Feels like imperative programming ~~
@@ -559,11 +589,9 @@ let update (msg : Msg) (model : Model): Model*Cmd<'a> =
                                             
                                             let filteredErrorList = 
                                                 match firstErrorIndex with 
-                                                |Some errorindex -> remove errorindex sym.HasError
-                                                |None -> sym.HasError
-                                               
-  
-                                            {sym with HasError = filteredErrorList}
+                                                |Some errorindex -> remove errorindex newSym.HasError
+                                                |None -> newSym.HasError
+                                            {newSym with HasError = filteredErrorList}
                                         else
                                             sym )
                                              mdl 

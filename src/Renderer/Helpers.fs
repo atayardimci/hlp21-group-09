@@ -61,11 +61,16 @@ type PortDU =
 type CreateDU =
     | Init      //initialized
     | Duplicate // duplicated
+    | DuplicateError
     | Error
 
 type BusWidthDU = 
     |EnforceStartPort
     |EnforceEndPort
+
+type SmallChangeDU = 
+    | Increment
+    | Decrement
 
 let posScaled (pos:XYPos) (zoom:float) = {X = pos.X/zoom; Y= pos.Y/zoom} 
 

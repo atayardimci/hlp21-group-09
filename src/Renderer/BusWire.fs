@@ -245,15 +245,14 @@ let createWire (startPort: Symbol.Port) (endPort: Symbol.Port) (createDU : Creat
         Id = CommonTypes.ConnectionId (uuid())
         SourcePort = startPort
         TargetPort = endPort
-        isSelected = if (createDU = Duplicate) then true else false
-        hasError = if (createDU = Error) then true else false
+        isSelected = if (createDU = Duplicate || createDU = DuplicateError) then true else false
+        hasError = if (createDU = Error || createDU = DuplicateError) then true else false
         relativPositions = [{X=0.0 ; Y=0.0} ; origin ; origin]
         PrevPositions = [origin ; origin ; origin]
         BeingDragged = -1
     }
 
-let getWiresToBeDuplicated (displacementPos : XYPos ) (wireList : Wire list) (portList : Symbol.Port list) : (Symbol.Port option *Symbol.Port option) list  =
-    
+let getWiresToBeDuplicated (displacementPos : XYPos ) (wireList : Wire list) (portList : Symbol.Port list) : (Symbol.Port option *Symbol.Port option* Wire) list  =    
     wireList
     |> List.map (fun wire ->  
 
@@ -264,7 +263,7 @@ let getWiresToBeDuplicated (displacementPos : XYPos ) (wireList : Wire list) (po
                 let endPort =  List.tryFind (fun (p : Symbol.Port)  ->  
                                              let dist = calcDistance (posAdd (wire.TargetPort.Pos)(displacementPos)) p.Pos
                                              (dist < 0.001) ) portList
-                (sourcePort,endPort)
+                (sourcePort,endPort,wire)
 
                 )
  
@@ -352,7 +351,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         let newWireSym  = 
             match (startPort.BusWidth, endPort.BusWidth ) with 
             | Some startWidth, Some endWidth  when (startWidth = endWidth) && startPort.PortType = CommonTypes.Input ->  //Buswidth match but inputPort has many drivers
-                                                if (startPort.IsConnected <> true ) then 
+                                                if (startPort.NumberOfConnections = 0) then 
                                                     let wire = createWire startPort endPort Init
 
                                                     let sym  = model.Symbol
@@ -360,12 +359,12 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                                                     (wire,sym) 
                                                 else
                                                     let wire = createWire startPort endPort Error
-                                                    printf ("Error : InputPort can only have One Driver.")
+                                                    printf ("Error : InputPort can only have One Driver. If you want to merge two wires you a MergeWire Component")
                                                     let sym = model.Symbol
                                                     (wire,sym)
                                                 
             | Some startWidth, Some endWidth  when startWidth = endWidth && endPort.PortType = CommonTypes.Input ->  //Buswidth match but inputPort has many drivers
-                                                if (endPort.IsConnected <> true ) then 
+                                                if (endPort.NumberOfConnections = 0) then 
                                                     let wire = createWire startPort endPort Init
                                                     let sym  = model.Symbol
                                                                                                
@@ -386,7 +385,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                                                 let sym,symMsg = Symbol.update (Symbol.Msg.AddErrorToErrorList
                                                                   [startPort;endPort]
                                                                  )model.Symbol
-                                                
+
                                                 (wire,sym)
             | Some startWidth, None  -> let wire = createWire startPort endPort Init //enforce the Port with BusWidth None to be a BusWidth 
                                         let sym,symMsg  = Symbol.update (Symbol.Msg.EnforceBusWidth 
@@ -428,28 +427,34 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                               ) 
         {model with WX = nwWls model.WX} , Cmd.none
     | DeleteWire -> 
-        printf ("HERE BOI 1") 
-        
-        let wireToBeRendered, wireToBeDeleted =
-            model.WX
-            |>List.partition (fun w -> w.isSelected = false) 
-        printf ($"{wireToBeRendered}{wireToBeDeleted}")
-        let newWireList = 
-            match wireToBeRendered with
-            | wireList when (wireList = []) ->   []
-            | wireList when (wireList <> []) ->  wireList
-                                                 |>List.filter (fun w -> (Symbol.getSymbolWithId (model.Symbol) (w.SourcePort.HostId)) <> None) 
-                                                 |>List.filter (fun w -> (Symbol.getSymbolWithId (model.Symbol) (w.TargetPort.HostId)) <> None) // when symbol is deleted, delete wire as well 
-                   
-            
+        let wireToBeRenderedFirst, wireToBeDeletedFirst =
+            let wireRender,wireDelete =
+                model.WX
+                |>List.partition (fun w -> w.isSelected = false)
+            let wireRender2,wireDelete2 = 
+                wireRender
+                |>List.partition (fun w -> (Symbol.getSymbolWithId (model.Symbol) (w.SourcePort.HostId)) <> None) 
+            let wireRender3,wireDelete3 =
+                wireRender2                              
+                |>List.partition (fun w -> (Symbol.getSymbolWithId (model.Symbol) (w.TargetPort.HostId)) <> None) // when symbol is deleted, delete wire as well 
+            let tmpRender = wireRender3 
+            let tmpDelete = wireDelete @ wireDelete2 @ wireDelete3
+            (tmpRender,tmpDelete)
+
         let allToBeDeletedPorts= //for all the wires that are gonna be deleted check if it has error 
-            wireToBeDeleted
+            wireToBeDeletedFirst
             |> List.collect (fun w -> [w.SourcePort;w.TargetPort])
+            |> Set.ofList
+            |> Set.toList
+        let wireToBeRendered =
+            wireToBeRenderedFirst
+            |>Set.ofList
+            |>Set.toList
 
         let newSymModel,ignoreMsg = 
             Symbol.update (Symbol.Msg.RemoveErrorFromErrorList allToBeDeletedPorts) model.Symbol
 
-        {model with WX = newWireList; Symbol = newSymModel} , Cmd.none
+        {model with WX = wireToBeRendered; Symbol = newSymModel} , Cmd.none
     | DuplicateWire (displacementPos,portList) ->
         let selectedWireList =
             List.filter (fun w -> w.isSelected) model.WX
@@ -457,10 +462,11 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         
         let createDupWireList = 
             dupWireList
-            |> List.map (fun w -> 
-                match w  with
-                | Some sourcePort , Some targetPort -> createWire sourcePort targetPort Duplicate
-                | _ , _ -> failwithf "Shouldn't happen")
+            |> List.map (fun tuple -> 
+                match tuple  with
+                | Some sourcePort , Some targetPort, w when w.hasError = true-> createWire sourcePort targetPort DuplicateError
+                | Some sourcePort , Some targetPort, w -> createWire sourcePort targetPort Duplicate
+                | _ , _ , _-> failwithf "Shouldn't happen")
 
         let newWireList  = 
             model.WX

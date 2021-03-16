@@ -543,9 +543,9 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             BusWire.update (BusWire.Msg.AddWire (startPort,endPort)) model.Wire
         
         let newSymModel = 
-            model.Wire.Symbol
-            |>List.map (fun sym -> Symbol.changePortStateIsConnected startPort sym)
-            |>List.map (fun sym -> Symbol.changePortStateIsConnected endPort sym)
+            newBusModel.Symbol
+            |>List.map (fun sym -> Symbol.changePortStateIsConnected startPort sym Increment)
+            |>List.map (fun sym -> Symbol.changePortStateIsConnected endPort sym Increment)
 
         let newerBusModel = 
             {newBusModel with Symbol = newSymModel}
