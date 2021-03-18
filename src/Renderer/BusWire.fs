@@ -269,10 +269,10 @@ let autosingleWireView (wModel: Model)=
         let msb = props.WireP.BusWidth - 1
         let displayWireSegment (start: XYPos) (final: XYPos) =
             let color =
-                    if props.WireP.hasError then
-                        "red"
-                    else if props.WireP.isSelected then
+                    if props.WireP.isSelected then
                         "green"
+                    else if props.WireP.hasError  then
+                        "red"
                     else 
                         "black"
             g   [ Style [ 
@@ -348,7 +348,7 @@ let view (model:Model) (dispatch: Msg -> unit)=
 
 let init n () =
     let symbols, cmd = Symbol.init()   
-    {WX=[];Symbol=symbols; Color=CommonTypes.Red ; Countselected = 0 ; PortToCursor = ({X = 0.0; Y= 0.0},{X = 0.0; Y= 0.0}, None)},Cmd.none 
+    {WX=[];Symbol=symbols; Color=CommonTypes.Red  ; Countselected = 0 ; PortToCursor = ({X = 0.0; Y= 0.0},{X = 0.0; Y= 0.0}, None)},Cmd.none 
 
 
 let createWire (startPort: Symbol.Port) (endPort: Symbol.Port) (createDU : CreateDU) =
@@ -507,14 +507,14 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                                                                  )symModel
 
                                                 (wire,sym)
-            | Some startWidth, None  -> let wire = createWire startPort endPort Init //enforce the Port with BusWidth None to be a BusWidth 
+            | Some startWidth, None  -> let wire = createWire startPort endPort Init     //change BusWidth None to BusWidth of newly connected port
                                         let sym,symMsg  = Symbol.update (Symbol.Msg.EnforceBusWidth 
                                                             (startWidth,endPort,EnforceEndPort)
                                                           )symModel
 
 
                                         (wire,sym)
-            | None , Some endWidth  -> let wire = createWire startPort endPort Init
+            | None , Some endWidth  -> let wire = createWire startPort endPort Init     //change BusWidth None to BusWidth of newly connected port
                                        let sym,symMsg  = Symbol.update (Symbol.Msg.EnforceBusWidth 
                                                             (endWidth,startPort,EnforceStartPort)
                                                           )symModel
