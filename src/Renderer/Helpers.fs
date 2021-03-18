@@ -47,11 +47,24 @@ type BoundingBox =
         BottomRight : XYPos
     }
 
+type Line = 
+    {
+        P1 : XYPos 
+        P2 : XYPos
+    }
+
 type PortOrientation = 
     | Top
     | Bottom
     | Left
     | Right
+
+//type SymAlignment = 
+//    | Top
+//    | Bottom
+//    | Left
+//    | Right
+  
 
 type PortDU =
     | In
@@ -119,9 +132,13 @@ let createBBoxFromPos (firstPos : XYPos) (sndPos : XYPos) : BoundingBox =
 
     {TopLeft = {X = topLeftX ; Y = topLeftY }; BottomRight = {X = bottomRightX ; Y = bottomRightY}}
 
-let calculateCenterFromBBox (bBox : BoundingBox) : XYPos =  
+let calcCentreBBox (bBox : BoundingBox) : XYPos =  
     let center = 
         {X = (bBox.TopLeft.X +  bBox.BottomRight.X) /2.0 ; Y = (bBox.TopLeft.Y + bBox.BottomRight.Y) / 2.0}
+    center
+let calcCentre (P1 : XYPos) (P2 : XYPos) =
+    let center = 
+        {X = (P1.X +  P2.X) /2.0 ; Y = (P1.Y + P2.Y) / 2.0}
     center
 
 //--------------------------------------------------------------------------//

@@ -26,7 +26,7 @@ type Model = {
 
     RegionToBeRendered  : Helpers.BoundingBox
     OverallBBoxToBeRendered : Helpers.BoundingBox
-    AlignmentLinesToBeRendered : float list 
+    AlignmentLinesToBeRendered : Line list 
     StartDrawingPosition : XYPos option
     }
 
@@ -76,7 +76,28 @@ type Msg =
 
     | AlignBoxes of Helpers.BoundingBox 
 
+let within num1 num2 = 
+    if (num1 < (num2 + 6.0) ) && (num1 > (num2 - 6.0) ) then true else false
 
+let withinPosX pos1 pos2 =
+    if (pos1.X < (pos2.X + 6.0) ) && (pos1.X > (pos2.X - 6.0)) then true else false
+
+let symIsWithin (bBox : BoundingBox) (symList : Symbol.Symbol list) = 
+    List.exists (fun (s : Symbol.Symbol) -> 
+                          withinPosX  (calcCentreBBox bBox) (calcCentre ({X = s.BBox.TopLeft.X ; Y = s.BBox.TopLeft.Y + 15.0 }) ({X = s.BBox.BottomRight.X ; Y = s.BBox.BottomRight.Y}))  ||
+                          (within bBox.TopLeft.X s.BBox.TopLeft.X) ||
+                          (within bBox.TopLeft.X s.BBox.BottomRight.X)||   
+                          (within bBox.BottomRight.X s.BBox.TopLeft.X) ||
+                          (within bBox.BottomRight.X s.BBox.BottomRight.X) ||
+                          (within bBox.TopLeft.Y  (s.BBox.TopLeft.Y + 15.0)) ||
+                          (within bBox.TopLeft.Y s.BBox.BottomRight.Y )||
+                          (within bBox.BottomRight.Y (s.BBox.TopLeft.Y + 15.0)) ||
+                          (within bBox.BottomRight.Y s.BBox.BottomRight.Y) 
+                ) symList
+
+let matchBBoxToPos (bBox : BoundingBox) = 
+    match bBox with 
+    |{TopLeft = tPos; BottomRight = bPos}  -> tPos,bPos  
 
 
 let isPortClicked (pos : XYPos) (port: Symbol.Port) : bool = 
@@ -86,6 +107,106 @@ let isPortClicked (pos : XYPos) (port: Symbol.Port) : bool =
          -> true
     | _ -> false
 
+let createLineCoordinates ( (x1,y1): float*float )  ( (x2,y2) : float*float ) : Line= 
+    {P1 = {X = x1; Y = y1;}; P2 = {X = x2; Y= y2}}
+
+let isSymAligned (draggingBBox : BoundingBox) (symList : Symbol.Symbol list) : (XYPos * Line) list = //draggingBBox is already top Y coordinate is scaled
+
+    let tSym, bSym = matchBBoxToPos draggingBBox  //returns top and btm pos of bbox
+    let notSelectedSym = List.filter (fun (sym : Symbol.Symbol)-> sym.IsSelected =false) symList
+    if (symIsWithin draggingBBox notSelectedSym ) then
+        
+        let (createLines : (XYPos * Line) list) = 
+            ([] ,notSelectedSym)
+            ||>List.fold (
+                fun lst sym ->  
+                    let symPosTuple = matchBBoxToPos sym.BBox
+                    match symPosTuple with 
+
+                    | {X = tx ; Y = ty}, {X = bx ; Y = by} 
+                        when withinPosX  (calcCentreBBox draggingBBox) (calcCentre ({X = tx ; Y = ty}) ({X = bx ; Y = by}))  
+                                              -> let boxCentre = calcCentre {X = tx ; Y = ty} {X = bx ; Y = by}
+                                                 let symCentre = calcCentreBBox draggingBBox
+                                                 let xDiff = boxCentre.X -  symCentre.X
+                                                 let line =  createLineCoordinates (symCentre.X,tSym.Y) (symCentre.X,by) 
+                                                 (posOf 0.0 xDiff, line) ::lst
+                                            
+
+                    | {X = tx ; Y = ty}, {X = bx ; Y = by} 
+                        when within tSym.X tx -> let xDiff = (tx - tSym.X)
+                                                 printf($"xDiff {xDiff}")
+                                                 let line =  createLineCoordinates (tx,tSym.Y) (tx,by) 
+                                                 (posOf xDiff 0.0, line) ::lst                       
+                    | {X = tx ; Y = ty}, {X = bx ; Y = by} 
+                        when within tSym.X bx -> let xDiff = (bx-tSym.X)
+                                                 let line =  createLineCoordinates (bx,tSym.Y) (bx,by) 
+                                                 (posOf xDiff 0.0, line) ::lst
+                    
+                    | {X = tx ; Y = ty}, {X = bx ; Y = by} 
+                        when within bSym.X bx -> let xDiff = (bx-bSym.X)
+                                                 let line =  createLineCoordinates (bx,tSym.Y) (bx,by) 
+                                                 (posOf xDiff 0.0, line) ::lst
+                    | {X = tx ; Y = ty}, {X = bx ; Y = by} 
+                        when within bSym.X tx -> let xDiff = (tx-bSym.X)
+                                                 let line =  createLineCoordinates (tx,tSym.Y) (tx,by) 
+                                                 (posOf xDiff 0.0, line) ::lst
+                    | {X = tx ; Y = ty}, {X = bx ; Y = by} 
+                        when within (tSym.Y) (ty + 15.0) -> 
+                                                 let yDiff = (ty + 15.0 - tSym.Y)
+                                                 let line =  createLineCoordinates (tSym.X,ty + 15.0) (bx,ty + 15.0) 
+                                                 (posOf 0.0 yDiff, line) ::lst
+                    | {X = tx ; Y = ty}, {X = bx ; Y = by} 
+                        when within (tSym.Y) (by) -> 
+                                             let yDiff = (by - tSym.Y)
+                                             let line =  createLineCoordinates (tSym.X,by) (bx,by) 
+                                             (posOf 0.0 yDiff, line) ::lst
+                    | {X = tx ; Y = ty}, {X = bx ; Y = by} 
+                        when within (bSym.Y) (ty + 15.0) -> 
+                                             let yDiff = (ty + 15.0 - bSym.Y)
+                                             let line =  createLineCoordinates (tSym.X,ty + 15.0) (bx,ty + 15.0) 
+                                             (posOf 0.0 yDiff, line) ::lst
+
+                    | {X = tx ; Y = ty}, {X = bx ; Y = by} 
+                        when within (bSym.Y) (by) -> 
+                                             let yDiff = (by- bSym.Y)
+                                             let line =  createLineCoordinates (tSym.X,by) (bx,by) 
+                                             (posOf 0.0 yDiff, line) ::lst
+                    
+
+                    | _ -> (nullPos, createLineCoordinates (0.0,0.0) (0.0,0.0)) :: lst
+                    )
+        createLines
+    else
+
+        []
+
+
+let shiftSymbol (sym : Symbol.Symbol) (diffPos : XYPos ) = 
+    { sym with
+        Pos = posAdd sym.Pos diffPos
+        InputPorts = sym.InputPorts 
+                     |> List.map (fun port -> 
+                        {port with Pos = posAdd port.Pos diffPos ; 
+                                   BBox = calcBBoxWithRadius 5. (posAdd port.Pos diffPos)}) 
+        OutputPorts = sym.OutputPorts 
+                      |> List.map (fun port -> 
+                        {port with Pos = posAdd port.Pos diffPos ;
+                                   BBox = calcBBoxWithRadius 5. (posAdd port.Pos diffPos)})
+        LastDragPos = posAdd sym.LastDragPos diffPos
+        BBox = {
+            TopLeft = (posAdd sym.BBox.TopLeft diffPos) 
+            BottomRight = (posAdd sym.BBox.BottomRight diffPos)
+    }
+        }
+
+let shiftSelectedSymbols (symList : Symbol.Symbol list ) (diffPos : XYPos ) = 
+    symList 
+    |>List.map (fun sym -> 
+            if sym.IsSelected = false then
+                sym
+            else
+                shiftSymbol sym diffPos)
+
 let isWithinDistanceToPort (pos : XYPos ) (dist : float) (port: Symbol.Port)   : bool = 
     if ( (calcDistance pos port.Pos) < dist ) then true else false
 
@@ -93,10 +214,9 @@ let getDistToOnePort (pos : XYPos) (port : Symbol.Port) : float =
     let dist = calcDistance pos port.Pos
     dist
 
-
 let sortDistToSymbol (pos : XYPos) (symList : Symbol.Symbol list) : (float * CommonTypes.ComponentId) list=
     let getDistToCentreofSymbol (pos : XYPos) (sym : Symbol.Symbol) : float * CommonTypes.ComponentId = 
-        let dist = calcDistance pos (Helpers.calculateCenterFromBBox sym.BBox)
+        let dist = calcDistance pos (calcCentreBBox sym.BBox)
         dist,sym.Id
     symList
     |>List.map (getDistToCentreofSymbol pos)
@@ -126,22 +246,8 @@ let draggingSymbol (pagePos: XYPos)  (model : Symbol.Symbol list) sId  =
         if sId <> sym.Id then
             sym
         else
-            let diff = posDiff pagePos sym.LastDragPos
-                     
-            { sym with
-                Pos = posAdd sym.Pos diff
-                InputPorts = sym.InputPorts 
-                             |> List.map (fun port -> {port with Pos = posAdd port.Pos diff ; BBox = calcBBoxWithRadius 5. (posAdd port.Pos diff)}) 
-                OutputPorts = sym.OutputPorts 
-                              |> List.map (fun port -> {port with Pos = posAdd port.Pos diff ; BBox = calcBBoxWithRadius 5. (posAdd port.Pos diff)})
-                LastDragPos = pagePos
-                BBox = {
-                    TopLeft = (posAdd sym.BBox.TopLeft diff) 
-                    BottomRight = (posAdd sym.BBox.BottomRight diff)
-                }
-            }
-              // fun (symbollist ) () go throughs the symbol list to find top left X = current topLeft = x 
-
+            let diffPos = posDiff pagePos sym.LastDragPos      
+            shiftSymbol sym diffPos
     )
 let endDraggingSymbol (model : Symbol.Symbol list) sId =
     model
@@ -151,11 +257,12 @@ let endDraggingSymbol (model : Symbol.Symbol list) sId =
         else
             { sym with
                 IsDragging = false 
+                
             }
     )
 
-
-let findPortsMatchingHostId (portList: Symbol.Port list) (portDU : Helpers.PortDU) 
+///return a dist and either Input, Output or All Ports 
+let filterPortsMatchingHostId (portList: Symbol.Port list) (portDU : Helpers.PortDU) 
                             (dist : float , hostId : CommonTypes.ComponentId)  
                                 : (float * Symbol.Port list) = 
     let newPortList =
@@ -163,13 +270,16 @@ let findPortsMatchingHostId (portList: Symbol.Port list) (portDU : Helpers.PortD
         |>List.filter(fun port ->     
             match portDU with 
             | In -> match port with 
-                    |{HostId = hId; PortType = pType} when (hostId = hId && pType = CommonTypes.Input) -> true //if hostId matches with portHostId      
+                    |{HostId = hId; PortType = pType} 
+                        when (hostId = hId && pType = CommonTypes.Input) -> true     
                     | _ -> false
             | Out -> match port with 
-                     |{HostId = hId; PortType = pType} when (hostId = hId && pType = CommonTypes.Output) -> true //if hostId matches with portHostId   
+                     |{HostId = hId; PortType = pType} 
+                        when (hostId = hId && pType = CommonTypes.Output) -> true 
                      | _ -> false
             | All -> match port with 
-                     |{HostId = hId} when (hostId = hId) -> true //if hostId matches with portHostId
+                     |{HostId = hId} 
+                        when (hostId = hId) -> true 
                      | _ -> false
         )
 
@@ -180,7 +290,7 @@ let getPortsWithinMinRange (mousePos : XYPos ) (model : Model) (minDist : float)
     let symbolsWithinMinRange = 
         sortedSymbols
         |> List.filter (fun x -> (fst x) < minDist)  //only consider those within the minimum distance    
-    let portsWithinMinRange = List.map (findPortsMatchingHostId model.Ports portDU) symbolsWithinMinRange
+    let portsWithinMinRange = List.map (filterPortsMatchingHostId model.Ports portDU) symbolsWithinMinRange
 
     portsWithinMinRange
 
@@ -201,6 +311,22 @@ let private renderBBox (bBox : BoundingBox) =
             ]
             ] [ ]
         ])
+
+let private renderAlignmentLines (lines : Line list) = 
+    g   [](
+        List.map (fun l ->  
+        g   []([
+                line [ 
+                    SVGAttr.X1 l.P1.X; SVGAttr.Y1 l.P1.Y; SVGAttr.X2 l.P2.X;  SVGAttr.Y2 l.P2.Y;
+                    Style [
+                    StrokeWidth 1
+                    Stroke "purple"
+                    StrokeDasharray "4.0 4.0"
+                    ]
+                ] [ ]
+            ])
+        ) lines
+    )
 
 
 
@@ -248,8 +374,11 @@ let private renderOnePort (mouseOnPort : XYPos * Symbol.Port option)(reElem : Re
         let mouseOnPortCircle = 
             match mouseOnPort with
             | (mousePos, Some port) when (calcDistance mousePos port.Pos < 10.0)->
-                                            circle [Cx port.Pos.X; Cy port.Pos.Y ; R 14.0 ; SVGAttr.Fill "lightskyblue"
-                                                    SVGAttr.Stroke "lightskyblue"; SVGAttr.StrokeWidth 0.8; SVGAttr.FillOpacity 0.3
+                                            circle [Cx port.Pos.X; Cy port.Pos.Y ;
+                                                    R 14.0 ; SVGAttr.Fill "lightskyblue"
+                                                    SVGAttr.Stroke "lightskyblue"; 
+                                                    SVGAttr.StrokeWidth 0.8; 
+                                                    SVGAttr.FillOpacity 0.3
                                                    ] []
                                                         
             | _ -> circle [] []
@@ -285,14 +414,15 @@ let private renderGrid =  //Canvas Grid
         ]
             [
                defs[]
-                   [ 
-                        pattern [
-                            Id "smallGrid"
-                            SVGAttr.Width 24.0;
-                            SVGAttr.Height 24.0;
-                            SVGAttr.PatternUnits "userSpaceOnUse"
-                        ] [path [SVGAttr.D "M 24 0 L 0 0 0 24" ; SVGAttr.Fill "none" ; SVGAttr.Stroke "silver"; SVGAttr.StrokeWidth 0.5] []]
-                   ]
+                [ 
+                pattern [
+                    Id "smallGrid"
+                    SVGAttr.Width 24.0;
+                    SVGAttr.Height 24.0;
+                    SVGAttr.PatternUnits "userSpaceOnUse"
+                    ] [path [SVGAttr.D "M 24 0 L 0 0 0 24" ; SVGAttr.Fill "none" ; 
+                             SVGAttr.Stroke "silver"; SVGAttr.StrokeWidth 0.5] []]
+                ]
                
                rect [
                    SVGAttr.Width "100%"
@@ -362,6 +492,7 @@ let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispat
                         renderHoveringPortsByDistance
                         renderHighlightRegion model.RegionToBeRendered
                         renderBBox model.OverallBBoxToBeRendered
+                        renderAlignmentLines model.AlignmentLinesToBeRendered
                     ] 
                  
                 ]
@@ -669,13 +800,30 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         { model with 
             Wire = {model.Wire with Symbol = newSymModel}
             SymIdList = []
+            AlignmentLinesToBeRendered = []
         }
         ,Cmd.none
 
     | AlignBoxes bbox -> 
-        
-
-        model,Cmd.none
+        let flineList = model.Wire.Symbol
+                       |>isSymAligned bbox 
+        printf ($"focus : {flineList}")
+        let firstDiff = flineList  
+                        |>List.tryFind (fun (diffPos,line) -> diffPos <> nullPos) 
+        let newSym,newOverallBBox = 
+            match firstDiff with 
+            |Some (diffPos,line) -> shiftSelectedSymbols model.Wire.Symbol diffPos, {
+                                    TopLeft = (posAdd model.OverallBBoxToBeRendered.TopLeft diffPos ) ;
+                                    BottomRight = (posAdd model.OverallBBoxToBeRendered.BottomRight diffPos);
+                                 }
+            |None -> model.Wire.Symbol,model.OverallBBoxToBeRendered
+                      
+        { model with
+             AlignmentLinesToBeRendered = List.map (snd) flineList
+             OverallBBoxToBeRendered =  newOverallBBox
+             Wire = {model.Wire with Symbol = newSym}
+        }
+        ,Cmd.none
 
     | DeselectAllSymbols  ->
         let newSymModel, newCmd = 
@@ -685,7 +833,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             SymIdList = []
             OverallBBoxToBeRendered = nullBBox
         }
-         , newCmd  
+         ,Cmd.ofMsg (UpdatePorts)
 
     | MouseMsg mMsg ->     
         let command = 
