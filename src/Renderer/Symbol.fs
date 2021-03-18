@@ -124,6 +124,37 @@ let changePortStateIsConnected (port : Port) (sym : Symbol)(smallChangeDU : Smal
 //let resetSymbolBusWidth (sym : Symbol) : Symbol = 
 //    {sym with InputPorts = resetPortBusWidth sym.InputPorts; OutputPorts = resetPortBusWidth sym.OutputPorts }
 
+/// Returns the overall BBox of a collection of symbols
+let getOverallBBox (symList : Symbol list) :   BoundingBox = 
+    
+    let selectedSymList = getSelectedSymbols symList
+    if (selectedSymList <> [] ) then
+        let minX = 
+            selectedSymList
+            |>List.minBy (fun sym -> sym.BBox.TopLeft.X)
+            |>(fun sym -> sym.BBox.TopLeft.X)
+
+        let maxX = 
+            selectedSymList
+            |>List.minBy (fun sym -> (-1.0)*(sym.BBox.BottomRight.X))
+            |>(fun sym -> sym.BBox.BottomRight.X)
+
+        let minY = 
+            selectedSymList
+            |>List.minBy (fun sym -> sym.BBox.TopLeft.Y)
+            |>(fun sym -> (sym.BBox.TopLeft.Y + 15.0))
+
+        let maxY = 
+            selectedSymList
+            |>List.minBy (fun sym -> (-1.0)*(sym.BBox.BottomRight.Y))
+            |>(fun sym -> sym.BBox.BottomRight.Y)
+        createBBoxFromPos {X = minX; Y = minY} {X = maxX; Y = maxY}
+    else 
+        nullBBox
+
+    
+    
+
 
 let addErrorToErrorList (newSymZ : Symbol) (deleteWirePort : Port) : Symbol = 
     let newSym = changePortStateIsConnected deleteWirePort newSymZ Decrement
@@ -522,17 +553,9 @@ let createNewSymbol (sType:CommonTypes.ComponentType) (name:string) (pos:XYPos) 
     }
 
 let duplicateSymbol (symList : Symbol list) : XYPos*Symbol list = 
-    let minY = 
-        symList
-        |>List.minBy (fun sym -> sym.BBox.TopLeft.Y)
-        |>(fun sym -> sym.BBox.TopLeft.Y)
-
-    let maxY = 
-        symList
-        |>List.minBy (fun sym -> (-1.0)*(sym.BBox.TopLeft.Y))
-        |>(fun sym -> sym.BBox.BottomRight.Y)
-
-    let posDisplacement = {X = 0.0; Y = maxY- minY + 80.0}
+    let overallBBox = getOverallBBox (symList)
+    let maxY,minY = overallBBox.BottomRight.Y,overallBBox.TopLeft.Y
+    let posDisplacement = {X = 0.0; Y = maxY - minY + 50.0}
     
     let dupList = 
         symList

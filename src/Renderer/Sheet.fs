@@ -25,6 +25,8 @@ type Model = {
     SelectedWire : CommonTypes.ConnectionId option
 
     RegionToBeRendered  : Helpers.BoundingBox
+    OverallBBoxToBeRendered : Helpers.BoundingBox
+    AlignmentLinesToBeRendered : float list 
     StartDrawingPosition : XYPos option
     }
 
@@ -72,7 +74,9 @@ type Msg =
     | DeselectWire 
     | AddWire of Symbol.Port*Symbol.Port    
 
-    
+    | AlignBoxes of Helpers.BoundingBox 
+
+
 
 
 let isPortClicked (pos : XYPos) (port: Symbol.Port) : bool = 
@@ -179,6 +183,25 @@ let getPortsWithinMinRange (mousePos : XYPos ) (model : Model) (minDist : float)
     let portsWithinMinRange = List.map (findPortsMatchingHostId model.Ports portDU) symbolsWithinMinRange
 
     portsWithinMinRange
+
+
+let private renderBBox (bBox : BoundingBox) = 
+    let fX, fY = bBox.TopLeft.X, bBox.TopLeft.Y
+    let fX_2, fY_2 = bBox.BottomRight.X, bBox.BottomRight.Y
+    g   [ ] 
+        ([
+            polygon [ 
+                Points $"{fX},{fY} {fX_2},{fY} {fX_2},{fY_2} {fX},{fY_2}"
+                Style [
+                StrokeWidth 1
+                Stroke "blue"
+                Fill "whitesmoke"
+                FillOpacity "0.0"
+                StrokeDasharray "4.0 4.0"
+            ]
+            ] [ ]
+        ])
+
 
 
 let private renderPortsHovering (distance: float , portList: Symbol.Port list) = 
@@ -338,6 +361,7 @@ let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispat
                         renderDraggingPortsByDistance
                         renderHoveringPortsByDistance
                         renderHighlightRegion model.RegionToBeRendered
+                        renderBBox model.OverallBBoxToBeRendered
                     ] 
                  
                 ]
@@ -374,6 +398,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             { model with 
                 Wire = newWireModel
                 SymIdList = []
+                OverallBBoxToBeRendered = nullBBox
             }
         newModel, Cmd.batch [Cmd.ofMsg (UpdatePorts); Cmd.ofMsg (RenderPorts ([],true))]
     
@@ -385,12 +410,12 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             model.Wire.Symbol
             |> List.map (fun sym -> {sym with IsSelected = false})
             |> List.append (snd dupSymbol)
-
         let displacement = fst dupSymbol
-
+        let overallBBox =  Symbol.getOverallBBox newSymModel
         let newModel =  //Sym duplicated
             { model with 
                 Wire = {model.Wire with Symbol = newSymModel}
+                OverallBBoxToBeRendered = overallBBox
             }
 
         newModel,Cmd.batch[Cmd.ofMsg(UpdatePorts); Cmd.ofMsg(DuplicateWire displacement)] 
@@ -587,6 +612,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             IsDrawingRegion = false
             StartDrawingPosition = None
             RegionToBeRendered = createBBoxFromPos {X = 0.0; Y =0.0} {X = 0.0; Y =0.0}
+
         }, Cmd.ofMsg(SelectComponentsWithinRegion (createBBoxFromPos startPos endPos))
 
     | SelectComponentsWithinRegion (bbox) ->             
@@ -601,38 +627,55 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         let newModel  =     { model with 
                                 Wire = newWireModel
                             }   
-        newModel, Cmd.none
+        let overallBBox =  Symbol.getOverallBBox newModel.Wire.Symbol
+    
+        {newModel with
+            OverallBBoxToBeRendered = overallBBox}
+        , Cmd.none
 
     | StartDraggingSymbol (sIdList, pagePos) ->
         let newSymModel = 
             (model.Wire.Symbol, sIdList)
             ||> List.fold (startDraggingSymbol pagePos)
             |> List.map (fun sym -> if List.contains sym.Id sIdList then {sym with IsSelected = true} else sym)
+        let overallBBox =  Symbol.getOverallBBox newSymModel
 
         { model with 
             Wire = {model.Wire with Symbol = newSymModel}
             SymIdList = sIdList
+            OverallBBoxToBeRendered = overallBBox
         }
         , Cmd.batch [Cmd.ofMsg(RenderPorts ([],false) );] //render no ports
 
     | DraggingSymbol (sIdList, pagePos) ->
+       
         let newSymModel = 
             (model.Wire.Symbol, sIdList)
             ||> List.fold (draggingSymbol pagePos)
+
+        let overallBBox =  Symbol.getOverallBBox newSymModel
+
         { model with 
             Wire = {model.Wire with Symbol = newSymModel}
+            OverallBBoxToBeRendered = overallBBox
         }
-        , Cmd.ofMsg (UpdatePorts)
+        , Cmd.batch [Cmd.ofMsg (UpdatePorts) ;Cmd.ofMsg(AlignBoxes overallBBox)]
 
     | EndDraggingSymbol sIdList ->
         let newSymModel = 
              (model.Wire.Symbol, sIdList)
              ||> List.fold (endDraggingSymbol)
+
         { model with 
             Wire = {model.Wire with Symbol = newSymModel}
             SymIdList = []
         }
         ,Cmd.none
+
+    | AlignBoxes bbox -> 
+        
+
+        model,Cmd.none
 
     | DeselectAllSymbols  ->
         let newSymModel, newCmd = 
@@ -640,6 +683,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         { model with 
             Wire = {model.Wire with Symbol = newSymModel}
             SymIdList = []
+            OverallBBoxToBeRendered = nullBBox
         }
          , newCmd  
 
@@ -710,8 +754,10 @@ let init() =
         IdOfPortBeingDragged = "null"
         IsWireSelected = false
         IsDrawingRegion = false
-        RegionToBeRendered = {TopLeft = {X=0.0; Y =0.0}; BottomRight = {X = 0.0; Y = 0.0}}
+        RegionToBeRendered = nullBBox
+        AlignmentLinesToBeRendered = []
         StartDrawingPosition = None
         SelectedWire = None
-        OnePortToBeRendered = {X=0.0; Y =0.0},None
+        OnePortToBeRendered = nullPos,None
+        OverallBBoxToBeRendered = nullBBox
     }, Cmd.map Wire cmdw
