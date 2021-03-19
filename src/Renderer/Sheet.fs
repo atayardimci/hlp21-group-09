@@ -64,8 +64,6 @@ type Msg =
     | EndDrawingRegion of pagePos : XYPos
     | SelectComponentsWithinRegion of Helpers.BoundingBox
     
-
-    
     // Wire
     | StartDraggingWire of CommonTypes.ConnectionId*XYPos
     | DraggingWire of CommonTypes.ConnectionId option *XYPos
@@ -73,8 +71,11 @@ type Msg =
     | DuplicateWire of displacementPos : XYPos
     | DeselectWire 
     | AddWire of Symbol.Port*Symbol.Port *CreateDU   
-
+    //Snap2Grid
     | AlignBoxes of Helpers.BoundingBox 
+
+    //Catalogue
+    | AddSymbol of symType : CommonTypes.ComponentType * name : string
 
 let within num1 num2 = 
     if (num1 < (num2 + 2.5) ) && (num1 > (num2 - 2.5) ) then true else false
@@ -854,6 +855,19 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             OverallBBoxToBeRendered = nullBBox
         }
          ,Cmd.ofMsg (UpdatePorts)
+    
+    | AddSymbol (symType , name) -> 
+        let newInput = Symbol.insertSymbol symType name
+        let newSymModel =
+            model.Wire.Symbol @ [newInput]
+
+        let newModel =  //Sym duplicated
+            { model with 
+                Wire = {model.Wire with Symbol = newSymModel}
+            }
+
+        newModel,Cmd.batch[Cmd.ofMsg(UpdatePorts)] 
+
 
     | MouseMsg mMsg ->     
         let command = 
@@ -861,7 +875,23 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             | Move -> 
                 let portsWithinMinRange = getPortsWithinMinRange mMsg.Pos model 90.0 All
                 [RenderPorts (portsWithinMinRange, true)] //isHovering
-            ///Clicking order : Ports -> Wire -> Symbol         
+            ///Clicking order : Catalogue -> Ports -> Wire -> Symbol     
+            | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y<80. && mMsg.Pos.Y>50.) -> [(AddSymbol ((CommonTypes.ComponentType.Input 2), "I2"))]
+            | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>80. && mMsg.Pos.Y<110.) -> [(AddSymbol ((CommonTypes.ComponentType.Output 2), "O2"))]
+            | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>110. && mMsg.Pos.Y<140.) -> [(AddSymbol ((CommonTypes.ComponentType.Constant (4,2)), "O2"))]
+            | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>140. && mMsg.Pos.Y<170.) -> [AddSymbol ((CommonTypes.ComponentType.IOLabel ), "IO2")]
+            | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>170. && mMsg.Pos.Y<200.) -> [AddSymbol ((CommonTypes.ComponentType.BusSelection (4,0) ), "B2")]
+            | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>200. && mMsg.Pos.Y<230.) -> [AddSymbol ((CommonTypes.ComponentType.BusCompare (4,0) ), "BC2")]      
+            | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>230. && mMsg.Pos.Y<260.) -> [AddSymbol ((CommonTypes.ComponentType.MergeWires ), "MW2")] 
+            | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>260. && mMsg.Pos.Y<290.) -> [AddSymbol ((CommonTypes.ComponentType.SplitWire 4 ), "SW2")]  
+
+            | Down when (mMsg.Pos.X<50.  && mMsg.Pos.X>0.  && mMsg.Pos.Y>290. && mMsg.Pos.Y<320.) -> [AddSymbol ((CommonTypes.ComponentType.Not ), "NG2")]  
+            | Down when (mMsg.Pos.X<100.  && mMsg.Pos.X>50.  && mMsg.Pos.Y>290. && mMsg.Pos.Y<320.) -> [AddSymbol ((CommonTypes.ComponentType.And ), "AG2")]  
+            | Down when (mMsg.Pos.X<150.  && mMsg.Pos.X>100.  && mMsg.Pos.Y>290. && mMsg.Pos.Y<320.) -> [AddSymbol ((CommonTypes.ComponentType.Or ), "OG2")]  
+            | Down when (mMsg.Pos.X<200.  && mMsg.Pos.X>150.  && mMsg.Pos.Y>290. && mMsg.Pos.Y<320.) -> [AddSymbol ((CommonTypes.ComponentType.Xor ), "XOG2")]  
+            | Down when (mMsg.Pos.X<67.  && mMsg.Pos.X>0.  && mMsg.Pos.Y>320. && mMsg.Pos.Y<350.) -> [AddSymbol ((CommonTypes.ComponentType.Nand ), "NAG2")]   
+            | Down when (mMsg.Pos.X<134.  && mMsg.Pos.X>67.  && mMsg.Pos.Y>320. && mMsg.Pos.Y<350.) -> [AddSymbol ((CommonTypes.ComponentType.Nor ), "NOG2")]   
+            | Down when (mMsg.Pos.X<200.  && mMsg.Pos.X>134.  && mMsg.Pos.Y>320. && mMsg.Pos.Y<350.) -> [AddSymbol ((CommonTypes.ComponentType.Xnor ), "XNG2")]        
             | Down -> 
                 let ClickedPort = List.tryFind (isPortClicked mMsg.Pos) model.Ports  
                 match ClickedPort with 
@@ -913,7 +943,7 @@ let init() =
     let wModel,cmdw = (BusWire.init 0)()
     {
         Wire = wModel
-        Canvas = {height = CommonTypes.draw2dCanvasHeight ; width = CommonTypes.draw2dCanvasWidth; zoom = 1.25}
+        Canvas = {height = CommonTypes.draw2dCanvasHeight ; width = CommonTypes.draw2dCanvasWidth; zoom = 1.00}
         SymIdList =  []
         Ports = Symbol.getAllPorts (wModel.Symbol)
         HoveringPortsToBeRendered = []
