@@ -72,28 +72,38 @@ type Msg =
     | EndDraggingWire of CommonTypes.ConnectionId
     | DuplicateWire of displacementPos : XYPos
     | DeselectWire 
-    | AddWire of Symbol.Port*Symbol.Port    
+    | AddWire of Symbol.Port*Symbol.Port *CreateDU   
 
     | AlignBoxes of Helpers.BoundingBox 
 
 let within num1 num2 = 
-    if (num1 < (num2 + 6.0) ) && (num1 > (num2 - 6.0) ) then true else false
+    if (num1 < (num2 + 2.5) ) && (num1 > (num2 - 2.5) ) then true else false
 
 let withinPosX pos1 pos2 =
-    if (pos1.X < (pos2.X + 6.0) ) && (pos1.X > (pos2.X - 6.0)) then true else false
+    if (pos1.X < (pos2.X + 2.5) ) && (pos1.X > (pos2.X - 2.5)) then true else false
+
+let withinPosY pos1 pos2 =
+    if (pos1.Y < (pos2.Y + 2.5) ) && (pos1.Y > (pos2.Y - 2.5)) then true else false
 
 let symIsWithin (bBox : BoundingBox) (symList : Symbol.Symbol list) = 
-    List.exists (fun (s : Symbol.Symbol) -> 
-                          withinPosX  (calcCentreBBox bBox) (calcCentre ({X = s.BBox.TopLeft.X ; Y = s.BBox.TopLeft.Y + 15.0 }) ({X = s.BBox.BottomRight.X ; Y = s.BBox.BottomRight.Y}))  ||
-                          (within bBox.TopLeft.X s.BBox.TopLeft.X) ||
-                          (within bBox.TopLeft.X s.BBox.BottomRight.X)||   
-                          (within bBox.BottomRight.X s.BBox.TopLeft.X) ||
-                          (within bBox.BottomRight.X s.BBox.BottomRight.X) ||
-                          (within bBox.TopLeft.Y  (s.BBox.TopLeft.Y + 15.0)) ||
-                          (within bBox.TopLeft.Y s.BBox.BottomRight.Y )||
-                          (within bBox.BottomRight.Y (s.BBox.TopLeft.Y + 15.0)) ||
-                          (within bBox.BottomRight.Y s.BBox.BottomRight.Y) 
-                ) symList
+            List.exists (fun (s : Symbol.Symbol) -> 
+                let boxTL =  bBox.TopLeft
+                let boxBR = bBox.BottomRight
+                let sTL =  s.BBox.TopLeft
+                let sBR = s.BBox.BottomRight
+                // check if we should snap 2 grid
+                withinPosX  (calcCentreBBox bBox) (calcCentre ({X = sTL.X ; Y = sTL.Y + 15.0 }) ({X = sBR.X ; Y = sBR.Y}))  ||
+                withinPosY  (calcCentreBBox bBox) (calcCentre ({X = sTL.X ; Y = sTL.Y + 15.0 }) ({X = sBR.X ; Y = sBR.Y}))  ||
+                (within boxTL.X sTL.X) ||
+                (within boxTL.X sBR.X)||   
+                (within boxBR.X sTL.X) ||
+                (within boxBR.X sBR.X) ||
+                (within boxTL.Y  (sTL.Y + 15.0)) ||
+                (within boxTL.Y sBR.Y )||
+                (within boxBR.Y (sTL.Y + 15.0)) ||
+                (within boxBR.Y sBR.Y) 
+                
+             ) symList
 
 let matchBBoxToPos (bBox : BoundingBox) = 
     match bBox with 
@@ -110,12 +120,11 @@ let isPortClicked (pos : XYPos) (port: Symbol.Port) : bool =
 let createLineCoordinates ( (x1,y1): float*float )  ( (x2,y2) : float*float ) : Line= 
     {P1 = {X = x1; Y = y1;}; P2 = {X = x2; Y= y2}}
 
-let isSymAligned (draggingBBox : BoundingBox) (symList : Symbol.Symbol list) : (XYPos * Line) list = //draggingBBox is already top Y coordinate is scaled
+let isSymAligned (overallBBox : BoundingBox) (symList : Symbol.Symbol list) : (XYPos * Line) list = //draggingBBox is already top Y coordinate is scaled
 
-    let tSym, bSym = matchBBoxToPos draggingBBox  //returns top and btm pos of bbox
+    let tOver, bOver = matchBBoxToPos overallBBox  //returns top and btm pos of overall box
     let notSelectedSym = List.filter (fun (sym : Symbol.Symbol)-> sym.IsSelected =false) symList
-    if (symIsWithin draggingBBox notSelectedSym ) then
-        
+    if (symIsWithin overallBBox notSelectedSym ) then
         let (createLines : (XYPos * Line) list) = 
             ([] ,notSelectedSym)
             ||>List.fold (
@@ -123,56 +132,69 @@ let isSymAligned (draggingBBox : BoundingBox) (symList : Symbol.Symbol list) : (
                     let symPosTuple = matchBBoxToPos sym.BBox
                     match symPosTuple with 
 
-                    | {X = tx ; Y = ty}, {X = bx ; Y = by} 
-                        when withinPosX  (calcCentreBBox draggingBBox) (calcCentre ({X = tx ; Y = ty}) ({X = bx ; Y = by}))  
-                                              -> let boxCentre = calcCentre {X = tx ; Y = ty} {X = bx ; Y = by}
-                                                 let symCentre = calcCentreBBox draggingBBox
-                                                 let xDiff = boxCentre.X -  symCentre.X
-                                                 let line =  createLineCoordinates (symCentre.X,tSym.Y) (symCentre.X,by) 
-                                                 (posOf 0.0 xDiff, line) ::lst
-                                            
-
-                    | {X = tx ; Y = ty}, {X = bx ; Y = by} 
-                        when within tSym.X tx -> let xDiff = (tx - tSym.X)
-                                                 printf($"xDiff {xDiff}")
-                                                 let line =  createLineCoordinates (tx,tSym.Y) (tx,by) 
-                                                 (posOf xDiff 0.0, line) ::lst                       
-                    | {X = tx ; Y = ty}, {X = bx ; Y = by} 
-                        when within tSym.X bx -> let xDiff = (bx-tSym.X)
-                                                 let line =  createLineCoordinates (bx,tSym.Y) (bx,by) 
-                                                 (posOf xDiff 0.0, line) ::lst
+                    | {X = stx ; Y = sty}, {X = sbx ; Y = sby} 
+                        when withinPosX  (calcCentreBBox overallBBox) (calcCentre ({X = stx ; Y = sty}) ({X = sbx ; Y = sby}))  
+                                              -> let symCentre = calcCentre {X = stx ; Y = sty} {X = sbx ; Y = sby}
+                                                 let overCentre = calcCentreBBox overallBBox
+                                                 let xDiff = symCentre.X -  overCentre.X
+                                                 if (symCentre.Y - overCentre.Y < 0.0 ) then 
+                                                     let line =  createLineCoordinates (symCentre.X, sby) (symCentre.X, tOver.Y) 
+                                                     (posOf xDiff 0.0, line) ::lst
+                                                 else
+                                                     let line =  createLineCoordinates (symCentre.X,bOver.Y) (symCentre.X, sty + 15.0) 
+                                                     (posOf xDiff 0.0, line) ::lst
+                    | {X = stx ; Y = sty}, {X = sbx ; Y = sby} 
+                        when withinPosY  (calcCentreBBox overallBBox) (calcCentre ({X = stx ; Y = sty + 15.0}) ({X = sbx ; Y = sby}))  
+                                              -> let symCentre = calcCentre {X = stx ; Y = sty + 15.0} {X = sbx ; Y = sby}
+                                                 let overCentre = calcCentreBBox overallBBox
+                                                 let yDiff = symCentre.Y -  overCentre.Y
+                                                 if (symCentre.X - overCentre.X < 0.0 ) then 
+                                                        let line =  createLineCoordinates (tOver.X,symCentre.Y) (sbx,symCentre.Y) 
+                                                        (posOf 0.0 yDiff, line) ::lst
+                                                    else
+                                                        let line =  createLineCoordinates (stx,symCentre.Y) (bOver.X,symCentre.Y) 
+                                                        (posOf 0.0 yDiff, line) ::lst
+                                                               
+                    | {X = stx ; Y = sty}, {X = sbx ; Y = sby} 
+                        when within tOver.X stx -> let xDiff = (stx - tOver.X)
+                                                   printf($"xDiff {xDiff}")
+                                                   let line =  createLineCoordinates (stx,tOver.Y) (stx,sby) 
+                                                   (posOf xDiff 0.0, line) ::lst                       
+                    | {X = stx ; Y = sty}, {X = sbx ; Y = sby} 
+                        when within tOver.X sbx -> let xDiff = (sbx-tOver.X)
+                                                   let line =  createLineCoordinates (sbx,tOver.Y) (sbx,sby) 
+                                                   (posOf xDiff 0.0, line) ::lst
                     
-                    | {X = tx ; Y = ty}, {X = bx ; Y = by} 
-                        when within bSym.X bx -> let xDiff = (bx-bSym.X)
-                                                 let line =  createLineCoordinates (bx,tSym.Y) (bx,by) 
-                                                 (posOf xDiff 0.0, line) ::lst
-                    | {X = tx ; Y = ty}, {X = bx ; Y = by} 
-                        when within bSym.X tx -> let xDiff = (tx-bSym.X)
-                                                 let line =  createLineCoordinates (tx,tSym.Y) (tx,by) 
-                                                 (posOf xDiff 0.0, line) ::lst
-                    | {X = tx ; Y = ty}, {X = bx ; Y = by} 
-                        when within (tSym.Y) (ty + 15.0) -> 
-                                                 let yDiff = (ty + 15.0 - tSym.Y)
-                                                 let line =  createLineCoordinates (tSym.X,ty + 15.0) (bx,ty + 15.0) 
+                    | {X = stx ; Y = sty}, {X = sbx ; Y = sby} 
+                        when within bOver.X sbx -> let xDiff = (sbx-bOver.X)
+                                                   let line =  createLineCoordinates (sbx,tOver.Y) (sbx,sby) 
+                                                   (posOf xDiff 0.0, line) ::lst
+                    | {X = stx ; Y = sty}, {X = sbx ; Y = sby} 
+                        when within bOver.X stx -> let xDiff = (stx-bOver.X)
+                                                   let line =  createLineCoordinates (stx,tOver.Y) (stx,sby) 
+                                                   (posOf xDiff 0.0, line) ::lst
+                    | {X = stx ; Y = sty}, {X = sbx ; Y = sby} 
+                        when within (tOver.Y) (sty + 15.0) -> 
+                                                 let yDiff = (sty + 15.0 - tOver.Y)
+                                                 let line =  createLineCoordinates (tOver.X,sty + 15.0) (sbx,sty + 15.0) 
                                                  (posOf 0.0 yDiff, line) ::lst
-                    | {X = tx ; Y = ty}, {X = bx ; Y = by} 
-                        when within (tSym.Y) (by) -> 
-                                             let yDiff = (by - tSym.Y)
-                                             let line =  createLineCoordinates (tSym.X,by) (bx,by) 
+                    | {X = stx ; Y = sty}, {X = sbx ; Y = sby} 
+                        when within (tOver.Y) (sby) -> 
+                                             let yDiff = (sby - tOver.Y)
+                                             let line =  createLineCoordinates (tOver.X,sby) (sbx,sby) 
                                              (posOf 0.0 yDiff, line) ::lst
-                    | {X = tx ; Y = ty}, {X = bx ; Y = by} 
-                        when within (bSym.Y) (ty + 15.0) -> 
-                                             let yDiff = (ty + 15.0 - bSym.Y)
-                                             let line =  createLineCoordinates (tSym.X,ty + 15.0) (bx,ty + 15.0) 
+                    | {X = stx ; Y = sty}, {X = sbx ; Y = sby} 
+                        when within (bOver.Y) (sty + 15.0) -> 
+                                             let yDiff = (sty + 15.0 - bOver.Y)
+                                             let line =  createLineCoordinates (tOver.X,sty + 15.0) (sbx,sty + 15.0) 
                                              (posOf 0.0 yDiff, line) ::lst
 
-                    | {X = tx ; Y = ty}, {X = bx ; Y = by} 
-                        when within (bSym.Y) (by) -> 
-                                             let yDiff = (by- bSym.Y)
-                                             let line =  createLineCoordinates (tSym.X,by) (bx,by) 
+                    | {X = stx ; Y = sty}, {X = sbx ; Y = sby} 
+                        when within (bOver.Y) (sby) -> 
+                                             let yDiff = (sby- bOver.Y)
+                                             let line =  createLineCoordinates (tOver.X,sby) (sbx,sby) 
                                              (posOf 0.0 yDiff, line) ::lst
                     
-
                     | _ -> (nullPos, createLineCoordinates (0.0,0.0) (0.0,0.0)) :: lst
                     )
         createLines
@@ -350,7 +372,7 @@ let private renderPortsHovering (distance: float , portList: Symbol.Port list) =
         ))
 
 let private renderPortsDragging (distance: float, portList: Symbol.Port list ) =
-    let radius = 10.0
+    let radius = 8.0
     let opacity = 1.0/ distance * 55.0
     g []
         (   (portList 
@@ -375,7 +397,7 @@ let private renderOnePort (mouseOnPort : XYPos * Symbol.Port option)(reElem : Re
             match mouseOnPort with
             | (mousePos, Some port) when (calcDistance mousePos port.Pos < 10.0)->
                                             circle [Cx port.Pos.X; Cy port.Pos.Y ;
-                                                    R 14.0 ; SVGAttr.Fill "lightskyblue"
+                                                    R 12.0 ; SVGAttr.Fill "lightskyblue"
                                                     SVGAttr.Stroke "lightskyblue"; 
                                                     SVGAttr.StrokeWidth 0.8; 
                                                     SVGAttr.FillOpacity 0.3
@@ -487,12 +509,13 @@ let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispat
                     [ Style [Transform  (sprintf "scale(%f)" model.Canvas.zoom)]] 
                     [   
                         renderGrid //background
+                        renderAlignmentLines model.AlignmentLinesToBeRendered
                         svgReact   
                         renderDraggingPortsByDistance
                         renderHoveringPortsByDistance
                         renderHighlightRegion model.RegionToBeRendered
                         renderBBox model.OverallBBoxToBeRendered
-                        renderAlignmentLines model.AlignmentLinesToBeRendered
+                        
                     ] 
                  
                 ]
@@ -555,18 +578,15 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         let selectedWireList =
             BusWire.getSelectedWireList model.Wire.WX
 
-
         let dupWireList = BusWire.getWiresToBeDuplicated displacementPos selectedWireList model.Ports 
 
         let createDupWireList = 
             dupWireList
             |> List.map (fun tuple -> 
                 match tuple  with
-                | Some sourcePort , Some targetPort, w  ->  Cmd.ofMsg (AddWire (sourcePort,targetPort)) 
+                | Some sourcePort , Some targetPort, w  ->  Cmd.ofMsg (AddWire (sourcePort,targetPort,Duplicate)) 
                 | _ , _ , _-> failwithf "Shouldn't happen")
-
-        
-        model,Cmd.batch createDupWireList
+        model,Cmd.batch ((Cmd.ofMsg DeselectWire) :: createDupWireList )
    
     | KeyPress s -> // Updates Orientation Key Presses
         let newSymModel,newCmd =
@@ -644,7 +664,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                 let startPort = tryFindPortByPortId model.IdOfPortBeingDragged model.Ports
                 let newMsg = 
                     match startPort with
-                    |Some startPort when endPort.PortType<>startPort.PortType -> AddWire (startPort,endPort) 
+                    |Some startPort when endPort.PortType<>startPort.PortType -> AddWire (startPort,endPort,Init) 
                     |None -> Msg "Error in Port" 
                     | _ -> Msg "endPort must be a different PortType then startPort"
 
@@ -701,9 +721,9 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         }
         , Cmd.none
 
-    | AddWire (startPort,endPort) -> 
+    | AddWire (startPort,endPort,createDU) -> 
         let newBusModel, newCmd = 
-            BusWire.update (BusWire.Msg.AddWire (startPort,endPort)) model.Wire
+            BusWire.update (BusWire.Msg.AddWire (startPort,endPort,createDU)) model.Wire
         {model with
             Wire = newBusModel
         }
@@ -893,7 +913,7 @@ let init() =
     let wModel,cmdw = (BusWire.init 0)()
     {
         Wire = wModel
-        Canvas = {height = CommonTypes.draw2dCanvasHeight ; width = CommonTypes.draw2dCanvasWidth; zoom = 1.0}
+        Canvas = {height = CommonTypes.draw2dCanvasHeight ; width = CommonTypes.draw2dCanvasWidth; zoom = 1.25}
         SymIdList =  []
         Ports = Symbol.getAllPorts (wModel.Symbol)
         HoveringPortsToBeRendered = []

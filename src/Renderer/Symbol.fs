@@ -869,6 +869,10 @@ let createClock fontSize fX fY heigth =
         createInSymbolText fontSize "start" 0 {X=fX + 8.; Y=fY + heigth - 7.} "clk"
     ]
 
+let floatCompare (a) (b) : bool  =
+    let epsilon = 0.00001
+    (a - b) < epsilon
+
 let createRectangularSymbol (symName:string) (inputPortNames:string list) (outputPortNames:string list) (includeClk:bool) props = 
     let fX, fY = props.Symbol.Pos.X, props.Symbol.Pos.Y
     let w, h = props.Symbol.W, props.Symbol.H
@@ -882,11 +886,12 @@ let createRectangularSymbol (symName:string) (inputPortNames:string list) (outpu
         ((props.Symbol.InputPorts @ props.Symbol.OutputPorts), (inputPortNames @ outputPortNames))
         ||> List.map2 (fun port portName -> 
             match port.Pos.X, port.Pos.Y with
-            | x, _ when x = fX -> createInSymbolText 10. "start" 0 {port.Pos with X = port.Pos.X + 8.} portName
-            | x, _ when x = fX + w -> createInSymbolText 10. "end" 0 {port.Pos with X = port.Pos.X - 8.} portName
-            | _, y when y = fY -> createInSymbolText 10. "middle" rotationOfTopAndBottomPorts {port.Pos with Y = port.Pos.Y + 10.} portName
-            | _, y when y = fY + h -> createInSymbolText 10. "middle" rotationOfTopAndBottomPorts {port.Pos with Y = port.Pos.Y - 10.} portName
-            | _ -> failwithf "Port position is not at the edge of the symbol!"
+            | x, _ when floatCompare (x) (fX) -> createInSymbolText 10. "start" 0 {port.Pos with X = port.Pos.X + 8.} portName
+            | x, _ when floatCompare (x) (fX + w) -> createInSymbolText 10. "end" 0 {port.Pos with X = port.Pos.X - 8.} portName
+            | _, y when floatCompare (y) (fY) -> createInSymbolText 10. "middle" rotationOfTopAndBottomPorts {port.Pos with Y = port.Pos.Y + 10.} portName
+            | _, y when floatCompare (y) (fY + h) -> createInSymbolText 10. "middle" rotationOfTopAndBottomPorts {port.Pos with Y = port.Pos.Y - 10.} portName
+            | x, y ->  printf($"x : {x}, fX + w : {fX + w},  y: {y} :, fX : {fX }, fY : {fY},  fY + h : {fY + h}  ")
+                       failwithf "Port position is not at the edge of the symbol!"
     
         )
     g   [ ] 

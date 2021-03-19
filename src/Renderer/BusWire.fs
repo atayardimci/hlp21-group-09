@@ -45,7 +45,7 @@ type Msg =
     | SetColor of CommonTypes.HighLightColor
     | MouseMsg of MouseT
     | DrawFromPortToCursor of XYPos*XYPos* Symbol.Port option
-    | AddWire of Symbol.Port*Symbol.Port
+    | AddWire of Symbol.Port*Symbol.Port*CreateDU
     | SelectWire of CommonTypes.ConnectionId*XYPos
     | DeleteWire
     | UpdatedPortsToBusWire of sId : Symbol.Port list
@@ -107,6 +107,8 @@ let drawLineToCursor (startPos : XYPos, endPos : XYPos, endPort : Symbol.Port op
                 SVGAttr.StrokeDasharray strokeDashArray
         ] []
         ]
+
+
 
 
 let pairListElements sequence  = 
@@ -295,19 +297,21 @@ let autosingleWireView (wModel: Model)=
 
         let startlst,endlst = pairListElements vertices
         let reactlst = List.map2 displayWireSegment startlst endlst 
-    
+        
         text [
-                        X (props.SrcP.X + 30.0)
-                        Y props.SrcP.Y
-                // a demo text svg element
+                        X (props.SrcP.X + 20.0)
+                        Y (props.SrcP.Y + 2.0)
                         Style [
-                            TextAnchor "middle" // left/right/middle: horizontal algnment vs (X,Y)
-                            DominantBaseline "hanging" // auto/middle/hanging: vertical alignment vs (X,Y)
-                            FontSize "20px"
+                            TextAnchor "middle"         // left/right/middle: horizontal algnment vs (X,Y)
+                            DominantBaseline "hanging"  // auto/middle/hanging: vertical alignment vs (X,Y)
+                            FontSize "15px"
                             FontWeight "Bold"
-                            Fill "Black" // demo font color
+                            Fill "Black"                // demo font color
+                            UserSelect UserSelectOptions.None
+                            PointerEvents "none"
                         ]
-                    ]  [sprintf "[%d:0]" msb|> str] :: reactlst
+                    ]  
+                    [sprintf "[%d:0]" msb|> str] :: reactlst
          |> (fun lineEl -> 
             g [] lineEl)
 
@@ -380,6 +384,61 @@ let getWiresToBeDuplicated (displacementPos : XYPos ) (wireList : Wire list) (po
                 (sourcePort,endPort,wire)
 
                 )
+
+let addWire (startPort : Symbol.Port) (endPort : Symbol.Port) (createDU : CreateDU) (symModel : Symbol.Symbol list) =
+    let createInit, createError =
+        match createDU with 
+        | Init -> Init,Error
+        | Duplicate -> Duplicate, DuplicateError
+        | _ -> failwithf "Sheet should only be sending Init or Duplicate to BusWire!"
+   
+    match (startPort.BusWidth, endPort.BusWidth ) with 
+    | Some startWidth, Some endWidth  when (startWidth = endWidth) && startPort.PortType = CommonTypes.Input ->  //Buswidth match but inputPort has many drivers
+                                        if (startPort.NumberOfConnections = 0) then 
+                                            let wire = createWire startPort endPort createInit
+                                            (wire,symModel) 
+                                        else
+                                            let wire = createWire startPort endPort createError
+                                            printf ("createError : InputPort can only have One Driver. If you want to merge two wires you a MergeWire Component")
+                                            (wire,symModel)
+                                        
+    | Some startWidth, Some endWidth  when startWidth = endWidth && endPort.PortType = CommonTypes.Input ->     //Buswidth match but inputPort has many drivers                                        
+                                        if (endPort.NumberOfConnections = 0) then 
+                                            let wire = createWire startPort endPort createInit
+                                                                             
+                                            (wire,symModel) 
+                                        else
+                                            let wire = createWire startPort endPort createError
+                                            printf ("createError : InputPort can only have One Driver.")
+                                            (wire,symModel)
+
+    | Some startWidth, Some endWidth  when startWidth = endWidth ->                                              //Buswidth match but inputPort has many drivers
+                                            let wire = createWire startPort endPort createInit
+                                           
+                                            (wire,symModel)
+    | Some startWidth, Some endWidth  when startWidth <> endWidth ->  //Buswidth dont match 
+                                        let wire = createWire startPort endPort createError
+                                        let sym,symMsg = Symbol.update (Symbol.Msg.AddErrorToErrorList
+                                                            [startPort;endPort]
+                                                            )symModel
+
+                                        (wire,sym)
+    | Some startWidth, None  -> let wire = createWire startPort endPort createInit                               //change BusWidth None to BusWidth of newly connected port
+                                let sym,symMsg  = Symbol.update (Symbol.Msg.EnforceBusWidth 
+                                                    (startWidth,endPort,EnforceEndPort)
+                                                    )symModel
+
+
+                                (wire,sym)
+    | None , Some endWidth  -> let wire = createWire startPort endPort createInit                                //change BusWidth None to BusWidth of newly connected port
+                               let sym,symMsg  = Symbol.update (Symbol.Msg.EnforceBusWidth 
+                                                    (endWidth,startPort,EnforceStartPort)
+                                                    )symModel
+                               (wire,sym)
+
+    | _ -> failwithf " BusWidths of sourcePort and targetPort are not specified !!!!"
+
+
  
 let startWireDragging (cable: Wire) (pos: XYPos) (wModel: Model)=
     let inShape (b:BoundingBox) =
@@ -464,66 +523,12 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             wir |> updateWS |> updateWT
         let updateNetList nLs = List.map newW nLs
         {model with WX = updateNetList model.WX} , Cmd.none
-    | AddWire (startPort , endPort) ->  
+    | AddWire (startPort , endPort,createDU) ->  
         let symModel = 
             model.Symbol
             |>List.map (fun sym -> Symbol.changePortStateIsConnected startPort sym Increment)
             |>List.map (fun sym -> Symbol.changePortStateIsConnected endPort sym Increment)
-        let newWireSym  = 
-            match (startPort.BusWidth, endPort.BusWidth ) with 
-            | Some startWidth, Some endWidth  when (startWidth = endWidth) && startPort.PortType = CommonTypes.Input ->  //Buswidth match but inputPort has many drivers
-                                               if (startPort.NumberOfConnections = 0) then 
-                                                    let wire = createWire startPort endPort Init
-                                                    
-                                                    (wire,symModel) 
-                                                else
-                                                    let wire = createWire startPort endPort Error
-                                                    printf ("Error : InputPort can only have One Driver. If you want to merge two wires you a MergeWire Component")
-                                                    (wire,symModel)
-                                                
-            | Some startWidth, Some endWidth  when startWidth = endWidth && endPort.PortType = CommonTypes.Input ->  //Buswidth match but inputPort has many drivers
-                                                let symModel = 
-                                                    model.Symbol
-                                                    |>List.map (fun sym -> Symbol.changePortStateIsConnected startPort sym Increment)
-                                                    |>List.map (fun sym -> Symbol.changePortStateIsConnected endPort sym Increment)
-                                                
-                                                if (endPort.NumberOfConnections = 0) then 
-                                                    let wire = createWire startPort endPort Init
-                                                                                        
-                                                    (wire,symModel) 
-                                                else
-                                                    let wire = createWire startPort endPort Error
-                                                    printf ("Error : InputPort can only have One Driver.")
-                                                    (wire,symModel)
-
-            | Some startWidth, Some endWidth  when startWidth = endWidth ->  //Buswidth match but inputPort has many drivers
-                                                    let wire = createWire startPort endPort Init
-                                                   
-                                                    (wire,symModel)
-            | Some startWidth, Some endWidth  when startWidth <> endWidth ->  //Buswidth dont match 
-                                                let wire = createWire startPort endPort Error
-                                                let sym,symMsg = Symbol.update (Symbol.Msg.AddErrorToErrorList
-                                                                  [startPort;endPort]
-                                                                 )symModel
-
-                                                (wire,sym)
-            | Some startWidth, None  -> let wire = createWire startPort endPort Init     //change BusWidth None to BusWidth of newly connected port
-                                        let sym,symMsg  = Symbol.update (Symbol.Msg.EnforceBusWidth 
-                                                            (startWidth,endPort,EnforceEndPort)
-                                                          )symModel
-
-
-                                        (wire,sym)
-            | None , Some endWidth  -> let wire = createWire startPort endPort Init     //change BusWidth None to BusWidth of newly connected port
-                                       let sym,symMsg  = Symbol.update (Symbol.Msg.EnforceBusWidth 
-                                                            (endWidth,startPort,EnforceStartPort)
-                                                          )symModel
-                                       (wire,sym)
-
-            | _ -> failwithf " BusWidths of sourcePort and targetPort are not specified !!!!"
-
-
-
+        let newWireSym  = addWire startPort endPort createDU symModel 
         {model with WX = (fst newWireSym) :: model.WX ; Symbol = (snd newWireSym)} , Cmd.none 
     
     | DeselectWire  ->
@@ -563,7 +568,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             let tmpDelete = wireDelete @ wireDelete2 @ wireDelete3
             (tmpRender,tmpDelete)
 
-        let allToBeDeletedPorts= //for all the wires that are gonna be deleted check if it has error 
+        let allToBeDeletedPorts= //for all the wires that are gonna be deleted check if it has createError 
             wireToBeDeletedFirst
             |> List.collect (fun w -> [w.SourcePort;w.TargetPort])
             |> Set.ofList
@@ -588,11 +593,8 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
 
     | MouseMsg mMsg -> model, Cmd.ofMsg (Symbol (Symbol.MouseMsg mMsg))
 
-//---------------Other interface functions--------------------//
 
-/// Given a point on the canvas, returns the wire ID of a wire within a few pixels
-/// or None if no such. Where there are two close wires the nearest is taken. Use
-/// to determine which winire (if any) to select on a mouse click
+// Interface Functions
 let wireToSelectOpt (wModel: Model) (pos: XYPos) : CommonTypes.ConnectionId option =
     let inShape (b:BoundingBox) =
         pos.X >= b.TopLeft.X && pos.X <= b.BottomRight.X && pos.Y >= b.TopLeft.Y && pos.Y <= b.BottomRight.Y 
