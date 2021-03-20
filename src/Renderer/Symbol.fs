@@ -90,7 +90,7 @@ let boxesCollide (boxOne: BoundingBox) (boxTwo: BoundingBox) =
     not (oneBR.X < twoTL.X || oneBR.Y < twoTL.Y || oneTL.X > twoBR.X || oneTL.Y > twoBR.Y)
 
 /// Updates the number of connections of the Port and Symbol
-let changePortStateIsConnected (port : Port) (sym : Symbol) (smallChangeDU : SmallChangeDU) : Symbol = 
+let changeNumConnections (port : Port) (sym : Symbol) (smallChangeDU : SmallChangeDU) : Symbol = 
     let mutable numConnections = sym.NumberOfConnections
     let newInputPorts =
         sym.InputPorts
@@ -155,13 +155,14 @@ let getOverallBBox (symList : Symbol list) :   BoundingBox =
     
     
 
-
-let addErrorToErrorList (newSymZ : Symbol) (deleteWirePort : Port) : Symbol = 
-    let newSym = changePortStateIsConnected deleteWirePort newSymZ Decrement
+/// function is called when deletion of a connection happens
+let removeErrorFromErrorList (sym : Symbol) (deleteWirePort : Port) : Symbol = 
+    let newSym = changeNumConnections deleteWirePort sym Decrement   //For Ata :  changes NumOfConnections field of Port and Symbol
     let portNum = 
         match deleteWirePort.PortNumber with
         |Some portNum -> portNum
         |None -> failwithf "No Port Num"
+
     let firstErrorIndex = 
         newSym.PortNumbersWithError
         |>List.tryFindIndex ( fun elem  -> (elem = portNum))   
@@ -172,18 +173,18 @@ let addErrorToErrorList (newSymZ : Symbol) (deleteWirePort : Port) : Symbol =
         | i, x::xs -> x::remove (i - 1) xs
         | i, [] -> failwith "index out of range"
                                             
-    let filteredErrorList = 
+    let filteredErrorList =    //For Ata :  Remove deleted connections from PortNumbersWithError field of Symbol 
         match firstErrorIndex with 
         |Some errorindex -> remove errorindex newSym.PortNumbersWithError
         |None -> newSym.PortNumbersWithError
-    {newSym with PortNumbersWithError = filteredErrorList}
-
+    {newSym with PortNumbersWithError = filteredErrorList}         
 
 /// Selects all symbols which have their bounding box collide with the given box and returns the updated model
 let selectSymbolsInRegion (symModel: Model) (box: BoundingBox) : Model =
     let doesCollide = boxesCollide box
     symModel
     |> List.map (fun sym -> if doesCollide sym.BBox then {sym with IsSelected = true} else sym)
+
 
 
 let enforceBusWidth (busWidth : int )(port : Port) (sym : Symbol ) (bwDU : BusWidthDU) =
@@ -216,8 +217,9 @@ let autoCompleteWidths (sym : Symbol)  =
             match (sym.Type) with 
             |CommonTypes.SplitWire num ->  
                                     let completedSymbol =  
-                                        match (sym.InputPorts,sym.OutputPorts) with 
-                                        | [in1],[out1;out2] when sym.NumberOfConnections = 0 -> 
+                                        match (sym.InputPorts,sym.OutputPorts) with              //For Ata : These part needs some changing as discussed before 
+                                                                                                 //          especially when connecting SpitWire from the top right.
+                                        | [in1],[out1;out2] when sym.NumberOfConnections = 0 ->  //For Ata : when zero connections refresh the symbol to original state.
                                                                 {sym with InputPorts = [{in1 with BusWidth = None}] ; 
                                                                           OutputPorts = [{out1 with BusWidth = None}; {out2 with BusWidth = None}]}
                                         | [in1],[out1;out2] -> let tmp = 
@@ -233,7 +235,7 @@ let autoCompleteWidths (sym : Symbol)  =
             |CommonTypes.MergeWires  ->  
                                     let completedSymbol = 
                                         match (sym.InputPorts,sym.OutputPorts) with 
-                                        | [in1;in2],[out1] when sym.NumberOfConnections = 0 -> 
+                                        | [in1;in2],[out1] when sym.NumberOfConnections = 0 ->  //For Ata : when zero connections refresh the symbol to original state.
                                                                 {sym with InputPorts = [{in1 with BusWidth = None}; {in2 with BusWidth = None}] ; 
                                                                           OutputPorts = [{out1 with BusWidth = None}]}
                                         | [in1;in2],[out1] -> let tmp =
@@ -252,7 +254,7 @@ let autoCompleteWidths (sym : Symbol)  =
             |CommonTypes.IOLabel  ->
                                    let completedSymbol =
                                      match (sym.InputPorts,sym.OutputPorts) with 
-                                     | [in1],[out1] when sym.NumberOfConnections = 0 -> 
+                                     | [in1],[out1] when sym.NumberOfConnections = 0 -> //For Ata : when zero connections refresh the symbol to original state.
                                                         {sym with InputPorts = [{in1 with BusWidth = None}] ; 
                                                                   OutputPorts = [{out1 with BusWidth = None}]}
                                      | [in1],[out1] -> let tmp = 
@@ -268,7 +270,7 @@ let autoCompleteWidths (sym : Symbol)  =
             |CommonTypes.Mux2     ->
                                   let completedSymbol =
                                     match (sym.InputPorts,sym.OutputPorts) with 
-                                    | [in1;in2;sel],[out1] when sym.NumberOfConnections = 0 -> 
+                                    | [in1;in2;sel],[out1] when sym.NumberOfConnections = 0 -> //For Ata : when zero connections refresh the symbol to original state.
                                                                 {sym with InputPorts = [{in1 with BusWidth = None};{in2 with BusWidth = None}; sel] ; 
                                                                           OutputPorts = [{out1 with BusWidth = None}]}
                                     | [in1;in2;sel],[out1] -> let tmp = 
@@ -290,7 +292,7 @@ let autoCompleteWidths (sym : Symbol)  =
             |CommonTypes.Demux2      ->
                                      let completedSymbol =
                                        match (sym.InputPorts,sym.OutputPorts) with 
-                                       | [in1;sel],[out1;out2] when sym.NumberOfConnections = 0 -> 
+                                       | [in1;sel],[out1;out2] when sym.NumberOfConnections = 0 -> //For Ata : when zero connections refresh the symbol to original state.
                                                                 {sym with InputPorts = [{in1 with BusWidth = None};{sel with BusWidth = None}] ; 
                                                                           OutputPorts = [{out1 with BusWidth = None};{out2 with BusWidth = None}]}
                                        | [in1;sel],[out1;out2] -> let tmp = 
@@ -316,11 +318,6 @@ let autoCompleteWidths (sym : Symbol)  =
         newSym
                         
 
-/// Render a ruler to assist in assigning the symbols
-// fun (symbollist ) () go throughs the symbol list to find top left X = current topLeft = x 
-//let renderRuler (symList : Symbol list) (BBox : BoundingBox) 
-//    //
-
 //---------------------------------helper types and functions----------------//
 
 /// Returns the height and the width of a symbol according to its type in a tuple
@@ -344,7 +341,6 @@ let getHeightWidthOf (sType:CommonTypes.ComponentType) =
         let n = float (max spec.InputLabels.Length spec.OutputLabels.Length)
         n * 35., n * 35.
     | CommonTypes.ComponentType.Catalogue -> 0., 0.
-    // | _ -> failwithf "Shouldn't happen"
 
 
 /// This function won't work! Implement later
@@ -687,11 +683,10 @@ let update (msg : Msg) (model : Model): Model*Cmd<'a> =
             symModel
             |> List.map (fun sym ->  
                 if sym.Id = deleteWirePort.HostId then  
-                    if sym.NumberOfConnections = 1 then
-                        printf "GOD SEND"
-                        let newSymZ = addErrorToErrorList sym deleteWirePort
-                        autoCompleteWidths newSymZ
-                    else addErrorToErrorList sym deleteWirePort
+                    if sym.NumberOfConnections = 1 then  //For Ata : Check equality with one, because deletion of this error connection will now turn symbol back to normal.
+                        let newSym = removeErrorFromErrorList sym deleteWirePort
+                        autoCompleteWidths newSym       // For Ata : 
+                    else removeErrorFromErrorList sym deleteWirePort
                 else sym 
             )
         )
