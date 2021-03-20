@@ -1257,34 +1257,6 @@ let updateSymbolModelWithComponent (symModel: Model) (comp:CommonTypes.Component
     failwithf "Not Implemented"
 
 
-
-
-// change this to get parametersOfSym
-/// Returns the buswidth information of the symbol with the given id. 
-/// If the buswidth information not known at symbol creation, None is returned.
-/// For memory symbols, the first element is the address width, and the second element is the width of the data
-let getBusWidthOf (symModel: Model) (sId: CommonTypes.ComponentId) : Option<int list> =
-    let sym = 
-        match (getSymbolWithId symModel sId) with
-        | Some sym -> sym
-        | None -> failwithf "Symbol with given Id not found"
-    
-    match sym.Type with
-    | CommonTypes.ComponentType.Input w | CommonTypes.ComponentType.Output w 
-    | CommonTypes.ComponentType.NbitsAdder w 
-    | CommonTypes.ComponentType.Register w 
-    | CommonTypes.ComponentType.RegisterE w -> Some [w]
-
-    | CommonTypes.ComponentType.Constant (w, v) -> Some [w; v]
-    | CommonTypes.ComponentType.BusSelection (wIn, wOut) -> Some [wIn; wOut]
-    | CommonTypes.ComponentType.AsyncROM memo | CommonTypes.ComponentType.ROM memo | CommonTypes.ComponentType.RAM memo ->
-        Some [memo.AddressWidth; memo.WordWidth] 
-    | CommonTypes.ComponentType.Custom spec ->
-        (spec.InputLabels @ spec.OutputLabels)
-        |> List.map snd
-        |> Some
-    | _ -> None
-
 /// Return the output Buswire width (in bits) if this can be calculated based on known
 /// input wire widths, for the symbol wId. The types used here are possibly wrong, since
 /// this calculation is based on ports, and the skeleton code does not implement ports or
