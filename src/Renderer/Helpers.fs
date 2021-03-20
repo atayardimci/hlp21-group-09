@@ -81,7 +81,7 @@ type BusWidthDU =
     |EnforceStartPort
     |EnforceEndPort
 
-type SmallChangeDU = 
+type ChangeDU = 
     | Increment
     | Decrement
 

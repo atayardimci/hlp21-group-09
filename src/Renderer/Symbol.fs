@@ -64,6 +64,13 @@ type Msg =
 
     // | UpdateSymbolModelWithComponent of CommonTypes.Component 
 
+
+
+
+
+
+
+
 //--------------------------some interface functions------------------------//
 
 /// Returns true if pos is within the bounds of the bounding box of the given symbol; else returns false.
@@ -89,41 +96,20 @@ let boxesCollide (boxOne: BoundingBox) (boxTwo: BoundingBox) =
     let oneTL, oneBR, twoTL, twoBR = boxOne.TopLeft, boxOne.BottomRight, boxTwo.TopLeft, boxTwo.BottomRight
     not (oneBR.X < twoTL.X || oneBR.Y < twoTL.Y || oneTL.X > twoBR.X || oneTL.Y > twoBR.Y)
 
-/// Updates the number of connections of the Port and Symbol
-let changeNumConnections (port : Port) (sym : Symbol) (smallChangeDU : SmallChangeDU) : Symbol = 
-    let mutable numConnections = sym.NumberOfConnections
-    let newInputPorts =
-        sym.InputPorts
-        |>List.map (fun inPort -> if (inPort.Id = port.Id) then 
-                                     if(smallChangeDU = Increment) then 
-                                        numConnections <- numConnections + 1         
-                                        {inPort with NumberOfConnections = inPort.NumberOfConnections + 1 }
-                                        
-                                     else
-                                        numConnections <- numConnections - 1
-                                        {inPort with NumberOfConnections = inPort.NumberOfConnections - 1 } 
-                                  else inPort)
-    let newOutputPorts = 
-        sym.OutputPorts
-        |>List.map (fun outPort -> if (outPort.Id = port.Id) then 
-                                     if(smallChangeDU = Increment) then 
-                                        numConnections <- numConnections + 1
-                                        {outPort with NumberOfConnections = outPort.NumberOfConnections + 1 } 
-                                     else
-                                        numConnections <- numConnections - 1
-                                        {outPort with NumberOfConnections = outPort.NumberOfConnections - 1 } 
-                                   else outPort)
+/// Updates the number of connections of the given port and symbol according to the given ChangeDU and returns the updated symbol
+let changeNumOfConnections (portToChange: Port) (symToChange: Symbol) (change: ChangeDU) : Symbol = 
+    let operand = if change = Increment then 1 else -1
+    let newPort = {portToChange with NumberOfConnections = portToChange.NumberOfConnections + operand}
+        
+    let newInputPorts, newOutputPorts = 
+        symToChange.InputPorts  |> List.map (fun port -> if port.Id = portToChange.Id then newPort else port),
+        symToChange.OutputPorts |> List.map (fun port -> if port.Id = portToChange.Id then newPort else port)
 
-    {sym with InputPorts = newInputPorts ; OutputPorts = newOutputPorts; NumberOfConnections = numConnections}
-
-//let resetPortBusWidth (newPortList : Port list ) : Port list = 
-//    (newPortList)
-//    |>List.map (fun newPort -> {newPort with BusWidth = None})
-
-//let resetSymbolBusWidth (sym : Symbol) : Symbol = 
-//    {sym with InputPorts = resetPortBusWidth sym.InputPorts; OutputPorts = resetPortBusWidth sym.OutputPorts }
-
-
+    {symToChange with 
+        InputPorts = newInputPorts
+        OutputPorts = newOutputPorts
+        NumberOfConnections = symToChange.NumberOfConnections + operand
+    }
 
 /// Returns the overall BBox of a collection of symbols
 let getOverallBBox (symList: Symbol list) : BoundingBox = 
@@ -157,7 +143,7 @@ let getOverallBBox (symList: Symbol list) : BoundingBox =
 
 /// function is called when deletion of a connection happens
 let removeErrorFromErrorList (sym : Symbol) (deleteWirePort : Port) : Symbol = 
-    let newSym = changeNumConnections deleteWirePort sym Decrement   //For Ata :  changes NumOfConnections field of Port and Symbol
+    let newSym = changeNumOfConnections deleteWirePort sym Decrement   //For Ata :  changes NumOfConnections field of Port and Symbol
     let portNum = 
         match deleteWirePort.PortNumber with
         |Some portNum -> portNum
