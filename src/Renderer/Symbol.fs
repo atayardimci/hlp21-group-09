@@ -873,10 +873,6 @@ let createClock fontSize fX fY heigth =
         createInSymbolText fontSize "start" 0 {X=fX + 8.; Y=fY + heigth - 7.} "clk"
     ]
 
-let floatCompare (a) (b) : bool  =
-    let epsilon = 0.00001
-    (a - b) < epsilon
-
 let createRectangularSymbol (symName:string) (inputPortNames:string list) (outputPortNames:string list) (includeClk:bool) props = 
     let fX, fY = props.Symbol.Pos.X, props.Symbol.Pos.Y
     let w, h = props.Symbol.W, props.Symbol.H
@@ -889,13 +885,15 @@ let createRectangularSymbol (symName:string) (inputPortNames:string list) (outpu
     let portLabels =
         ((props.Symbol.InputPorts @ props.Symbol.OutputPorts), (inputPortNames @ outputPortNames))
         ||> List.map2 (fun port portName -> 
-            match port.Pos.X, port.Pos.Y with
-            | x, _ when floatCompare (x) (fX) -> createInSymbolText 10. "start" 0 {port.Pos with X = port.Pos.X + 8.} portName
-            | x, _ when floatCompare (x) (fX + w) -> createInSymbolText 10. "end" 0 {port.Pos with X = port.Pos.X - 8.} portName
-            | _, y when floatCompare (y) (fY) -> createInSymbolText 10. "middle" rotationOfTopAndBottomPorts {port.Pos with Y = port.Pos.Y + 10.} portName
-            | _, y when floatCompare (y) (fY + h) -> createInSymbolText 10. "middle" rotationOfTopAndBottomPorts {port.Pos with Y = port.Pos.Y - 10.} portName
-            | x, y ->  printf($"x : {x}, fX + w : {fX + w},  y: {y} :, fX : {fX }, fY : {fY},  fY + h : {fY + h}  ")
-                       failwithf "Port position is not at the edge of the symbol!"
+            match port.PortType, props.Symbol.InputOrientation, props.Symbol.OutputOrientation with
+            | CommonTypes.PortType.Input , Top   , _ 
+            | CommonTypes.PortType.Output, _     , Top    -> createInSymbolText 10. "middle" rotationOfTopAndBottomPorts {port.Pos with Y = port.Pos.Y + 10.} portName
+            | CommonTypes.PortType.Input , Left  , _      -> createInSymbolText 10. "start" 0 {port.Pos with X = port.Pos.X + 8.} portName
+            | CommonTypes.PortType.Input , Bottom, _ 
+            | CommonTypes.PortType.Output, _     , Bottom -> createInSymbolText 10. "middle" rotationOfTopAndBottomPorts {port.Pos with Y = port.Pos.Y - 10.} portName
+            | CommonTypes.PortType.Output, _     , Right  -> createInSymbolText 10. "end" 0 {port.Pos with X = port.Pos.X - 8.} portName
+            | _ -> failwithf "Port position is not at the edge of the symbol!"
+
     
         )
     g   [ ] 
@@ -1225,7 +1223,6 @@ let private renderCatalogue =
                     ]
                 ]
                 [   
-                    
                     drawRect 0. 0. 200. "100%" "white"
                     standardText 10 20 20 "Catalogue"
                     drawRect 0. 50. 200. 30. "white"
@@ -1259,11 +1256,7 @@ let private renderCatalogue =
                     standardText 82 330 15 "Nor"
                     drawRect 134. 320. 66. 30. "white"
                     standardText 146 330 15 "Xnor"
-                    
-
-                    
-                ]
-                   
+                ]          
     , "Catalogue"
     , equalsButFunctions
     )
@@ -1300,7 +1293,7 @@ let private renderSymbol (props : RenderSymbolProps) =
     | CommonTypes.ComponentType.RAM _ -> renderRectSymbol props
     | CommonTypes.ComponentType.Custom _ -> renderRectSymbol props
     | CommonTypes.ComponentType.Catalogue -> renderCatalogue props
-    // | _ -> failwithf "Shouldn't happen"
+
 
 /// View function for symbol layer of SVG
 let view (model : Model) (dispatch : Msg -> unit) = 
@@ -1342,7 +1335,6 @@ let getBoundingBoxOf (symModel: Model) (sId: CommonTypes.ComponentId) : Bounding
         match (getSymbolWithId symModel sId) with
         | Some sym -> sym
         | None -> failwithf "The symbol with given Id not found"
-    
     sym.BBox
     
 // Returns all ports of the symbol with the given Id
