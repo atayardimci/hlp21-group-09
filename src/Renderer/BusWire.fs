@@ -526,8 +526,8 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
     | AddWire (startPort , endPort,createDU) ->  
         let symModel = 
             model.Symbol
-            |>List.map (fun sym -> Symbol.changePortStateIsConnected startPort sym Increment)
-            |>List.map (fun sym -> Symbol.changePortStateIsConnected endPort sym Increment)
+            |>List.map (fun sym -> Symbol.changeNumConnections startPort sym Increment)
+            |>List.map (fun sym -> Symbol.changeNumConnections endPort sym Increment)
         let newWireSym  = addWire startPort endPort createDU symModel 
         {model with WX = (fst newWireSym) :: model.WX ; Symbol = (snd newWireSym)} , Cmd.none 
     
