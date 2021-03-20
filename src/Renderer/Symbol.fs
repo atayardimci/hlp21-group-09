@@ -126,7 +126,7 @@ let changePortStateIsConnected (port : Port) (sym : Symbol) (smallChangeDU : Sma
 
 
 /// Returns the overall BBox of a collection of symbols
-let getOverallBBox (symList : Symbol list) :   BoundingBox = 
+let getOverallBBox (symList: Symbol list) : BoundingBox = 
     let selectedSymList = getSelectedSymbols symList
     if (selectedSymList <> [] ) then
         let minX = 
@@ -156,7 +156,7 @@ let getOverallBBox (symList : Symbol list) :   BoundingBox =
     
 
 
-let addErrorToErrorList (newSymZ : Symbol) (deleteWirePort : Port) : Symbol = 
+let addErrorToErrorList (newSymZ: Symbol) (deleteWirePort: Port) : Symbol = 
     let newSym = changePortStateIsConnected deleteWirePort newSymZ Decrement
     let portNum = 
         match deleteWirePort.PortNumber with
@@ -670,7 +670,6 @@ let update (msg : Msg) (model : Model): Model*Cmd<'a> =
             symModel
             |> List.map (fun sym -> 
                 if sym.Id = errorPort.HostId then 
-                    printf ($" AddZ {sym.PortNumbersWithError}")
                     let portNum = 
                         match errorPort.PortNumber with
                         | Some portNum -> portNum
