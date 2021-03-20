@@ -20,7 +20,6 @@ type Port =
         IsDragging : bool
         NumberOfConnections : int
         BusWidth : int Option
-        
     }
 
 type Symbol =
@@ -39,7 +38,7 @@ type Symbol =
         LastDragPos : XYPos
         IsDragging : bool
         IsSelected : bool
-        HasError : int list
+        PortNumbersWithError : int list
         NumberOfConnections : int 
         
         H : float
@@ -65,7 +64,7 @@ type Msg =
 
     // | UpdateSymbolModelWithComponent of CommonTypes.Component 
 
-//---------------------------------some interface functions----------------//
+//--------------------------some interface functions------------------------//
 
 /// Returns true if pos is within the bounds of the bounding box of the given symbol; else returns false.
 let isSymClicked (pos : XYPos) (sym : Symbol) : bool =
@@ -75,12 +74,12 @@ let isSymClicked (pos : XYPos) (sym : Symbol) : bool =
         -> true
     | _ -> false
 
-
 /// Returns the Ids of the selected symbols
 let getSelectedSymbolIds (symModel: Model) : CommonTypes.ComponentId list = 
     ([], symModel)
     ||> List.fold (fun acc sym -> if sym.IsSelected then acc @ [sym.Id] else acc)
 
+/// Returns a list of the selected symbols
 let getSelectedSymbols (symModel : Model) : Symbol list = 
     ([], symModel)
     ||> List.fold (fun acc sym -> if sym.IsSelected then acc @ [sym] else acc)
@@ -90,8 +89,8 @@ let boxesCollide (boxOne: BoundingBox) (boxTwo: BoundingBox) =
     let oneTL, oneBR, twoTL, twoBR = boxOne.TopLeft, boxOne.BottomRight, boxTwo.TopLeft, boxTwo.BottomRight
     not (oneBR.X < twoTL.X || oneBR.Y < twoTL.Y || oneTL.X > twoBR.X || oneTL.Y > twoBR.Y)
 
-///Updates the number of connections of the Port and Symbol
-let changePortStateIsConnected (port : Port) (sym : Symbol)(smallChangeDU : SmallChangeDU) : Symbol = 
+/// Updates the number of connections of the Port and Symbol
+let changePortStateIsConnected (port : Port) (sym : Symbol) (smallChangeDU : SmallChangeDU) : Symbol = 
     let mutable numConnections = sym.NumberOfConnections
     let newInputPorts =
         sym.InputPorts
@@ -124,9 +123,10 @@ let changePortStateIsConnected (port : Port) (sym : Symbol)(smallChangeDU : Smal
 //let resetSymbolBusWidth (sym : Symbol) : Symbol = 
 //    {sym with InputPorts = resetPortBusWidth sym.InputPorts; OutputPorts = resetPortBusWidth sym.OutputPorts }
 
+
+
 /// Returns the overall BBox of a collection of symbols
 let getOverallBBox (symList : Symbol list) :   BoundingBox = 
-    
     let selectedSymList = getSelectedSymbols symList
     if (selectedSymList <> [] ) then
         let minX = 
@@ -163,7 +163,7 @@ let addErrorToErrorList (newSymZ : Symbol) (deleteWirePort : Port) : Symbol =
         |Some portNum -> portNum
         |None -> failwithf "No Port Num"
     let firstErrorIndex = 
-        newSym.HasError
+        newSym.PortNumbersWithError
         |>List.tryFindIndex ( fun elem  -> (elem = portNum))   
 
     let rec remove i l =   //deletion at specific index. Feels like imperative programming ~~
@@ -174,9 +174,9 @@ let addErrorToErrorList (newSymZ : Symbol) (deleteWirePort : Port) : Symbol =
                                             
     let filteredErrorList = 
         match firstErrorIndex with 
-        |Some errorindex -> remove errorindex newSym.HasError
-        |None -> newSym.HasError
-    {newSym with HasError = filteredErrorList}
+        |Some errorindex -> remove errorindex newSym.PortNumbersWithError
+        |None -> newSym.PortNumbersWithError
+    {newSym with PortNumbersWithError = filteredErrorList}
 
 
 /// Selects all symbols which have their bounding box collide with the given box and returns the updated model
@@ -545,7 +545,7 @@ let createNewSymbol (sType:CommonTypes.ComponentType) (name:string) (pos:XYPos) 
         LastDragPos = {X=0. ; Y=0.} 
         IsDragging = false
         IsSelected = if(createDU = Duplicate || createDU = DuplicateError) then true else false
-        HasError = []
+        PortNumbersWithError = []
         NumberOfConnections = 0
         
         H = h
@@ -563,7 +563,7 @@ let duplicateSymbol (symList : Symbol list) : XYPos*Symbol list =
         |>List.map (fun sym -> 
                             let newSym = createNewSymbol sym.Type sym.Label (posAdd sym.Pos posDisplacement) Duplicate
                             
-                            {newSym with HasError = sym.HasError}
+                            {newSym with PortNumbersWithError = sym.PortNumbersWithError}
                    )
     (posDisplacement,dupList)
                            
@@ -661,50 +661,42 @@ let update (msg : Msg) (model : Model): Model*Cmd<'a> =
         )
         , Cmd.none
 
-    | AddErrorToErrorList (errorPortList) -> 
-        let newModel = 
-            (model, errorPortList)
-            ||>List.fold (fun mdl errorPort ->
-                                    List.map (fun sym -> 
-
-                                    if (sym.Id = errorPort.HostId) 
-                                    then 
-                                        
-                                        printf ($" AddZ {sym.HasError}")
-                                        let portNum = 
-                                            match errorPort.PortNumber with
-                                            |Some portNum -> portNum
-                                            |None -> failwithf "No Port Num"
-                                        {sym with HasError = (portNum :: sym.HasError)} 
-                                                             
-                                        
-                                    else 
-                                        sym ) mdl )
-                                        
-
-        newModel,Cmd.none
-
-                                                     
-    | RemoveErrorFromErrorList (deleteWirePortList) -> //remove error portNumbers 
-        let newModel = 
-            (model, deleteWirePortList)
-            ||>List.fold (fun mdl deleteWirePort -> 
-                                        List.map (fun (sym : Symbol)->  
-                                                    if (sym.Id = deleteWirePort.HostId) then  
-                                                        if ( sym.NumberOfConnections = 1 ) then
-                                                            printf ("GOD SEND")
-                                                            
-                                                            let newSymZ = addErrorToErrorList sym deleteWirePort
-                                                            autoCompleteWidths newSymZ
-                                                        else 
-                                                            addErrorToErrorList sym deleteWirePort
-                                                    else
-                                                        sym )
-                                                    mdl 
-                                   )
-        newModel,Cmd.none             
     | SelectSymbolsWithinRegion box ->
         selectSymbolsInRegion model box, Cmd.none
+
+    | AddErrorToErrorList errorPortList -> 
+        (model, errorPortList)
+        ||> List.fold (fun symModel errorPort ->
+            symModel
+            |> List.map (fun sym -> 
+                if sym.Id = errorPort.HostId then 
+                    printf ($" AddZ {sym.PortNumbersWithError}")
+                    let portNum = 
+                        match errorPort.PortNumber with
+                        | Some portNum -> portNum
+                        | None -> failwithf "No Port Num"
+                    {sym with PortNumbersWithError = portNum::sym.PortNumbersWithError} 
+                else sym 
+            )  
+        )
+        , Cmd.none
+                  
+    | RemoveErrorFromErrorList (deleteWirePortList) -> //remove error portNumbers 
+        (model, deleteWirePortList)
+        ||> List.fold (fun symModel deleteWirePort -> 
+            symModel
+            |> List.map (fun sym ->  
+                if sym.Id = deleteWirePort.HostId then  
+                    if sym.NumberOfConnections = 1 then
+                        printf "GOD SEND"
+                        let newSymZ = addErrorToErrorList sym deleteWirePort
+                        autoCompleteWidths newSymZ
+                    else addErrorToErrorList sym deleteWirePort
+                else sym 
+            )
+        )
+        ,Cmd.none             
+    
 
     | EnforceBusWidth (busWidth,port,DU) ->  
         let newModel = 
@@ -744,7 +736,7 @@ type RenderSymbolProps =
 
 let symbolShapeStyle (props : RenderSymbolProps) =
     let color =
-        match props.Symbol.IsSelected, props.Symbol.IsDragging, props.Symbol.HasError with
+        match props.Symbol.IsSelected, props.Symbol.IsDragging, props.Symbol.PortNumbersWithError with
         | true, _, _ 
         | _, true, _ -> dragColor
         | _, _, list when list <> []-> errorColor
@@ -1399,9 +1391,8 @@ let createSymbolFromComponent (comp:CommonTypes.Component) (pos:XYPos) : Symbol 
         LastDragPos = {X=0. ; Y=0.} // initial value can always be this
         IsDragging = false // initial value can always be this
         IsSelected = false
-        HasError = []
+        PortNumbersWithError = []
         NumberOfConnections = 0
-
 
         H = h
         W = w
