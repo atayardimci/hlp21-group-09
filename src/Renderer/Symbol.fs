@@ -140,18 +140,12 @@ let changeNumOfConnections (portToChange: Port) (symToChange: Symbol) (change: C
     let newPort = {portToChange with NumberOfConnections = portToChange.NumberOfConnections + operand}
     {updateSymWithPort symToChange newPort with NumberOfConnections = symToChange.NumberOfConnections + operand}
 
+/// Returns true if any of the ports of a symbol has an error, else false
+let checkSymbolForError (sym:Symbol) : bool = 
+    (false, sym.InputPorts @ sym.OutputPorts)
+    ||> List.fold (fun hasError port -> if port.NumOfErrors <> 0 then true else hasError)
 
-/// function is called when deletion of a connection happens
-let removeErrorConnection (sym: Symbol) (port: Port) : Symbol = 
-    let newSym = changeNumOfConnections {port with NumOfErrors = port.NumOfErrors - 1} sym Decrement
-    
-    let newSymHasError = 
-        (false, newSym.InputPorts @ newSym.OutputPorts)
-        ||> List.fold (fun hasError port -> if port.NumOfErrors <> 0 then true else hasError)
-    
-    {newSym with HasError = newSymHasError}        
-
-
+/// Removes a connection which can have an error or not and returns the model with the updated symbols
 let removeConnection (model:Model) (portOne:Port, portTwo:Port, connectionHasError:bool) : Model = 
     (model, [portOne; portTwo])
     ||> List.fold (fun symModel port -> 
@@ -159,7 +153,9 @@ let removeConnection (model:Model) (portOne:Port, portTwo:Port, connectionHasErr
         |> List.map (fun sym ->  
             if sym.Id = port.HostId then
                 if connectionHasError then
-                    removeErrorConnection sym port
+                    let newSym = changeNumOfConnections {port with NumOfErrors = port.NumOfErrors - 1} sym Decrement
+                    let newSymHasError = checkSymbolForError newSym
+                    {newSym with HasError = newSymHasError}
                 else
                     changeNumOfConnections port sym Decrement
             else
