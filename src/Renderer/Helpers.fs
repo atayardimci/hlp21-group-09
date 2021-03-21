@@ -70,9 +70,9 @@ type CreateDU =
     | DuplicateError
     | Error
 
-type BusWidthDU = 
-    | EnforceStartPort
-    | EnforceEndPort
+// type BusWidthDU = 
+//     | EnforceStartPort
+//     | EnforceEndPort
 
 type ChangeDU = 
     | Increment

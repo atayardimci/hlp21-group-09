@@ -390,47 +390,26 @@ let addWire (startPort : Symbol.Port) (endPort : Symbol.Port) (createDU : Create
         | Duplicate -> Duplicate, DuplicateError
         | _ -> failwithf "Sheet should only be sending Init or Duplicate to BusWire!"
    
-    match (startPort.BusWidth, endPort.BusWidth ) with 
-    | Some startWidth, Some endWidth  when (startWidth = endWidth) && startPort.PortType = CommonTypes.Input ->  //Buswidth match but inputPort has many drivers
-                                        if (startPort.NumberOfConnections = 0) then 
-                                            let wire = createWire startPort endPort createInit
-                                            (Some wire,symModel) 
-                                        else
-                                            printf ("createError : InputPort can only have One Driver. If you want to merge two wires you a MergeWire Component")
-                                            (None ,symModel)
-                                        
-    | Some startWidth, Some endWidth  when startWidth = endWidth && endPort.PortType = CommonTypes.Input ->     //Buswidth match but inputPort has many drivers                                        
-                                        if (endPort.NumberOfConnections = 0) then 
-                                            let wire = createWire startPort endPort createInit
-                                                                             
-                                            (Some wire,symModel) 
-                                        else
-                                            printf ("createError : InputPort can only have One Driver.")
-                                            (None ,symModel)
-
-    | Some startWidth, Some endWidth  when startWidth = endWidth ->                                              //Buswidth match but inputPort has many drivers
-                                            let wire = createWire startPort endPort createInit
-                                           
-                                            (Some wire,symModel)
-    | Some startWidth, Some endWidth  when startWidth <> endWidth ->  //Buswidth dont match 
-                                        let wire = createWire startPort endPort createError
-                                        let sym,symMsg = Symbol.update (Symbol.Msg.AddErrorToPorts
-                                                            (startPort,endPort)
-                                                            )symModel
-
-                                        (Some wire,sym)
-    | Some startWidth, None  -> let wire = createWire startPort endPort createInit                               //change BusWidth None to BusWidth of newly connected port
-                                let sym,symMsg  = Symbol.update (Symbol.Msg.EnforceBusWidth 
-                                                    (startWidth,endPort,EnforceEndPort)
-                                                    )symModel
-
-
-                                (Some wire,sym)
-    | None , Some endWidth  -> let wire = createWire startPort endPort createInit                                //change BusWidth None to BusWidth of newly connected port
-                               let sym,symMsg  = Symbol.update (Symbol.Msg.EnforceBusWidth 
-                                                    (endWidth,startPort,EnforceStartPort)
-                                                    )symModel
-                               (Some wire,sym)
+    match startPort, startPort.BusWidth, endPort, endPort.BusWidth with 
+    | _, Some startWidth, _,  Some endWidth ->
+        let inputPort = if startPort.PortType = CommonTypes.Input then startPort else endPort
+        match startWidth = endWidth, inputPort.NumberOfConnections = 0 with
+        | true, true -> 
+            let wire = createWire startPort endPort createInit
+            Some wire, symModel
+        | _, false -> 
+            printf ("createError : InputPort can only have One Driver. If you want to merge two wires you a MergeWire Component")
+            None, symModel
+        | false, _ -> 
+            let wire = createWire startPort endPort createError
+            let newSymModel, symMsg = Symbol.update (Symbol.Msg.AddErrorToPorts (startPort,endPort)) symModel
+            Some wire, newSymModel
+       
+    | _, Some width, undefinedPort, None | undefinedPort, None, _, Some width ->
+        let wire = createWire startPort endPort createInit  
+        let sym, symMsg = 
+            Symbol.update (Symbol.Msg.EnforceBusWidth (width, undefinedPort)) symModel
+        Some wire, sym
 
     | _ -> failwithf " BusWidths of sourcePort and targetPort are not specified !!!!"
 

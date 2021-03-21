@@ -60,7 +60,7 @@ type Msg =
     | UpdateOutputOrientation of outputOrientation: PortOrientation 
     | AddErrorToPorts of (Port * Port)
     | RemoveConnections of (Port * Port * bool) list
-    | EnforceBusWidth of int*Port*BusWidthDU
+    | EnforceBusWidth of int * Port
     | SelectSymbolsWithinRegion of box: BoundingBox
 
     // | UpdateSymbolModelWithComponent of CommonTypes.Component 
@@ -175,28 +175,28 @@ let selectSymbolsInRegion (symModel: Model) (box: BoundingBox) : Model =
 
 
 
-let enforceBusWidth (busWidth : int )(port : Port) (sym : Symbol ) (bwDU : BusWidthDU) =
-    match bwDU with 
-    |EnforceEndPort -> let newInputPortList = 
-                            (sym.InputPorts,[port])||> List.fold (fun inputPortList port -> 
-                                                                List.map(fun (inputPort:Port) -> 
-                                                                    if (inputPort.Id = port.Id) then
-                                                                     {inputPort with BusWidth = Some busWidth}
-                                                                    else 
-                                                                     inputPort
-                                                                    )inputPortList
-                                                              )
-                       {sym with InputPorts =newInputPortList }
-    |EnforceStartPort -> let newOutputPortList =
-                            (sym.OutputPorts,[port])||> List.fold (fun outputPortList port -> 
-                                                                List.map(fun (outputPort:Port) -> 
-                                                                    if (outputPort.Id = port.Id) then      
-                                                                        {outputPort with BusWidth = Some busWidth}
-                                                                    else 
-                                                                    outputPort
-                                                                    ) outputPortList
-                                                              )
-                         {sym with OutputPorts = newOutputPortList }
+// let enforceBusWidth (busWidth : int ) (port : Port) (sym : Symbol ) (bwDU : BusWidthDU) =
+//     match bwDU with 
+//     |EnforceEndPort -> let newInputPortList = 
+//                             (sym.InputPorts,[port])||> List.fold (fun inputPortList port -> 
+//                                                                 List.map(fun (inputPort:Port) -> 
+//                                                                     if (inputPort.Id = port.Id) then
+//                                                                      {inputPort with BusWidth = Some busWidth}
+//                                                                     else 
+//                                                                      inputPort
+//                                                                     )inputPortList
+//                                                               )
+//                        {sym with InputPorts =newInputPortList }
+//     |EnforceStartPort -> let newOutputPortList =
+//                             (sym.OutputPorts,[port])||> List.fold (fun outputPortList port -> 
+//                                                                 List.map(fun (outputPort:Port) -> 
+//                                                                     if (outputPort.Id = port.Id) then      
+//                                                                         {outputPort with BusWidth = Some busWidth}
+//                                                                     else 
+//                                                                     outputPort
+//                                                                     ) outputPortList
+//                                                               )
+//                          {sym with OutputPorts = newOutputPortList }
 
 
 ///Auto Completed Widths of 5 special components
@@ -671,27 +671,18 @@ let update (msg : Msg) (model : Model): Model*Cmd<'a> =
         ||> List.fold (fun symModel connection ->
             removeConnection symModel connection
         )
-        ,Cmd.none
+        , Cmd.none
     
-    | EnforceBusWidth (busWidth,port,DU) ->  
-        let newModel = 
-            (model,[port])
-            ||> List.fold (fun mdl port ->
-                List.map (fun sym ->            
-                    if (sym.Id = port.HostId)
-                    then                                                
-                        let newSym: Symbol =
-                            match DU with
-                            |EnforceStartPort -> enforceBusWidth busWidth port sym EnforceStartPort
-                            |EnforceEndPort -> enforceBusWidth busWidth port sym EnforceEndPort
-                        newSym
-                        |>autoCompleteWidths
-
-                    else 
-                        sym
-                    ) mdl
-            )
-        newModel,Cmd.none
+    | EnforceBusWidth (busWidth, undefinedPort) ->  
+        model
+        |> List.map (fun sym -> 
+            if sym.Id = undefinedPort.HostId then
+                let newPort = {undefinedPort with BusWidth = Some busWidth}
+                updateSymWithPort sym newPort
+                |> autoCompleteWidths
+            else sym
+        )
+        , Cmd.none
 
     | MouseMsg _ -> model, Cmd.none // allow unused mouse messags
 
