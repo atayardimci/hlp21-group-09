@@ -469,6 +469,32 @@ let private renderGrid =
                    SVGAttr.Fill "url(#smallGrid)"
                ] []
             ]
+let renderPortOfWireSelected (w:BusWire.Wire)  =
+    let src = w.SourcePort.Pos
+    let tgt = w.TargetPort.Pos
+    let radius = 6.0 
+    g  [] 
+        [
+        circle
+            [ 
+                Cx src.X ;Cy src.Y
+                R radius;
+                SVGAttr.Fill "skyblue"
+                SVGAttr.Stroke "black"
+                SVGAttr.StrokeWidth 1
+                SVGAttr.FillOpacity 1
+            ] [ ]
+        circle
+            [
+                Cx tgt.X ;Cy tgt.Y
+                R radius;
+                SVGAttr.Fill "skyblue"
+                SVGAttr.Stroke "black"
+                SVGAttr.StrokeWidth 1
+                SVGAttr.FillOpacity 1
+            ]   []
+        ]
+
 
 let mutable getScrollPos : (unit ->(float*float) option) = (fun () -> None) 
 
@@ -489,7 +515,8 @@ let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispat
     let renderHoveringPortsByDistance = g [] (List.map renderPortsHovering  model.HoveringPortsToBeRendered)
     let renderDraggingPortsByDistance = (g [](List.map renderPortsDragging  model.DraggingPortsToBeRendered))
                                         |> renderOnePort model.OnePortToBeRendered
-
+    let renderPortsOfWireSelection = g[] ((List.map renderPortOfWireSelected) (BusWire.getSelectedWireList model.Wire.WX))
+    
     div [ Style 
             [ 
                 Height "100vh" 
@@ -513,30 +540,28 @@ let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispat
           
         ] 
         [ 
-            svg
-                [ Style 
-                    [
-                        Border "2px solid grey"
-                        Height (model.Canvas.height) 
-                        Width (model.Canvas.width )          
-                    ]
+        svg
+            [ Style 
+                [
+                    Border "2px solid grey"
+                    Height (model.Canvas.height) 
+                    Width (model.Canvas.width )          
                 ]
+            ]
 
-                [ g 
-                    [ Style [Transform  (sprintf "scale(%f)" model.Canvas.zoom)]] 
-                    [   
-                        renderGrid //background
-                        renderAlignmentLines model.AlignmentLinesToBeRendered
-                        svgReact   
-                        renderDraggingPortsByDistance
-                        renderHoveringPortsByDistance
-                        renderHighlightRegion model.RegionToBeRendered
-                        //renderBBox model.OverallBBoxToBeRendered
+            [ g 
+                [ Style [Transform  (sprintf "scale(%f)" model.Canvas.zoom)]] 
+                [   
+                    renderGrid //background
+                    renderAlignmentLines model.AlignmentLinesToBeRendered
+                    svgReact   
+                    renderDraggingPortsByDistance
+                    renderHoveringPortsByDistance
+                    renderPortsOfWireSelection
+                    renderHighlightRegion model.RegionToBeRendered
                         
-                    ] 
-                 
-                ]
-             
+                ]   
+            ]    
         ] 
 
 
@@ -584,6 +609,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             |> List.append (snd dupSymbol)
         let displacementPos = fst dupSymbol
         let overallBBox =  Symbol.getOverallBBox newSymModel
+        let tmpWire =  {model.Wire with Symbol = newSymModel}
 
         //Sym duplicated model
         let tmpModel =  
@@ -594,12 +620,16 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         // Duplicate Wire
         let selectedWireList =
             BusWire.getSelectedWireList tmpModel.Wire.WX
+        let tmpWX = BusWire.deselectWire tmpModel.Wire.WX
         let portList = Symbol.getAllPorts (tmpModel.Wire.Symbol)
         let dupWireList = BusWire.getWiresToBeDuplicated displacementPos selectedWireList portList
-        
+        let tmpModel2 =  
+            { tmpModel with 
+                Wire = {tmpModel.Wire with WX = tmpWX}
+            }
         //Wire duplicated model
         let newModel = 
-            (tmpModel,dupWireList)
+            (tmpModel2,dupWireList)
             ||> List.fold (fun m tuple -> 
                     match tuple  with
                     | (Some sourcePort , Some targetPort, _) -> 
@@ -611,7 +641,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                 )
         {newModel with 
             UndoStates = storeUndoState model
-        },Cmd.batch[Cmd.ofMsg(UpdatePorts);Cmd.ofMsg (DeselectWire)] 
+        },Cmd.batch[Cmd.ofMsg(UpdatePorts)] 
 
     | RenderPorts (floatPortListTuple,isHovering) -> 
         match model.SymIdList with
@@ -698,7 +728,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             BusWire.update (BusWire.Msg.RemoveDrawnLine) model.Wire
         {model with
             Wire = newBusModel
-            OnePortToBeRendered = {X = 0.0; Y = 0.0},None;
+            OnePortToBeRendered = nullPos,None;
             DraggingPortsToBeRendered = [];
         }, Cmd.none
 
@@ -710,7 +740,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             Wire = newBusModel
             IsWireSelected = true
             SelectedWire = Some connectionId
-            UndoStates = storeUndoState model
+            UndoStates = storeUndoState {model with OnePortToBeRendered = nullPos,None;}
         }
         , Cmd.map Wire newCmd
 
@@ -732,7 +762,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             BusWire.update (BusWire.Msg.AddWire (startPort,endPort,createDU)) model.Wire
         let removedLineModel = {model with 
                                  Wire = {model.Wire with
-                                              PortToCursor = ({X = 0.0; Y = 0.0}, {X = 0.0; Y=0.0}, None)}
+                                              PortToCursor = (nullPos, nullPos, None)}
                                }
         {model with
             Wire = newBusModel

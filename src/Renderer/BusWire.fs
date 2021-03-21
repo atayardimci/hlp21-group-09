@@ -271,9 +271,7 @@ let autosingleWireView (wModel: Model)=
         let msb = props.WireP.BusWidth - 1
         let displayWireSegment (start: XYPos) (final: XYPos) =
             let color =
-                    if props.WireP.isSelected then
-                        "green"
-                    else if props.WireP.hasError  then
+                    if props.WireP.hasError  then
                         "red"
                     else 
                         "black"
@@ -609,6 +607,13 @@ let wireToSelectOpt (wModel: Model) (pos: XYPos) : CommonTypes.ConnectionId opti
 
 let getSelectedWireList (wireList : Wire list) : Wire list = 
     List.filter (fun w -> w.isSelected) wireList
+
+let deselectWire (WX : Wire list)  =
+    let newWX =
+        WX |> List.map (fun w ->
+                           {w with isSelected = false}
+                        ) 
+    newWX
 
 //----------------------interface to Issie-----------------------//
 let extractWire (wModel: Model) (sId:CommonTypes.ComponentId) : CommonTypes.Component= 
