@@ -418,8 +418,8 @@ let addWire (startPort : Symbol.Port) (endPort : Symbol.Port) (createDU : Create
                                             (wire,symModel)
     | Some startWidth, Some endWidth  when startWidth <> endWidth ->  //Buswidth dont match 
                                         let wire = createWire startPort endPort createError
-                                        let sym,symMsg = Symbol.update (Symbol.Msg.AddErrorToErrorList
-                                                            [startPort;endPort]
+                                        let sym,symMsg = Symbol.update (Symbol.Msg.AddErrorToPorts
+                                                            (startPort,endPort)
                                                             )symModel
 
                                         (wire,sym)
@@ -526,8 +526,8 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
     | AddWire (startPort , endPort,createDU) ->  
         let symModel = 
             model.Symbol
-            |>List.map (fun sym -> Symbol.changeNumConnections startPort sym Increment)
-            |>List.map (fun sym -> Symbol.changeNumConnections endPort sym Increment)
+            |>List.map (fun sym -> Symbol.changeNumOfConnections startPort sym Increment)
+            |>List.map (fun sym -> Symbol.changeNumOfConnections endPort sym Increment)
         let newWireSym  = addWire startPort endPort createDU symModel 
         {model with WX = (fst newWireSym) :: model.WX ; Symbol = (snd newWireSym)} , Cmd.none 
     
@@ -570,7 +570,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
 
         let allToBeDeletedPorts= //for all the wires that are gonna be deleted check if it has createError 
             wireToBeDeletedFirst
-            |> List.collect (fun w -> [w.SourcePort;w.TargetPort])
+            |> List.collect (fun w -> [(w.SourcePort, w.TargetPort, w.hasError)])
             |> Set.ofList
             |> Set.toList
         let wireToBeRendered =
@@ -579,7 +579,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             |>Set.toList
 
         let newSymModel,ignoreMsg = 
-            Symbol.update (Symbol.Msg.RemoveErrorFromErrorList allToBeDeletedPorts) model.Symbol
+            Symbol.update (Symbol.Msg.RemoveConnections allToBeDeletedPorts) model.Symbol
 
         {model with WX = wireToBeRendered; Symbol = newSymModel} , Cmd.none
 

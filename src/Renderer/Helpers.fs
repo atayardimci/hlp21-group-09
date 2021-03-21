@@ -78,8 +78,8 @@ type CreateDU =
     | Error
 
 type BusWidthDU = 
-    |EnforceStartPort
-    |EnforceEndPort
+    | EnforceStartPort
+    | EnforceEndPort
 
 type ChangeDU = 
     | Increment
