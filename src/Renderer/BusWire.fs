@@ -394,45 +394,43 @@ let addWire (startPort : Symbol.Port) (endPort : Symbol.Port) (createDU : Create
     | Some startWidth, Some endWidth  when (startWidth = endWidth) && startPort.PortType = CommonTypes.Input ->  //Buswidth match but inputPort has many drivers
                                         if (startPort.NumberOfConnections = 0) then 
                                             let wire = createWire startPort endPort createInit
-                                            (wire,symModel) 
+                                            (Some wire,symModel) 
                                         else
-                                            let wire = createWire startPort endPort createError
                                             printf ("createError : InputPort can only have One Driver. If you want to merge two wires you a MergeWire Component")
-                                            (wire,symModel)
+                                            (None ,symModel)
                                         
     | Some startWidth, Some endWidth  when startWidth = endWidth && endPort.PortType = CommonTypes.Input ->     //Buswidth match but inputPort has many drivers                                        
                                         if (endPort.NumberOfConnections = 0) then 
                                             let wire = createWire startPort endPort createInit
                                                                              
-                                            (wire,symModel) 
+                                            (Some wire,symModel) 
                                         else
-                                            let wire = createWire startPort endPort createError
                                             printf ("createError : InputPort can only have One Driver.")
-                                            (wire,symModel)
+                                            (None ,symModel)
 
     | Some startWidth, Some endWidth  when startWidth = endWidth ->                                              //Buswidth match but inputPort has many drivers
                                             let wire = createWire startPort endPort createInit
                                            
-                                            (wire,symModel)
+                                            (Some wire,symModel)
     | Some startWidth, Some endWidth  when startWidth <> endWidth ->  //Buswidth dont match 
                                         let wire = createWire startPort endPort createError
                                         let sym,symMsg = Symbol.update (Symbol.Msg.AddErrorToPorts
                                                             (startPort,endPort)
                                                             )symModel
 
-                                        (wire,sym)
+                                        (Some wire,sym)
     | Some startWidth, None  -> let wire = createWire startPort endPort createInit                               //change BusWidth None to BusWidth of newly connected port
                                 let sym,symMsg  = Symbol.update (Symbol.Msg.EnforceBusWidth 
                                                     (startWidth,endPort,EnforceEndPort)
                                                     )symModel
 
 
-                                (wire,sym)
+                                (Some wire,sym)
     | None , Some endWidth  -> let wire = createWire startPort endPort createInit                                //change BusWidth None to BusWidth of newly connected port
                                let sym,symMsg  = Symbol.update (Symbol.Msg.EnforceBusWidth 
                                                     (endWidth,startPort,EnforceStartPort)
                                                     )symModel
-                               (wire,sym)
+                               (Some wire,sym)
 
     | _ -> failwithf " BusWidths of sourcePort and targetPort are not specified !!!!"
 
@@ -522,12 +520,16 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         let updateNetList nLs = List.map newW nLs
         {model with WX = updateNetList model.WX} , Cmd.none
     | AddWire (startPort , endPort,createDU) ->  
-        let symModel = 
-            model.Symbol
-            |>List.map (fun sym -> Symbol.changeNumOfConnections startPort sym Increment)
-            |>List.map (fun sym -> Symbol.changeNumOfConnections endPort sym Increment)
-        let newWireSym  = addWire startPort endPort createDU symModel 
-        {model with WX = (fst newWireSym) :: model.WX ; Symbol = (snd newWireSym)} , Cmd.none 
+        let newWireSym  = addWire startPort endPort createDU model.Symbol
+
+        match newWireSym with 
+        | Some newWire, sym -> let newSym  =
+                                    sym
+                                    |>List.map (fun sym -> Symbol.changeNumOfConnections startPort sym Increment)
+                                    |>List.map (fun sym -> Symbol.changeNumOfConnections endPort sym Increment)
+                               {model with WX = newWire :: model.WX ; Symbol = newSym} , Cmd.none
+        | None , sym -> model,Cmd.none
+        
     
     | DeselectWire  ->
         let newWls =
