@@ -571,34 +571,34 @@ let init () =
         OutputLabels = ["Err", 4; "Out", 8; "W", 1]
     }
     [
-        createNewSymbol (CommonTypes.ComponentType.Input 2)                 "I1"     {X = float (1*64+30); Y=float (1*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.Output 4)                "O1"     {X = float (2*64+30); Y=float (1*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.IOLabel)                 "IO1"    {X = float (3*64+30); Y=float (1*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.Constant (4, 15))        "C1"     {X = float (4*64+30); Y=float (1*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.BusSelection (4, 2))     "B1"     {X = float (5*64+30); Y=float (1*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.BusCompare (4, 10))      "EQ1"    {X = float (6*64+30); Y=float (1*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.Not)                     "G1"     {X = float (1*64+30); Y=float (2*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.And)                     "G2"     {X = float (2*64+30); Y=float (2*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.Or)                      "G3"     {X = float (3*64+30); Y=float (2*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.Xor)                     "G4"     {X = float (4*64+30); Y=float (2*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.Nand)                    "G5"     {X = float (5*64+30); Y=float (2*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.Nor)                     "G6"     {X = float (6*64+30); Y=float (2*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.Xnor)                    "G7"     {X = float (7*64+30); Y=float (2*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.Decode4)                 "DECO4"  {X = float (1*64+30); Y=float (3*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.Mux2)                    "MUX2"   {X = float (3*64+30); Y=float (3*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.Demux2)                  "DEMUX2" {X = float (4*64+30); Y=float (3*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.NbitsAdder 4)            "A1"     {X = float (5*64+30); Y=float (3*64+30)} Init 
-        createNewSymbol (CommonTypes.ComponentType.NbitsXor   7)            "XOR1"   {X = float (7*64+30); Y=float (3*64+30)} Init 
-        createNewSymbol (CommonTypes.ComponentType.MergeWires)              "MERGE"  {X = float (1*64+30); Y=float (6*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.SplitWire 3)             "SPLIT"  {X = float (2*64+30); Y=float (6*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.DFF)                     "FF1"    {X = float (3*64+30); Y=float (6*64+30)} Init 
-        createNewSymbol (CommonTypes.ComponentType.DFFE)                    "FFE1"   {X = float (5*64+30); Y=float (6*64+30)} Init 
-        createNewSymbol (CommonTypes.ComponentType.Register 5)              "REG1"   {X = float (1*64+30); Y=float (8*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.RegisterE 3)             "REG2"   {X = float (3*64+30); Y=float (8*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.AsyncROM fakeMemo)       "AROM1"  {X = float (1*64+30); Y=float (10*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.ROM fakeMemo)            "ROM1"   {X = float (3*64+30); Y=float (10*64+30)} Init 
-        createNewSymbol (CommonTypes.ComponentType.RAM fakeMemo)            "RAM1"   {X = float (5*64+30); Y=float (10*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.Custom fakeCustomParams) "CUST1"  {X = float (8*64+30); Y=float (10*64+30)} Init
+        createNewSymbol (CommonTypes.ComponentType.Input 2)                 "I1"     {X = float (3*64+30); Y=float (1*64+30)} Init
+        createNewSymbol (CommonTypes.ComponentType.Output 4)                "O1"     {X = float (4*64+30); Y=float (1*64+30)} Init
+        createNewSymbol (CommonTypes.ComponentType.IOLabel)                 "IO1"    {X = float (5*64+30); Y=float (1*64+30)} Init
+        createNewSymbol (CommonTypes.ComponentType.Constant (4, 15))        "C1"     {X = float (6*64+30); Y=float (1*64+30)} Init
+        createNewSymbol (CommonTypes.ComponentType.BusSelection (4, 2))     "B1"     {X = float (7*64+30); Y=float (1*64+30)} Init
+        createNewSymbol (CommonTypes.ComponentType.BusCompare (4, 10))      "EQ1"    {X = float (8*64+30); Y=float (1*64+30)} Init
+        createNewSymbol (CommonTypes.ComponentType.Not)                     "G1"     {X = float (3*64+30); Y=float (2*64+30)} Init
+        createNewSymbol (CommonTypes.ComponentType.And)                     "G2"     {X = float (4*64+30); Y=float (2*64+30)} Init
+        createNewSymbol (CommonTypes.ComponentType.Or)                      "G3"     {X = float (5*64+30); Y=float (2*64+30)} Init
+        createNewSymbol (CommonTypes.ComponentType.Xor)                     "G4"     {X = float (6*64+30); Y=float (2*64+30)} Init
+        createNewSymbol (CommonTypes.ComponentType.Nand)                    "G5"     {X = float (7*64+30); Y=float (2*64+30)} Init
+        createNewSymbol (CommonTypes.ComponentType.Nor)                     "G6"     {X = float (8*64+30); Y=float (2*64+30)} Init
+        createNewSymbol (CommonTypes.ComponentType.Xnor)                    "G7"     {X = float (9*64+30); Y=float (2*64+30)} Init
+        createNewSymbol (CommonTypes.ComponentType.Decode4)                 "DECO4"  {X = float (3*64+30); Y=float (3*64+30)} Init
+        createNewSymbol (CommonTypes.ComponentType.Mux2)                    "MUX2"   {X = float (5*64+30); Y=float (3*64+30)} Init
+        createNewSymbol (CommonTypes.ComponentType.Demux2)                  "DEMUX2" {X = float (6*64+30); Y=float (3*64+30)} Init
+        createNewSymbol (CommonTypes.ComponentType.NbitsAdder 4)            "A1"     {X = float (7*64+30); Y=float (3*64+30)} Init 
+        createNewSymbol (CommonTypes.ComponentType.NbitsXor   7)            "XOR1"   {X = float (9*64+30); Y=float (3*64+30)} Init 
+        createNewSymbol (CommonTypes.ComponentType.MergeWires)              "MERGE"  {X = float (3*64+30); Y=float (6*64+30)} Init
+        createNewSymbol (CommonTypes.ComponentType.SplitWire 3)             "SPLIT"  {X = float (4*64+30); Y=float (6*64+30)} Init
+        createNewSymbol (CommonTypes.ComponentType.DFF)                     "FF1"    {X = float (5*64+30); Y=float (6*64+30)} Init 
+        createNewSymbol (CommonTypes.ComponentType.DFFE)                    "FFE1"   {X = float (7*64+30); Y=float (6*64+30)} Init 
+        createNewSymbol (CommonTypes.ComponentType.Register 5)              "REG1"   {X = float (3*64+30); Y=float (8*64+30)} Init
+        createNewSymbol (CommonTypes.ComponentType.RegisterE 3)             "REG2"   {X = float (5*64+30); Y=float (8*64+30)} Init
+        createNewSymbol (CommonTypes.ComponentType.AsyncROM fakeMemo)       "AROM1"  {X = float (3*64+30); Y=float (10*64+30)} Init
+        createNewSymbol (CommonTypes.ComponentType.ROM fakeMemo)            "ROM1"   {X = float (5*64+30); Y=float (10*64+30)} Init 
+        createNewSymbol (CommonTypes.ComponentType.RAM fakeMemo)            "RAM1"   {X = float (7*64+30); Y=float (10*64+30)} Init
+        createNewSymbol (CommonTypes.ComponentType.Custom fakeCustomParams) "CUST1"  {X = float (10*64+30); Y=float (10*64+30)} Init
         createNewSymbol (CommonTypes.ComponentType.Catalogue)               "Catalogue"  {X = 0.; Y= 0.} Init
     ]
     , Cmd.none
@@ -663,8 +663,8 @@ let update (msg : Msg) (model : Model): Model*Cmd<'a> =
             symModel
             |> List.map (fun sym -> 
                 if sym.Id = port.HostId then 
-                    let newPort = {port with NumOfErrors = port.NumOfErrors + 1}
-                    {updateSymWithPort sym newPort with HasError = true}
+                    let newSym = changeNumOfConnections {port with NumOfErrors = port.NumOfErrors + 1} sym Increment
+                    {newSym with HasError = true}
                 else sym 
             )  
         )
