@@ -759,7 +759,7 @@ let getSymbolWithId (symModel: Model) (sId: CommonTypes.ComponentId) : Symbol op
 
 
 // Returns all Ports of all symbols in the model
-let getAllPorts (symModel: Model) : Port List =
+let getAllPorts (symModel: Model) : Port list =
     symModel
     |> List.collect (fun sym -> sym.InputPorts @ sym.OutputPorts)
 
