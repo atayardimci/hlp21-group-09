@@ -59,13 +59,6 @@ type PortOrientation =
     | Left
     | Right
 
-//type SymAlignment = 
-//    | Top
-//    | Bottom
-//    | Left
-//    | Right
-  
-
 type PortDU =
     | In
     | Out

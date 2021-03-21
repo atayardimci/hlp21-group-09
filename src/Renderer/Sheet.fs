@@ -11,8 +11,6 @@ type Model = {
     Wire: BusWire.Model
     Canvas: CanvasProps
     SymIdList : CommonTypes.ComponentId list
-
-    Ports : Symbol.Port list
     HoveringPortsToBeRendered : (float* Symbol.Port list) list
     DraggingPortsToBeRendered : (float* Symbol.Port list) list
     OnePortToBeRendered : XYPos * Symbol.Port option
@@ -28,6 +26,8 @@ type Model = {
     OverallBBoxToBeRendered : Helpers.BoundingBox
     AlignmentLinesToBeRendered : Line list 
     StartDrawingPosition : XYPos option
+    UndoStates :Model list
+    RedoStates : Model list
     }
 
 type KeyboardMsg =
@@ -71,7 +71,7 @@ type Msg =
     | DuplicateWire of displacementPos : XYPos
     | DeselectWire 
     | AddWire of Symbol.Port*Symbol.Port *CreateDU   
-    //Snap2Grid
+    //Snap2Alignment
     | AlignBoxes of Helpers.BoundingBox 
 
     //Catalogue
@@ -92,7 +92,7 @@ let symIsWithin (bBox : BoundingBox) (symList : Symbol.Symbol list) =
                 let boxBR = bBox.BottomRight
                 let sTL =  s.BBox.TopLeft
                 let sBR = s.BBox.BottomRight
-                // check if we should snap 2 grid
+                // check if we should snap2alignment,  TL = TopLeft BR = BottomRight 
                 withinPosX  (calcCentreBBox bBox) (calcCentre ({X = sTL.X ; Y = sTL.Y + 15.0 }) ({X = sBR.X ; Y = sBR.Y}))  ||
                 withinPosY  (calcCentreBBox bBox) (calcCentre ({X = sTL.X ; Y = sTL.Y + 15.0 }) ({X = sBR.X ; Y = sBR.Y}))  ||
                 (within boxTL.X sTL.X) ||
@@ -121,7 +121,9 @@ let isPortClicked (pos : XYPos) (port: Symbol.Port) : bool =
 let createLineCoordinates ( (x1,y1): float*float )  ( (x2,y2) : float*float ) : Line= 
     {P1 = {X = x1; Y = y1;}; P2 = {X = x2; Y= y2}}
 
-let isSymAligned (overallBBox : BoundingBox) (symList : Symbol.Symbol list) : (XYPos * Line) list = //draggingBBox is already top Y coordinate is scaled
+
+
+let isSymAligned (overallBBox : BoundingBox) (symList : Symbol.Symbol list) : (XYPos * Line) list = //BoudingBox has it's Y coordinates - 15 already
 
     let tOver, bOver = matchBBoxToPos overallBBox  //returns top and btm pos of overall box
     let notSelectedSym = List.filter (fun (sym : Symbol.Symbol)-> sym.IsSelected =false) symList
@@ -133,7 +135,7 @@ let isSymAligned (overallBBox : BoundingBox) (symList : Symbol.Symbol list) : (X
                     let symPosTuple = matchBBoxToPos sym.BBox
                     match symPosTuple with 
 
-                    | {X = stx ; Y = sty}, {X = sbx ; Y = sby} 
+                    | {X = stx ; Y = sty}, {X = sbx ; Y = sby}  //aligns centre vertically
                         when withinPosX  (calcCentreBBox overallBBox) (calcCentre ({X = stx ; Y = sty}) ({X = sbx ; Y = sby}))  
                                               -> let symCentre = calcCentre {X = stx ; Y = sty} {X = sbx ; Y = sby}
                                                  let overCentre = calcCentreBBox overallBBox
@@ -144,7 +146,7 @@ let isSymAligned (overallBBox : BoundingBox) (symList : Symbol.Symbol list) : (X
                                                  else
                                                      let line =  createLineCoordinates (symCentre.X,bOver.Y) (symCentre.X, sty + 15.0) 
                                                      (posOf xDiff 0.0, line) ::lst
-                    | {X = stx ; Y = sty}, {X = sbx ; Y = sby} 
+                    | {X = stx ; Y = sty}, {X = sbx ; Y = sby}  //aligns centre horizontally
                         when withinPosY  (calcCentreBBox overallBBox) (calcCentre ({X = stx ; Y = sty + 15.0}) ({X = sbx ; Y = sby}))  
                                               -> let symCentre = calcCentre {X = stx ; Y = sty + 15.0} {X = sbx ; Y = sby}
                                                  let overCentre = calcCentreBBox overallBBox
@@ -157,44 +159,47 @@ let isSymAligned (overallBBox : BoundingBox) (symList : Symbol.Symbol list) : (X
                                                         (posOf 0.0 yDiff, line) ::lst
                                                                
                     | {X = stx ; Y = sty}, {X = sbx ; Y = sby} 
-                        when within tOver.X stx -> let xDiff = (stx - tOver.X)
-                                                   printf($"xDiff {xDiff}")
-                                                   let line =  createLineCoordinates (stx,tOver.Y) (stx,sby) 
-                                                   (posOf xDiff 0.0, line) ::lst                       
+                        when within tOver.X stx -> 
+                                                let xDiff = (stx - tOver.X)
+                                                let line =  createLineCoordinates (stx,tOver.Y) (stx,sby) 
+                                                (posOf xDiff 0.0, line) ::lst                       
                     | {X = stx ; Y = sty}, {X = sbx ; Y = sby} 
-                        when within tOver.X sbx -> let xDiff = (sbx-tOver.X)
-                                                   let line =  createLineCoordinates (sbx,tOver.Y) (sbx,sby) 
-                                                   (posOf xDiff 0.0, line) ::lst
+                        when within tOver.X sbx -> 
+                                                let xDiff = (sbx-tOver.X)
+                                                let line =  createLineCoordinates (sbx,tOver.Y) (sbx,sby) 
+                                                (posOf xDiff 0.0, line) ::lst
                     
                     | {X = stx ; Y = sty}, {X = sbx ; Y = sby} 
-                        when within bOver.X sbx -> let xDiff = (sbx-bOver.X)
-                                                   let line =  createLineCoordinates (sbx,tOver.Y) (sbx,sby) 
-                                                   (posOf xDiff 0.0, line) ::lst
+                        when within bOver.X sbx -> 
+                                                let xDiff = (sbx-bOver.X)
+                                                let line =  createLineCoordinates (sbx,tOver.Y) (sbx,sby) 
+                                                (posOf xDiff 0.0, line) ::lst
                     | {X = stx ; Y = sty}, {X = sbx ; Y = sby} 
-                        when within bOver.X stx -> let xDiff = (stx-bOver.X)
-                                                   let line =  createLineCoordinates (stx,tOver.Y) (stx,sby) 
-                                                   (posOf xDiff 0.0, line) ::lst
+                        when within bOver.X stx -> 
+                                                let xDiff = (stx-bOver.X)
+                                                let line =  createLineCoordinates (stx,tOver.Y) (stx,sby) 
+                                                (posOf xDiff 0.0, line) ::lst
                     | {X = stx ; Y = sty}, {X = sbx ; Y = sby} 
                         when within (tOver.Y) (sty + 15.0) -> 
-                                                 let yDiff = (sty + 15.0 - tOver.Y)
-                                                 let line =  createLineCoordinates (tOver.X,sty + 15.0) (sbx,sty + 15.0) 
-                                                 (posOf 0.0 yDiff, line) ::lst
+                                                let yDiff = (sty + 15.0 - tOver.Y)
+                                                let line =  createLineCoordinates (tOver.X,sty + 15.0) (sbx,sty + 15.0) 
+                                                (posOf 0.0 yDiff, line) ::lst
                     | {X = stx ; Y = sty}, {X = sbx ; Y = sby} 
                         when within (tOver.Y) (sby) -> 
-                                             let yDiff = (sby - tOver.Y)
-                                             let line =  createLineCoordinates (tOver.X,sby) (sbx,sby) 
-                                             (posOf 0.0 yDiff, line) ::lst
+                                                let yDiff = (sby - tOver.Y)
+                                                let line =  createLineCoordinates (tOver.X,sby) (sbx,sby) 
+                                                (posOf 0.0 yDiff, line) ::lst
                     | {X = stx ; Y = sty}, {X = sbx ; Y = sby} 
                         when within (bOver.Y) (sty + 15.0) -> 
-                                             let yDiff = (sty + 15.0 - bOver.Y)
-                                             let line =  createLineCoordinates (tOver.X,sty + 15.0) (sbx,sty + 15.0) 
-                                             (posOf 0.0 yDiff, line) ::lst
+                                                let yDiff = (sty + 15.0 - bOver.Y)
+                                                let line =  createLineCoordinates (tOver.X,sty + 15.0) (sbx,sty + 15.0) 
+                                                (posOf 0.0 yDiff, line) ::lst
 
                     | {X = stx ; Y = sty}, {X = sbx ; Y = sby} 
                         when within (bOver.Y) (sby) -> 
-                                             let yDiff = (sby- bOver.Y)
-                                             let line =  createLineCoordinates (tOver.X,sby) (sbx,sby) 
-                                             (posOf 0.0 yDiff, line) ::lst
+                                                let yDiff = (sby- bOver.Y)
+                                                let line =  createLineCoordinates (tOver.X,sby) (sbx,sby) 
+                                                (posOf 0.0 yDiff, line) ::lst
                     
                     | _ -> (nullPos, createLineCoordinates (0.0,0.0) (0.0,0.0)) :: lst
                     )
@@ -252,6 +257,18 @@ let tryFindPortByPortId (id : string) (ports : Symbol.Port list) : Symbol.Port o
 
     List.tryFind(findPortByPortId id) ports
 
+let storeUndoState (model : Model) : Model list = 
+    if (model.UndoStates.Length >= 20) then 
+        model :: List.take 15 model.UndoStates
+    else 
+        model :: model.UndoStates 
+
+let storeRedoState (model : Model) : Model list = 
+    if (model.UndoStates.Length >= 20) then 
+        model :: List.take 15 model.UndoStates
+    else 
+        model :: model.UndoStates 
+
 let startDraggingSymbol (pagePos: XYPos)  (model : Symbol.Symbol list) sId  =
     model
     |> List.map (fun sym ->
@@ -307,17 +324,18 @@ let filterPortsMatchingHostId (portList: Symbol.Port list) (portDU : Helpers.Por
         )
 
     (dist,newPortList)
-
+///returns ports that are within a minimum range to the cursor
 let getPortsWithinMinRange (mousePos : XYPos ) (model : Model) (minDist : float) (portDU : PortDU)  = 
     let sortedSymbols = sortDistToSymbol (mousePos) model.Wire.Symbol
     let symbolsWithinMinRange = 
         sortedSymbols
-        |> List.filter (fun x -> (fst x) < minDist)  //only consider those within the minimum distance    
-    let portsWithinMinRange = List.map (filterPortsMatchingHostId model.Ports portDU) symbolsWithinMinRange
+        |> List.filter (fun x -> (fst x) < minDist)  //only consider those within the minimum distance  
+    let portList = Symbol.getAllPorts (model.Wire.Symbol)
+    let portsWithinMinRange = List.map (filterPortsMatchingHostId portList portDU) symbolsWithinMinRange
 
     portsWithinMinRange
 
-
+///function that renders BoundingBoxes
 let private renderBBox (bBox : BoundingBox) = 
     let fX, fY = bBox.TopLeft.X, bBox.TopLeft.Y
     let fX_2, fY_2 = bBox.BottomRight.X, bBox.BottomRight.Y
@@ -334,7 +352,7 @@ let private renderBBox (bBox : BoundingBox) =
             ]
             ] [ ]
         ])
-
+///function that renders AlignmentLines
 let private renderAlignmentLines (lines : Line list) = 
     g   [](
         List.map (fun l ->  
@@ -352,7 +370,7 @@ let private renderAlignmentLines (lines : Line list) =
     )
 
 
-
+///function that renders Ports close to your cursor
 let private renderPortsHovering (distance: float , portList: Symbol.Port list) = 
     let radius = 6.0
     let opacity = 1.0/distance * 55.0
@@ -371,7 +389,7 @@ let private renderPortsHovering (distance: float , portList: Symbol.Port list) =
             ]
             [ ]
         ))
-
+///function that renders Ports close to your cursor while dragging from a port to another
 let private renderPortsDragging (distance: float, portList: Symbol.Port list ) =
     let radius = 8.0
     let opacity = 1.0/ distance * 55.0
@@ -391,27 +409,25 @@ let private renderPortsDragging (distance: float, portList: Symbol.Port list ) =
                                 [ ]
                             )
             )
-           
         )
+///Renders an outline of the EndPort when EndPort is connectable.
 let private renderOnePort (mouseOnPort : XYPos * Symbol.Port option)(reElem : ReactElement) = 
         let mouseOnPortCircle = 
             match mouseOnPort with
-            | (mousePos, Some port) when (calcDistance mousePos port.Pos < 10.0)->
+            | (mousePos, Some port) when (calcDistance mousePos port.Pos < 10.0) ->
+                                        
                                             circle [Cx port.Pos.X; Cy port.Pos.Y ;
                                                     R 12.0 ; SVGAttr.Fill "lightskyblue"
                                                     SVGAttr.Stroke "lightskyblue"; 
                                                     SVGAttr.StrokeWidth 0.8; 
                                                     SVGAttr.FillOpacity 0.3
-                                                   ] []
+                                                ] []
                                                         
             | _ -> circle [] []
 
         g [] [mouseOnPortCircle; reElem]
                
-        
-        
-
-
+///Renders a highlight region when dragging
 let private renderHighlightRegion (bBox : BoundingBox) =
             let fX, fY = bBox.TopLeft.X, bBox.TopLeft.Y
             let fX_2, fY_2 = bBox.BottomRight.X, bBox.BottomRight.Y
@@ -429,8 +445,8 @@ let private renderHighlightRegion (bBox : BoundingBox) =
                     ] [ ]
                 ])
 
-
-let private renderGrid =  //Canvas Grid 
+///Renders the background as small grids.
+let private renderGrid = 
         svg [
             SVGAttr.Width "100%"
             SVGAttr.Height "100%"
@@ -515,7 +531,7 @@ let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispat
                         renderDraggingPortsByDistance
                         renderHoveringPortsByDistance
                         renderHighlightRegion model.RegionToBeRendered
-                        renderBBox model.OverallBBoxToBeRendered
+                        //renderBBox model.OverallBBoxToBeRendered
                         
                     ] 
                  
@@ -536,9 +552,8 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         let wModel, wCmd = BusWire.update wMsg model.Wire
         {model with Wire = wModel}, Cmd.map Wire wCmd
     
-
     | KeyPress DEL ->  
-        let SymModel, newCmd = 
+        let SymModel, CmdX = 
             Symbol.update Symbol.Msg.DeleteSymbols model.Wire.Symbol  
 
         let newModel = 
@@ -554,60 +569,50 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                 Wire = newWireModel
                 SymIdList = []
                 OverallBBoxToBeRendered = nullBBox
+                UndoStates = storeUndoState model
             }
-        newModel, Cmd.batch [Cmd.ofMsg (UpdatePorts); Cmd.ofMsg (RenderPorts ([],true))]
+        newModel, Cmd.batch [Cmd.ofMsg (RenderPorts ([],true))]
     
-    ///Duplication : Duplicate Symbols first then duplciate Wires.
+    ///Duplication : Duplicate Symbols first then duplicate Wires.
     | KeyPress AltC  ->  
         let symbolsToBeDup = Symbol.getSelectedSymbols(model.Wire.Symbol)
         let dupSymbol = Symbol.duplicateSymbol (symbolsToBeDup)
+        //duplicate symbol
         let newSymModel =
             model.Wire.Symbol
             |> List.map (fun sym -> {sym with IsSelected = false})
             |> List.append (snd dupSymbol)
-        let displacement = fst dupSymbol
+        let displacementPos = fst dupSymbol
         let overallBBox =  Symbol.getOverallBBox newSymModel
-        let newModel =  //Sym duplicated
+
+        //Sym duplicated model
+        let tmpModel =  
             { model with 
                 Wire = {model.Wire with Symbol = newSymModel}
                 OverallBBoxToBeRendered = overallBBox
             }
-
-        newModel,Cmd.batch[Cmd.ofMsg(UpdatePorts); Cmd.ofMsg(DuplicateWire displacement)] 
-
-    | DuplicateWire displacementPos -> 
+        // Duplicate Wire
         let selectedWireList =
-            BusWire.getSelectedWireList model.Wire.WX
-
-        let dupWireList = BusWire.getWiresToBeDuplicated displacementPos selectedWireList model.Ports 
-
-        let createDupWireList = 
-            dupWireList
-            |> List.map (fun tuple -> 
-                match tuple  with
-                | Some sourcePort , Some targetPort, w  ->  Cmd.ofMsg (AddWire (sourcePort,targetPort,Duplicate)) 
-                | _ , _ , _-> failwithf "Shouldn't happen")
-        model,Cmd.batch ((Cmd.ofMsg DeselectWire) :: createDupWireList )
-   
-    | KeyPress s -> // Updates Orientation Key Presses
-        let newSymModel,newCmd =
-            match s with 
-            | AltA -> Symbol.update (Symbol.Msg.UpdateInputOrientation Left) model.Wire.Symbol
-            | AltW -> Symbol.update (Symbol.Msg.UpdateInputOrientation Top) model.Wire.Symbol
-            | AltS -> Symbol.update (Symbol.Msg.UpdateInputOrientation Bottom) model.Wire.Symbol
-            | AltShiftW -> Symbol.update (Symbol.Msg.UpdateOutputOrientation Top) model.Wire.Symbol
-            | AltShiftS -> Symbol.update (Symbol.Msg.UpdateOutputOrientation Bottom) model.Wire.Symbol
-            | AltShiftD -> Symbol.update (Symbol.Msg.UpdateOutputOrientation Right) model.Wire.Symbol
+            BusWire.getSelectedWireList tmpModel.Wire.WX
+        let portList = Symbol.getAllPorts (tmpModel.Wire.Symbol)
+        let dupWireList = BusWire.getWiresToBeDuplicated displacementPos selectedWireList portList
         
-        let newModel = {
-            model with
-                Wire = {model.Wire with Symbol = newSymModel}
-                SymIdList = []
-            }
-        newModel, Cmd.ofMsg (UpdatePorts) 
+        //Wire duplicated model
+        let newModel = 
+            (tmpModel,dupWireList)
+            ||> List.fold (fun m tuple -> 
+                    match tuple  with
+                    | (Some sourcePort , Some targetPort, _) -> 
+                                        let newBusModel = fst (BusWire.update (BusWire.AddWire (sourcePort,targetPort,Duplicate)) m.Wire)
+                                        {m with 
+                                            Wire = newBusModel
+                                        } 
+                    | _ , _ , _-> m
+                )
+        {newModel with 
+            UndoStates = storeUndoState model
+        },Cmd.batch[Cmd.ofMsg(UpdatePorts);Cmd.ofMsg (DeselectWire)] 
 
-
-       
     | RenderPorts (floatPortListTuple,isHovering) -> 
         match model.SymIdList with
         | [] when isHovering = true -> {model with HoveringPortsToBeRendered = floatPortListTuple}, Cmd.none
@@ -626,7 +631,8 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
 
 
     | DraggingPort (mousePos) -> 
-        let draggedPort = tryFindPortByPortId model.IdOfPortBeingDragged model.Ports
+        let portList = Symbol.getAllPorts (model.Wire.Symbol)
+        let draggedPort = tryFindPortByPortId model.IdOfPortBeingDragged portList
         let port = 
             match draggedPort with
             |Some port -> port
@@ -657,12 +663,12 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
          , Cmd.none
 
     | EndDraggingPort mousePos->
-
-        let endOutcome = List.tryFind (isWithinDistanceToPort mousePos 10.0) model.Ports
+        let portList = Symbol.getAllPorts (model.Wire.Symbol)
+        let endOutcome = List.tryFind (isWithinDistanceToPort mousePos 10.0) portList //check if it is within range of enlarged ports.
   
         match endOutcome with 
         | Some endPort  ->  
-                let startPort = tryFindPortByPortId model.IdOfPortBeingDragged model.Ports
+                let startPort = tryFindPortByPortId model.IdOfPortBeingDragged portList
                 let newMsg = 
                     match startPort with
                     |Some startPort when endPort.PortType<>startPort.PortType -> AddWire (startPort,endPort,Init) 
@@ -680,12 +686,10 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                 }, Cmd.batch ([Cmd.ofMsg(RemoveDrawnLine); Cmd.ofMsg(UpdatePorts)])
       
     | UpdatePorts  ->
-        let newPorts = Symbol.getAllPorts (model.Wire.Symbol)
+        let portList = Symbol.getAllPorts (model.Wire.Symbol)
         let newBusModel, newCmd = 
-            BusWire.update (BusWire.Msg.UpdatedPortsToBusWire newPorts) model.Wire
-                    
+            BusWire.update (BusWire.Msg.UpdatedPortsToBusWire portList) model.Wire
         {model with 
-            Ports = newPorts
             Wire = newBusModel
         }, Cmd.none
     
@@ -706,6 +710,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             Wire = newBusModel
             IsWireSelected = true
             SelectedWire = Some connectionId
+            UndoStates = storeUndoState model
         }
         , Cmd.map Wire newCmd
 
@@ -725,10 +730,15 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
     | AddWire (startPort,endPort,createDU) -> 
         let newBusModel, newCmd = 
             BusWire.update (BusWire.Msg.AddWire (startPort,endPort,createDU)) model.Wire
+        let removedLineModel = {model with 
+                                 Wire = {model.Wire with
+                                              PortToCursor = ({X = 0.0; Y = 0.0}, {X = 0.0; Y=0.0}, None)}
+                               }
         {model with
             Wire = newBusModel
+            UndoStates = storeUndoState removedLineModel 
         }
-        , Cmd.batch [Cmd.ofMsg (RemoveDrawnLine); Cmd.ofMsg(UpdatePorts)]
+        , Cmd.batch [Cmd.ofMsg(UpdatePorts)]
 
     | DeselectWire -> 
         let newBusModel, newCmd = 
@@ -796,6 +806,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             Wire = {model.Wire with Symbol = newSymModel}
             SymIdList = sIdList
             OverallBBoxToBeRendered = overallBBox
+            UndoStates = storeUndoState model
         }
         , Cmd.batch [Cmd.ofMsg(RenderPorts ([],false) );] //render no ports
 
@@ -810,6 +821,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         { model with 
             Wire = {model.Wire with Symbol = newSymModel}
             OverallBBoxToBeRendered = overallBBox
+
         }
         , Cmd.batch [Cmd.ofMsg (UpdatePorts) ;Cmd.ofMsg(AlignBoxes overallBBox)]
 
@@ -817,23 +829,24 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         let newSymModel = 
              (model.Wire.Symbol, sIdList)
              ||> List.fold (endDraggingSymbol)
-
-        { model with 
-            Wire = {model.Wire with Symbol = newSymModel}
-            SymIdList = []
-            AlignmentLinesToBeRendered = []
-        }
-        ,Cmd.none
+        
+        let newModel = 
+            { model with 
+                Wire = {model.Wire with Symbol = newSymModel}
+                SymIdList = []
+                AlignmentLinesToBeRendered = []
+            }
+    
+        newModel,Cmd.none
 
     | AlignBoxes bbox -> 
         let flineList = model.Wire.Symbol
                        |>isSymAligned bbox 
-        printf ($"focus : {flineList}")
-        let firstDiff = flineList  
-                        |>List.tryFind (fun (diffPos,line) -> diffPos <> nullPos) 
+        let firstDiff = flineList             //this calculates the diff in distance from overall bbox to the edges you want to align to.
+                        |>List.tryFind (fun (diffPos,line) -> diffPos <> nullPos)  
         let newSym,newOverallBBox = 
             match firstDiff with 
-            |Some (diffPos,line) -> shiftSelectedSymbols model.Wire.Symbol diffPos, {
+            |Some (diffPos,line) -> shiftSelectedSymbols model.Wire.Symbol diffPos, {    //SNAPS2GRID
                                     TopLeft = (posAdd model.OverallBBoxToBeRendered.TopLeft diffPos ) ;
                                     BottomRight = (posAdd model.OverallBBoxToBeRendered.BottomRight diffPos);
                                  }
@@ -864,6 +877,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         let newModel =  //Sym duplicated
             { model with 
                 Wire = {model.Wire with Symbol = newSymModel}
+                UndoStates = storeUndoState model
             }
 
         newModel,Cmd.batch[Cmd.ofMsg(UpdatePorts)] 
@@ -876,8 +890,8 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                 let portsWithinMinRange = getPortsWithinMinRange mMsg.Pos model 90.0 All
                 [RenderPorts (portsWithinMinRange, true)] //isHovering
             ///Clicking order : Catalogue -> Ports -> Wire -> Symbol     
-            | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y<80. && mMsg.Pos.Y>50.) -> [(AddSymbol ((CommonTypes.ComponentType.Input 2), "I2"))]
-            | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>80. && mMsg.Pos.Y<110.) -> [(AddSymbol ((CommonTypes.ComponentType.Output 2), "O2"))]
+            | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y<80. && mMsg.Pos.Y>50.) ->   [(AddSymbol ((CommonTypes.ComponentType.Input 2), "I2"))]
+            | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>80. && mMsg.Pos.Y<110.) ->  [(AddSymbol ((CommonTypes.ComponentType.Output 2), "O2"))]
             | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>110. && mMsg.Pos.Y<140.) -> [(AddSymbol ((CommonTypes.ComponentType.Constant (4,2)), "O2"))]
             | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>140. && mMsg.Pos.Y<170.) -> [AddSymbol ((CommonTypes.ComponentType.IOLabel ), "IO2")]
             | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>170. && mMsg.Pos.Y<200.) -> [AddSymbol ((CommonTypes.ComponentType.BusSelection (4,0) ), "B2")]
@@ -885,15 +899,16 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>230. && mMsg.Pos.Y<260.) -> [AddSymbol ((CommonTypes.ComponentType.MergeWires ), "MW2")] 
             | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>260. && mMsg.Pos.Y<290.) -> [AddSymbol ((CommonTypes.ComponentType.SplitWire 4 ), "SW2")]  
 
-            | Down when (mMsg.Pos.X<50.  && mMsg.Pos.X>0.  && mMsg.Pos.Y>290. && mMsg.Pos.Y<320.) -> [AddSymbol ((CommonTypes.ComponentType.Not ), "NG2")]  
-            | Down when (mMsg.Pos.X<100.  && mMsg.Pos.X>50.  && mMsg.Pos.Y>290. && mMsg.Pos.Y<320.) -> [AddSymbol ((CommonTypes.ComponentType.And ), "AG2")]  
+            | Down when (mMsg.Pos.X<50.  && mMsg.Pos.X>0.  && mMsg.Pos.Y>290. && mMsg.Pos.Y<320.) ->    [AddSymbol ((CommonTypes.ComponentType.Not ), "NG2")]  
+            | Down when (mMsg.Pos.X<100.  && mMsg.Pos.X>50.  && mMsg.Pos.Y>290. && mMsg.Pos.Y<320.) ->  [AddSymbol ((CommonTypes.ComponentType.And ), "AG2")]  
             | Down when (mMsg.Pos.X<150.  && mMsg.Pos.X>100.  && mMsg.Pos.Y>290. && mMsg.Pos.Y<320.) -> [AddSymbol ((CommonTypes.ComponentType.Or ), "OG2")]  
             | Down when (mMsg.Pos.X<200.  && mMsg.Pos.X>150.  && mMsg.Pos.Y>290. && mMsg.Pos.Y<320.) -> [AddSymbol ((CommonTypes.ComponentType.Xor ), "XOG2")]  
-            | Down when (mMsg.Pos.X<67.  && mMsg.Pos.X>0.  && mMsg.Pos.Y>320. && mMsg.Pos.Y<350.) -> [AddSymbol ((CommonTypes.ComponentType.Nand ), "NAG2")]   
-            | Down when (mMsg.Pos.X<134.  && mMsg.Pos.X>67.  && mMsg.Pos.Y>320. && mMsg.Pos.Y<350.) -> [AddSymbol ((CommonTypes.ComponentType.Nor ), "NOG2")]   
+            | Down when (mMsg.Pos.X<67.  && mMsg.Pos.X>0.  && mMsg.Pos.Y>320. && mMsg.Pos.Y<350.) ->    [AddSymbol ((CommonTypes.ComponentType.Nand ), "NAG2")]   
+            | Down when (mMsg.Pos.X<134.  && mMsg.Pos.X>67.  && mMsg.Pos.Y>320. && mMsg.Pos.Y<350.) ->  [AddSymbol ((CommonTypes.ComponentType.Nor ), "NOG2")]   
             | Down when (mMsg.Pos.X<200.  && mMsg.Pos.X>134.  && mMsg.Pos.Y>320. && mMsg.Pos.Y<350.) -> [AddSymbol ((CommonTypes.ComponentType.Xnor ), "XNG2")]        
             | Down -> 
-                let ClickedPort = List.tryFind (isPortClicked mMsg.Pos) model.Ports  
+                let portList = Symbol.getAllPorts (model.Wire.Symbol)
+                let ClickedPort = List.tryFind (isPortClicked mMsg.Pos) portList 
                 match ClickedPort with 
                 | Some port -> [DeselectAllSymbols; DeselectWire; StartDraggingPort (port)]
                 | None  -> 
@@ -937,6 +952,38 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                  model, Cmd.none
 
     | Zoom msg -> {model with Canvas = msg}, Cmd.none 
+    
+    | KeyPress undoRedo -> 
+        let newModel = 
+            match undoRedo with
+            | AltZ ->  let undoModel =  List.tryHead model.UndoStates
+                       printf ($"Length of this list = {model.UndoStates.Length}")
+                       match undoModel with 
+                       |Some undoModel -> {undoModel with RedoStates = storeRedoState model}
+                       |None -> model 
+            | AltShiftZ ->let redoModel =  List.tryHead model.RedoStates
+                          printf ($"Length of this list = {model.RedoStates.Length}")
+                          match redoModel with 
+                          |Some redoModel -> {redoModel with UndoStates = storeUndoState model}
+                          |None -> model 
+   
+        newModel,Cmd.none
+    | KeyPress s -> // Updates Symbol Orientation Key Pressess
+        let newSymModel,newCmd =
+            match s with 
+            | AltA -> Symbol.update (Symbol.Msg.UpdateInputOrientation Left) model.Wire.Symbol
+            | AltW -> Symbol.update (Symbol.Msg.UpdateInputOrientation Top) model.Wire.Symbol
+            | AltS -> Symbol.update (Symbol.Msg.UpdateInputOrientation Bottom) model.Wire.Symbol
+            | AltShiftW -> Symbol.update (Symbol.Msg.UpdateOutputOrientation Top) model.Wire.Symbol
+            | AltShiftS -> Symbol.update (Symbol.Msg.UpdateOutputOrientation Bottom) model.Wire.Symbol
+            | AltShiftD -> Symbol.update (Symbol.Msg.UpdateOutputOrientation Right) model.Wire.Symbol
+        
+        let newModel = {
+            model with
+                Wire = {model.Wire with Symbol = newSymModel}
+                SymIdList = []
+            }
+        newModel, Cmd.ofMsg (UpdatePorts) 
 
 
 let init() = 
@@ -945,7 +992,6 @@ let init() =
         Wire = wModel
         Canvas = {height = CommonTypes.draw2dCanvasHeight ; width = CommonTypes.draw2dCanvasWidth; zoom = 1.00}
         SymIdList =  []
-        Ports = Symbol.getAllPorts (wModel.Symbol)
         HoveringPortsToBeRendered = []
         DraggingPortsToBeRendered = []
         IsPortDragging = false
@@ -958,4 +1004,6 @@ let init() =
         SelectedWire = None
         OnePortToBeRendered = nullPos,None
         OverallBBoxToBeRendered = nullBBox
+        UndoStates = []
+        RedoStates = []
     }, Cmd.map Wire cmdw
