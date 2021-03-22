@@ -77,6 +77,19 @@ type Msg =
     //Catalogue
     | AddSymbol of symType : CommonTypes.ComponentType * name : string
 
+
+/// Make all the graphical effects go to null (*For Undo and Redo)
+let nullRender model  =  
+        {model with 
+                Wire = {model.Wire with
+                                PortToCursor = (nullPos, nullPos, None)}
+                OnePortToBeRendered = nullPos,None;
+                HoveringPortsToBeRendered = [];
+                DraggingPortsToBeRendered = [];
+        }
+
+//
+
 let within num1 num2 = 
     if (num1 < (num2 + 2.5) ) && (num1 > (num2 - 2.5) ) then true else false
 
@@ -124,7 +137,6 @@ let createLineCoordinates ( (x1,y1): float*float )  ( (x2,y2) : float*float ) : 
 
 
 let isSymAligned (overallBBox : BoundingBox) (symList : Symbol.Symbol list) : (XYPos * Line) list = //BoudingBox has it's Y coordinates - 15 already
-
     let tOver, bOver = matchBBoxToPos overallBBox  //returns top and btm pos of overall box
     let notSelectedSym = List.filter (fun (sym : Symbol.Symbol)-> sym.IsSelected =false) symList
     if (symIsWithin overallBBox notSelectedSym ) then
@@ -450,7 +462,7 @@ let private renderGrid =
         svg [
             SVGAttr.Width "100%"
             SVGAttr.Height "100%"
-        ]
+            ]
             [
                defs[]
                 [ 
@@ -538,7 +550,7 @@ let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispat
           OnMouseMove (fun ev -> mouseOp (if mDown ev then Drag else Move) ev (scrollTop,scrollLeft) )
           OnWheel (fun ev -> if ev.ctrlKey = true then wheelOp CtrlScroll ev else ())
           
-        ] 
+       ] 
         [ 
         svg
             [ Style 
@@ -558,8 +570,7 @@ let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispat
                     renderDraggingPortsByDistance
                     renderHoveringPortsByDistance
                     renderPortsOfWireSelection
-                    renderHighlightRegion model.RegionToBeRendered
-                        
+                    renderHighlightRegion model.RegionToBeRendered 
                 ]   
             ]    
         ] 
@@ -581,22 +592,22 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         let SymModel, CmdX = 
             Symbol.update Symbol.Msg.DeleteSymbols model.Wire.Symbol  
 
-        let newModel = 
+        let newModel1 = 
             { model with
                  Wire = {model.Wire with Symbol = SymModel}
             }
 
         let newWireModel, wireCmd = 
-            BusWire.update BusWire.Msg.DeleteWire newModel.Wire
+            BusWire.update BusWire.Msg.DeleteWire newModel1.Wire
 
-        let newModel = 
+        let newModel2 = 
             { model with 
                 Wire = newWireModel
                 SymIdList = []
                 OverallBBoxToBeRendered = nullBBox
-                UndoStates = storeUndoState model
+                UndoStates = storeUndoState (nullRender model)
             }
-        newModel, Cmd.batch [Cmd.ofMsg (RenderPorts ([],true))]
+        newModel2, Cmd.batch [Cmd.ofMsg (RenderPorts ([],true))]
     
     ///Duplication : Duplicate Symbols first then duplicate Wires.
     | KeyPress AltC  ->  
@@ -609,7 +620,6 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             |> List.append (snd dupSymbol)
         let displacementPos = fst dupSymbol
         let overallBBox =  Symbol.getOverallBBox newSymModel
-        let tmpWire =  {model.Wire with Symbol = newSymModel}
 
         //Sym duplicated model
         let tmpModel =  
@@ -638,9 +648,9 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                                             Wire = newBusModel
                                         } 
                     | _ , _ , _-> m
-                )
+            )
         {newModel with 
-            UndoStates = storeUndoState model
+            UndoStates = storeUndoState (nullRender model)
         },Cmd.batch[Cmd.ofMsg(UpdatePorts)] 
 
     | RenderPorts (floatPortListTuple,isHovering) -> 
@@ -719,9 +729,11 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         let portList = Symbol.getAllPorts (model.Wire.Symbol)
         let newBusModel, newCmd = 
             BusWire.update (BusWire.Msg.UpdatedPortsToBusWire portList) model.Wire
+        
         {model with 
             Wire = newBusModel
-        }, Cmd.none
+        }
+        |>nullRender,Cmd.none
     
     | RemoveDrawnLine ->
         let newBusModel, newMsg = 
@@ -740,7 +752,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             Wire = newBusModel
             IsWireSelected = true
             SelectedWire = Some connectionId
-            UndoStates = storeUndoState {model with OnePortToBeRendered = nullPos,None;}
+            UndoStates = storeUndoState (nullRender model)
         }
         , Cmd.map Wire newCmd
 
@@ -760,13 +772,9 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
     | AddWire (startPort,endPort,createDU) -> 
         let newBusModel, newCmd = 
             BusWire.update (BusWire.Msg.AddWire (startPort,endPort,createDU)) model.Wire
-        let removedLineModel = {model with 
-                                 Wire = {model.Wire with
-                                              PortToCursor = (nullPos, nullPos, None)}
-                               }
         {model with
             Wire = newBusModel
-            UndoStates = storeUndoState removedLineModel 
+            UndoStates = storeUndoState (nullRender model)
         }
         , Cmd.batch [Cmd.ofMsg(UpdatePorts)]
 
@@ -812,12 +820,8 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             BusWire.update (BusWire.Msg.SelectWiresWithinRegion(bbox)) model.Wire
         let SymModel, newCmd = 
             Symbol.update (Symbol.Msg.SelectSymbolsWithinRegion(bbox)) model.Wire.Symbol
-        let newWireModel =  { WireModel with
-                                Symbol = SymModel
-                            }
-
         let newModel  =     { model with 
-                                Wire = newWireModel
+                                Wire = {WireModel with Symbol = SymModel}
                             }   
         let overallBBox =  Symbol.getOverallBBox newModel.Wire.Symbol
     
@@ -836,7 +840,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             Wire = {model.Wire with Symbol = newSymModel}
             SymIdList = sIdList
             OverallBBoxToBeRendered = overallBBox
-            UndoStates = storeUndoState model
+            UndoStates = storeUndoState (nullRender model)
         }
         , Cmd.batch [Cmd.ofMsg(RenderPorts ([],false) );] //render no ports
 
@@ -907,7 +911,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         let newModel =  //Sym duplicated
             { model with 
                 Wire = {model.Wire with Symbol = newSymModel}
-                UndoStates = storeUndoState model
+                UndoStates = storeUndoState (nullRender model)
             }
 
         newModel,Cmd.batch[Cmd.ofMsg(UpdatePorts)] 
@@ -991,11 +995,11 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                        match undoModel with 
                        |Some undoModel -> {undoModel with RedoStates = storeRedoState model}
                        |None -> model 
-            | AltShiftZ ->let redoModel =  List.tryHead model.RedoStates
-                          printf ($"Length of this list = {model.RedoStates.Length}")
-                          match redoModel with 
-                          |Some redoModel -> {redoModel with UndoStates = storeUndoState model}
-                          |None -> model 
+            | AltShiftZ -> let redoModel =  List.tryHead model.RedoStates
+                           printf ($"Length of this list = {model.RedoStates.Length}")
+                           match redoModel with 
+                           |Some redoModel -> {redoModel with UndoStates = storeUndoState model}
+                           |None -> model 
    
         newModel,Cmd.none
     | KeyPress s -> // Updates Symbol Orientation Key Pressess
