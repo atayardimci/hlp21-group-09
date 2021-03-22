@@ -271,7 +271,9 @@ let autosingleWireView (wModel: Model)=
         let msb = props.WireP.BusWidth - 1
         let displayWireSegment (start: XYPos) (final: XYPos) =
             let color =
-                    if props.WireP.hasError  then
+                    if props.WireP.isSelected then
+                        "skyblue" 
+                    else if props.WireP.hasError  then
                         "red"
                     else 
                         "black"
@@ -353,13 +355,13 @@ let init n () =
     {WX=[];Symbol=symbols; Color=CommonTypes.Red  ; Countselected = 0 ; PortToCursor = ({X = 0.0; Y= 0.0},{X = 0.0; Y= 0.0}, None)},Cmd.none 
 
 
-let createWire (startPort: Symbol.Port) (endPort: Symbol.Port) (createDU : CreateDU) =
+let createWire (startPort: Symbol.Port) (endPort: Symbol.Port) (*(createDU : CreateDU)*) =
     {
         Id = CommonTypes.ConnectionId (uuid())
         SourcePort = startPort
         TargetPort = endPort
-        isSelected = if (createDU = Duplicate || createDU = DuplicateError) then true else false
-        hasError = if (createDU = Error || createDU = DuplicateError) then true else false
+        isSelected = false //if (createDU = Duplicate || createDU = DuplicateError) then true else false
+        hasError =  false // if (createDU = Error || createDU = DuplicateError) then true else false
         relativPositions = [{X=0.0 ; Y=0.0} ; origin ; origin]
         PrevPositions = [origin ; origin ; origin]
         BeingDragged = -1
@@ -371,7 +373,7 @@ let createWire (startPort: Symbol.Port) (endPort: Symbol.Port) (createDU : Creat
 let getWiresToBeDuplicated (displacementPos : XYPos ) (wireList : Wire list) (portList : Symbol.Port list) : (Symbol.Port option *Symbol.Port option* Wire) list  =    
     wireList
     |> List.map (fun wire ->  
-    
+        
                 let sourcePort =  List.tryFind (fun (p : Symbol.Port)  ->  
                                                 let dist = calcDistance (posAdd (wire.SourcePort.Pos)(displacementPos)) p.Pos
                                                 (dist < 0.001) ) portList
@@ -380,38 +382,45 @@ let getWiresToBeDuplicated (displacementPos : XYPos ) (wireList : Wire list) (po
                                              let dist = calcDistance (posAdd (wire.TargetPort.Pos)(displacementPos)) p.Pos
                                              (dist < 0.001) ) portList
                 (sourcePort,endPort,wire)
-
                 )
 
 let addWire (startPort : Symbol.Port) (endPort : Symbol.Port) (createDU : CreateDU) (symModel : Symbol.Symbol list) =
-    let createInit, createError =
+    let duplicate =      
         match createDU with 
-        | Init -> Init,Error
-        | Duplicate -> Duplicate, DuplicateError
-        | _ -> failwithf "Sheet should only be sending Init or Duplicate to BusWire!"
-   
-    match startPort, startPort.BusWidth, endPort, endPort.BusWidth with 
-    | _, Some startWidth, _,  Some endWidth ->
-        let inputPort = if startPort.PortType = CommonTypes.Input then startPort else endPort
-        match startWidth = endWidth, inputPort.NumberOfConnections = 0 with
-        | true, true -> 
-            let wire = createWire startPort endPort createInit
-            Some wire, symModel
-        | _, false -> 
-            printf ("createError : InputPort can only have One Driver. If you want to merge two wires you a MergeWire Component")
-            None, symModel
-        | false, _ -> 
-            let wire = createWire startPort endPort createError
-            let newSymModel, symMsg = Symbol.update (Symbol.Msg.AddErrorToPorts (startPort,endPort)) symModel
-            Some wire, newSymModel
+        | Init -> false
+        | Duplicate -> true
+    
+    let newWire,newSym = 
+        match startPort, startPort.BusWidth, endPort, endPort.BusWidth with 
+        | _, Some startWidth, _,  Some endWidth ->
+            let inputPort = if startPort.PortType = CommonTypes.Input then startPort else endPort
+            match startWidth = endWidth, inputPort.NumberOfConnections = 0 with
+            | true, true -> 
+                let wire = 
+                    createWire startPort endPort 
+                Some wire, symModel
+            | _, false -> 
+                printf ("createError : InputPort can only have One Driver. If you want to merge two wires you a MergeWire Component")
+                None, symModel
+            | false, _ -> 
+                let errorWire = { (createWire startPort endPort) with hasError = true} 
+                let newSymModel, symMsg = Symbol.update (Symbol.Msg.AddErrorToPorts (startPort,endPort)) symModel
+                Some errorWire, newSymModel
        
-    | _, Some width, undefinedPort, None | undefinedPort, None, _, Some width ->
-        let wire = createWire startPort endPort createInit  
-        let sym, symMsg = 
-            Symbol.update (Symbol.Msg.EnforceBusWidth (width, undefinedPort)) symModel
-        Some wire, sym
+        | _, Some width, undefinedPort, None | undefinedPort, None, _, Some width ->
+            let wire = createWire startPort endPort  
+            let sym, symMsg = 
+                Symbol.update (Symbol.Msg.EnforceBusWidth (width, undefinedPort)) symModel
+            Some wire, sym
 
-    | _ -> failwithf " BusWidths of sourcePort and targetPort are not specified !!!!"
+        | _ -> failwithf " BusWidths of sourcePort and targetPort are not specified !!!!"
+    if (duplicate) then 
+        match newWire with
+        | Some w -> Some {w with isSelected = true}, newSym
+        | None -> None, newSym
+    else newWire,newSym
+
+
 
 
  
@@ -508,7 +517,8 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                                     |>List.map (fun sym -> Symbol.changeNumOfConnections endPort sym Increment)
                                {model with WX = newWire :: model.WX ; Symbol = newSym} , Cmd.none
         | None , sym -> model,Cmd.none
-        
+    
+
     
     | DeselectWire  ->
         let newWls =

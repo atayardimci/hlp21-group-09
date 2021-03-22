@@ -592,12 +592,12 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         let SymModel, CmdX = 
             Symbol.update Symbol.Msg.DeleteSymbols model.Wire.Symbol  
 
-        let newModel1 = 
+        let newModel1 =  //deletesSymbol
             { model with
                  Wire = {model.Wire with Symbol = SymModel}
             }
 
-        let newWireModel, wireCmd = 
+        let newWireModel, wireCmd =  //deletesWire
             BusWire.update BusWire.Msg.DeleteWire newModel1.Wire
 
         let newModel2 = 
@@ -633,6 +633,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         let tmpWX = BusWire.deselectWire tmpModel.Wire.WX
         let portList = Symbol.getAllPorts (tmpModel.Wire.Symbol)
         let dupWireList = BusWire.getWiresToBeDuplicated displacementPos selectedWireList portList
+
         let tmpModel2 =  
             { tmpModel with 
                 Wire = {tmpModel.Wire with WX = tmpWX}
@@ -644,6 +645,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                     match tuple  with
                     | (Some sourcePort , Some targetPort, _) -> 
                                         let newBusModel = fst (BusWire.update (BusWire.AddWire (sourcePort,targetPort,Duplicate)) m.Wire)
+                                                          
                                         {m with 
                                             Wire = newBusModel
                                         } 

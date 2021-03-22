@@ -67,12 +67,6 @@ type PortDU =
 type CreateDU =
     | Init      //initialized
     | Duplicate // duplicated
-    | DuplicateError
-    | Error
-
-// type BusWidthDU = 
-//     | EnforceStartPort
-//     | EnforceEndPort
 
 type ChangeDU = 
     | Increment
