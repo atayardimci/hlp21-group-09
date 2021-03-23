@@ -54,6 +54,8 @@
                    makeKeyItem "outPortRight" "Alt+Shift+D" (fun () -> dispatch KeyboardMsg.AltShiftD)
                    makeKeyItem "outPortTop" "Alt+Shift+W" (fun () -> dispatch KeyboardMsg.AltShiftW)
                    makeKeyItem "outPortBottom" "Alt+Shift+S" (fun () -> dispatch KeyboardMsg.AltShiftS)
+                   makeKeyItem "secondSheet" "Alt+1" (fun () -> dispatch KeyboardMsg.AltOne)
+                   makeKeyItem "secondSheet" "Alt+2" (fun () -> dispatch KeyboardMsg.AltTwo)
                    menuSeparator
                    makeKeyItem "Print Statistics" "Alt+Shift+Z" (fun () -> dispatch KeyboardMsg.AltShiftZ)
                    makeRoleItem MenuItemRole.ForceReload
