@@ -776,7 +776,6 @@ let getOrientationOfPort (symModel: Model) (port:Port) : PortOrientation =
     | _ -> failwithf "The hosting symbol of the given port is not found"
 
 
-
 /// Update the symbol with matching componentId to comp, or add a new symbol based on comp.
 let updateSymbolModelWithComponent (symModel: Model) (comp:CommonTypes.Component) =
     failwithf "Not Implemented"
