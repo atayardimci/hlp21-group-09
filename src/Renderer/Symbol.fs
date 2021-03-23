@@ -20,7 +20,7 @@ type Port =
         IsDragging : bool
         NumberOfConnections : int
         BusWidth : int Option
-        
+        NumOfErrors : int
     }
 
 type Symbol =
@@ -35,12 +35,12 @@ type Symbol =
         InputOrientation: PortOrientation
         OutputOrientation: PortOrientation
 
-        Pos: XYPos
+        Pos : XYPos
         LastDragPos : XYPos
         IsDragging : bool
         IsSelected : bool
-        HasError : int list
-        NumberOfConnections : int 
+        HasError : bool
+        NumberOfConnections : int
         
         H : float
         W : float
@@ -58,14 +58,21 @@ type Msg =
     | DeselectAllSymbols
     | UpdateInputOrientation of inputOrientation: PortOrientation
     | UpdateOutputOrientation of outputOrientation: PortOrientation 
-    | AddErrorToErrorList of  Port list
-    | RemoveErrorFromErrorList of Port list
-    | EnforceBusWidth of int*Port*BusWidthDU
+    | AddErrorToPorts of (Port * Port)
+    | RemoveConnections of (Port * Port * bool) list
+    | EnforceBusWidth of int * Port
     | SelectSymbolsWithinRegion of box: BoundingBox
 
     // | UpdateSymbolModelWithComponent of CommonTypes.Component 
 
-//---------------------------------some interface functions----------------//
+
+
+
+
+
+
+
+//--------------------------some interface functions------------------------//
 
 /// Returns true if pos is within the bounds of the bounding box of the given symbol; else returns false.
 let isSymClicked (pos : XYPos) (sym : Symbol) : bool =
@@ -75,12 +82,12 @@ let isSymClicked (pos : XYPos) (sym : Symbol) : bool =
         -> true
     | _ -> false
 
-
 /// Returns the Ids of the selected symbols
 let getSelectedSymbolIds (symModel: Model) : CommonTypes.ComponentId list = 
     ([], symModel)
     ||> List.fold (fun acc sym -> if sym.IsSelected then acc @ [sym.Id] else acc)
 
+/// Returns a list of the selected symbols
 let getSelectedSymbols (symModel : Model) : Symbol list = 
     ([], symModel)
     ||> List.fold (fun acc sym -> if sym.IsSelected then acc @ [sym] else acc)
@@ -90,43 +97,16 @@ let boxesCollide (boxOne: BoundingBox) (boxTwo: BoundingBox) =
     let oneTL, oneBR, twoTL, twoBR = boxOne.TopLeft, boxOne.BottomRight, boxTwo.TopLeft, boxTwo.BottomRight
     not (oneBR.X < twoTL.X || oneBR.Y < twoTL.Y || oneTL.X > twoBR.X || oneTL.Y > twoBR.Y)
 
-///Updates the number of connections of the Port and Symbol
-let changePortStateIsConnected (port : Port) (sym : Symbol)(smallChangeDU : SmallChangeDU) : Symbol = 
-    let mutable numConnections = sym.NumberOfConnections
-    let newInputPorts =
-        sym.InputPorts
-        |>List.map (fun inPort -> if (inPort.Id = port.Id) then 
-                                     if(smallChangeDU = Increment) then 
-                                        numConnections <- numConnections + 1         
-                                        {inPort with NumberOfConnections = inPort.NumberOfConnections + 1 }
-                                        
-                                     else
-                                        numConnections <- numConnections - 1
-                                        {inPort with NumberOfConnections = inPort.NumberOfConnections - 1 } 
-                                  else inPort)
-    let newOutputPorts = 
-        sym.OutputPorts
-        |>List.map (fun outPort -> if (outPort.Id = port.Id) then 
-                                     if(smallChangeDU = Increment) then 
-                                        numConnections <- numConnections + 1
-                                        {outPort with NumberOfConnections = outPort.NumberOfConnections + 1 } 
-                                     else
-                                        numConnections <- numConnections - 1
-                                        {outPort with NumberOfConnections = outPort.NumberOfConnections - 1 } 
-                                   else outPort)
+let updateSymWithPort (sym: Symbol) (newPort: Port) : Symbol =
+    let newInputPorts, newOutputPorts = 
+        sym.InputPorts  |> List.map (fun port -> if port.Id = newPort.Id then newPort else port),
+        sym.OutputPorts |> List.map (fun port -> if port.Id = newPort.Id then newPort else port)
+    {sym with InputPorts = newInputPorts; OutputPorts = newOutputPorts}
 
-    {sym with InputPorts = newInputPorts ; OutputPorts = newOutputPorts; NumberOfConnections = numConnections}
 
-//let resetPortBusWidth (newPortList : Port list ) : Port list = 
-//    (newPortList)
-//    |>List.map (fun newPort -> {newPort with BusWidth = None})
-
-//let resetSymbolBusWidth (sym : Symbol) : Symbol = 
-//    {sym with InputPorts = resetPortBusWidth sym.InputPorts; OutputPorts = resetPortBusWidth sym.OutputPorts }
 
 /// Returns the overall BBox of a collection of symbols
-let getOverallBBox (symList : Symbol list) :   BoundingBox = 
-    
+let getOverallBBox (symList: Symbol list) : BoundingBox = 
     let selectedSymList = getSelectedSymbols symList
     if (selectedSymList <> [] ) then
         let minX = 
@@ -154,29 +134,37 @@ let getOverallBBox (symList : Symbol list) :   BoundingBox =
 
     
     
+/// Increments or decrements the number of connections of the given port and symbol according to the given ChangeDU and returns the updated symbol
+let changeNumOfConnections (portToChange: Port) (symToChange: Symbol) (change: ChangeDU) : Symbol = 
+    let operand = if change = Increment then 1 else -1
+    let newPort = {portToChange with NumberOfConnections = portToChange.NumberOfConnections + operand}
+    {updateSymWithPort symToChange newPort with NumberOfConnections = symToChange.NumberOfConnections + operand}
+
+/// Returns true if any of the ports of a symbol has an error, else false
+let checkSymbolForError (sym:Symbol) : bool = 
+    (false, sym.InputPorts @ sym.OutputPorts)
+    ||> List.fold (fun hasError port -> if port.NumOfErrors <> 0 then true else hasError)
+
+/// Removes a connection which can have an error or not and returns the model with the updated symbols
+let removeConnection (model:Model) (portOne:Port, portTwo:Port, connectionHasError:bool) : Model = 
+    (model, [portOne; portTwo])
+    ||> List.fold (fun symModel port -> 
+        symModel
+        |> List.map (fun sym ->  
+            if sym.Id = port.HostId then
+                if connectionHasError then
+                    let newSym = changeNumOfConnections {port with NumOfErrors = port.NumOfErrors - 1} sym Decrement
+                    let newSymHasError = checkSymbolForError newSym
+                    {newSym with HasError = newSymHasError}
+                else
+                    changeNumOfConnections port sym Decrement
+            else
+                sym
+        )
+    )
 
 
-let addErrorToErrorList (newSymZ : Symbol) (deleteWirePort : Port) : Symbol = 
-    let newSym = changePortStateIsConnected deleteWirePort newSymZ Decrement
-    let portNum = 
-        match deleteWirePort.PortNumber with
-        |Some portNum -> portNum
-        |None -> failwithf "No Port Num"
-    let firstErrorIndex = 
-        newSym.HasError
-        |>List.tryFindIndex ( fun elem  -> (elem = portNum))   
 
-    let rec remove i l =   //deletion at specific index. Feels like imperative programming ~~
-        match i, l with
-        | 0, x::xs -> xs
-        | i, x::xs -> x::remove (i - 1) xs
-        | i, [] -> failwith "index out of range"
-                                            
-    let filteredErrorList = 
-        match firstErrorIndex with 
-        |Some errorindex -> remove errorindex newSym.HasError
-        |None -> newSym.HasError
-    {newSym with HasError = filteredErrorList}
 
 
 /// Selects all symbols which have their bounding box collide with the given box and returns the updated model
@@ -186,28 +174,29 @@ let selectSymbolsInRegion (symModel: Model) (box: BoundingBox) : Model =
     |> List.map (fun sym -> if doesCollide sym.BBox then {sym with IsSelected = true} else sym)
 
 
-let enforceBusWidth (busWidth : int )(port : Port) (sym : Symbol ) (bwDU : BusWidthDU) =
-    match bwDU with 
-    |EnforceEndPort -> let newInputPortList = 
-                            (sym.InputPorts,[port])||> List.fold (fun inputPortList port -> 
-                                                                List.map(fun (inputPort:Port) -> 
-                                                                    if (inputPort.Id = port.Id) then
-                                                                     {inputPort with BusWidth = Some busWidth}
-                                                                    else 
-                                                                     inputPort
-                                                                    )inputPortList
-                                                              )
-                       {sym with InputPorts =newInputPortList }
-    |EnforceStartPort -> let newOutputPortList =
-                            (sym.OutputPorts,[port])||> List.fold (fun outputPortList port -> 
-                                                                List.map(fun (outputPort:Port) -> 
-                                                                    if (outputPort.Id = port.Id) then      
-                                                                        {outputPort with BusWidth = Some busWidth}
-                                                                    else 
-                                                                    outputPort
-                                                                    ) outputPortList
-                                                              )
-                         {sym with OutputPorts = newOutputPortList }
+
+// let enforceBusWidth (busWidth : int ) (port : Port) (sym : Symbol ) (bwDU : BusWidthDU) =
+//     match bwDU with 
+//     |EnforceEndPort -> let newInputPortList = 
+//                             (sym.InputPorts,[port])||> List.fold (fun inputPortList port -> 
+//                                                                 List.map(fun (inputPort:Port) -> 
+//                                                                     if (inputPort.Id = port.Id) then
+//                                                                      {inputPort with BusWidth = Some busWidth}
+//                                                                     else 
+//                                                                      inputPort
+//                                                                     )inputPortList
+//                                                               )
+//                        {sym with InputPorts =newInputPortList }
+//     |EnforceStartPort -> let newOutputPortList =
+//                             (sym.OutputPorts,[port])||> List.fold (fun outputPortList port -> 
+//                                                                 List.map(fun (outputPort:Port) -> 
+//                                                                     if (outputPort.Id = port.Id) then      
+//                                                                         {outputPort with BusWidth = Some busWidth}
+//                                                                     else 
+//                                                                     outputPort
+//                                                                     ) outputPortList
+//                                                               )
+//                          {sym with OutputPorts = newOutputPortList }
 
 
 ///Auto Completed Widths of 5 special components
@@ -216,8 +205,9 @@ let autoCompleteWidths (sym : Symbol)  =
             match (sym.Type) with 
             |CommonTypes.SplitWire num ->  
                                     let completedSymbol =  
-                                        match (sym.InputPorts,sym.OutputPorts) with 
-                                        | [in1],[out1;out2] when sym.NumberOfConnections = 0 -> 
+                                        match (sym.InputPorts,sym.OutputPorts) with              //For Ata : These part needs some changing as discussed before 
+                                                                                                 //          especially when connecting SpitWire from the top right.
+                                        | [in1],[out1;out2] when sym.NumberOfConnections = 0 ->  //For Ata : when zero connections refresh the symbol to original state.
                                                                 {sym with InputPorts = [{in1 with BusWidth = None}] ; 
                                                                           OutputPorts = [{out1 with BusWidth = None}; {out2 with BusWidth = None}]}
                                         | [in1],[out1;out2] -> let tmp = 
@@ -233,7 +223,7 @@ let autoCompleteWidths (sym : Symbol)  =
             |CommonTypes.MergeWires  ->  
                                     let completedSymbol = 
                                         match (sym.InputPorts,sym.OutputPorts) with 
-                                        | [in1;in2],[out1] when sym.NumberOfConnections = 0 -> 
+                                        | [in1;in2],[out1] when sym.NumberOfConnections = 0 ->  //For Ata : when zero connections refresh the symbol to original state.
                                                                 {sym with InputPorts = [{in1 with BusWidth = None}; {in2 with BusWidth = None}] ; 
                                                                           OutputPorts = [{out1 with BusWidth = None}]}
                                         | [in1;in2],[out1] -> let tmp =
@@ -252,7 +242,7 @@ let autoCompleteWidths (sym : Symbol)  =
             |CommonTypes.IOLabel  ->
                                    let completedSymbol =
                                      match (sym.InputPorts,sym.OutputPorts) with 
-                                     | [in1],[out1] when sym.NumberOfConnections = 0 -> 
+                                     | [in1],[out1] when sym.NumberOfConnections = 0 -> //For Ata : when zero connections refresh the symbol to original state.
                                                         {sym with InputPorts = [{in1 with BusWidth = None}] ; 
                                                                   OutputPorts = [{out1 with BusWidth = None}]}
                                      | [in1],[out1] -> let tmp = 
@@ -268,7 +258,7 @@ let autoCompleteWidths (sym : Symbol)  =
             |CommonTypes.Mux2     ->
                                   let completedSymbol =
                                     match (sym.InputPorts,sym.OutputPorts) with 
-                                    | [in1;in2;sel],[out1] when sym.NumberOfConnections = 0 -> 
+                                    | [in1;in2;sel],[out1] when sym.NumberOfConnections = 0 -> //For Ata : when zero connections refresh the symbol to original state.
                                                                 {sym with InputPorts = [{in1 with BusWidth = None};{in2 with BusWidth = None}; sel] ; 
                                                                           OutputPorts = [{out1 with BusWidth = None}]}
                                     | [in1;in2;sel],[out1] -> let tmp = 
@@ -290,7 +280,7 @@ let autoCompleteWidths (sym : Symbol)  =
             |CommonTypes.Demux2      ->
                                      let completedSymbol =
                                        match (sym.InputPorts,sym.OutputPorts) with 
-                                       | [in1;sel],[out1;out2] when sym.NumberOfConnections = 0 -> 
+                                       | [in1;sel],[out1;out2] when sym.NumberOfConnections = 0 -> //For Ata : when zero connections refresh the symbol to original state.
                                                                 {sym with InputPorts = [{in1 with BusWidth = None};{sel with BusWidth = None}] ; 
                                                                           OutputPorts = [{out1 with BusWidth = None};{out2 with BusWidth = None}]}
                                        | [in1;sel],[out1;out2] -> let tmp = 
@@ -316,11 +306,6 @@ let autoCompleteWidths (sym : Symbol)  =
         newSym
                         
 
-/// Render a ruler to assist in assigning the symbols
-// fun (symbollist ) () go throughs the symbol list to find top left X = current topLeft = x 
-//let renderRuler (symList : Symbol list) (BBox : BoundingBox) 
-//    //
-
 //---------------------------------helper types and functions----------------//
 
 /// Returns the height and the width of a symbol according to its type in a tuple
@@ -343,7 +328,7 @@ let getHeightWidthOf (sType:CommonTypes.ComponentType) =
     | CommonTypes.ComponentType.Custom spec -> 
         let n = float (max spec.InputLabels.Length spec.OutputLabels.Length)
         n * 35., n * 35.
-    // | _ -> failwithf "Shouldn't happen"
+    | CommonTypes.ComponentType.Catalogue -> 0., 0.
 
 
 /// This function won't work! Implement later
@@ -406,6 +391,7 @@ let getPortPositions sType pos =
     | CommonTypes.ComponentType.ROM _ -> getRegularPortPositions (Left, Right) 1 1 h w pos
     | CommonTypes.ComponentType.RAM _ -> getRegularPortPositions (Left, Right) 3 1 h w pos
     | CommonTypes.ComponentType.Custom spec -> getRegularPortPositions (Left, Right) spec.InputLabels.Length spec.OutputLabels.Length h w pos
+    | CommonTypes.ComponentType.Catalogue -> ([], [])
     // | _ -> failwithf "Shouldn't happen"
 
 
@@ -448,15 +434,13 @@ let getBusWidthOfPort (sType:CommonTypes.ComponentType) (portType:CommonTypes.Po
         match portType with 
         | CommonTypes.PortType.Input -> Some (snd spec.InputLabels.[portNumber])
         | _                          -> Some (snd spec.OutputLabels.[portNumber])
+    | CommonTypes.ComponentType.Catalogue -> None
     // | _ -> failwithf "Shouldn't happen"
-
-
-
 
 
 /// Returns the input and output ports using the hostId of the symbol 
 /// together with the input and output ports position lists
-let getPorts (sType:CommonTypes.ComponentType) hostId inputPortsPosList outputPortsPosList = 
+let createPorts (sType:CommonTypes.ComponentType) hostId inputPortsPosList outputPortsPosList = 
     let inputPorts = 
         inputPortsPosList
         |> List.mapi (fun idx pos -> 
@@ -470,6 +454,7 @@ let getPorts (sType:CommonTypes.ComponentType) hostId inputPortsPosList outputPo
                 IsDragging = false
                 NumberOfConnections = 0
                 BusWidth = getBusWidthOfPort sType CommonTypes.PortType.Input idx
+                NumOfErrors = 0
             }
         )
     let outputPorts = 
@@ -485,6 +470,7 @@ let getPorts (sType:CommonTypes.ComponentType) hostId inputPortsPosList outputPo
                 IsDragging = false
                 NumberOfConnections = 0
                 BusWidth = getBusWidthOfPort sType CommonTypes.PortType.Output idx
+                NumOfErrors = 0
             }
         )
     inputPorts, outputPorts
@@ -524,11 +510,11 @@ let createSymbolWithPortOrientation (sym:Symbol) =
 //-----------------------Symbol Creation----------------------//
 
 /// Returns a symbol of given type with given name at the given position
-let createNewSymbol (sType:CommonTypes.ComponentType) (name:string) (pos:XYPos) (createDU: CreateDU) =
+let createNewSymbol (sType:CommonTypes.ComponentType) (name:string) (pos:XYPos) =
     let h, w = (getHeightWidthOf sType)
     let hostId = CommonTypes.ComponentId (uuid())
     let inputPortsPosList, outputPortsPosList = getPortPositions sType pos
-    let inputPorts, outputPorts = getPorts sType hostId inputPortsPosList outputPortsPosList
+    let inputPorts, outputPorts = createPorts sType hostId inputPortsPosList outputPortsPosList
     {
         Id = hostId // create a unique id for this symbol
         Type = sType
@@ -543,8 +529,8 @@ let createNewSymbol (sType:CommonTypes.ComponentType) (name:string) (pos:XYPos) 
         Pos = pos
         LastDragPos = {X=0. ; Y=0.} 
         IsDragging = false
-        IsSelected = if(createDU = Duplicate || createDU = DuplicateError) then true else false
-        HasError = []
+        IsSelected = false
+        HasError = false
         NumberOfConnections = 0
         
         H = h
@@ -559,14 +545,16 @@ let duplicateSymbol (symList : Symbol list) : XYPos*Symbol list =
     
     let dupList = 
         symList
-        |>List.map (fun sym -> 
-                            let newSym = createNewSymbol sym.Type sym.Label (posAdd sym.Pos posDisplacement) Duplicate
-                            
-                            {newSym with HasError = sym.HasError}
-                   )
-    (posDisplacement,dupList)
+        |> List.map (fun sym -> 
+            createNewSymbol sym.Type sym.Label (posAdd sym.Pos posDisplacement) 
+            )
+            // {newSym with HasError = sym.HasError}
+        |> List.map (fun sym -> {sym with IsSelected = true})
+        
+    posDisplacement, dupList
                            
-
+let insertSymbol symType name  =
+    createNewSymbol (symType) name {X = float (10*64+30); Y=float (1*64+30)} 
 
 let init () =
     let fakeMemo: CommonTypes.Memory = {
@@ -580,43 +568,49 @@ let init () =
         OutputLabels = ["Err", 4; "Out", 8; "W", 1]
     }
     [
-        createNewSymbol (CommonTypes.ComponentType.Input 2)                 "I1"     {X = float (1*64+30); Y=float (1*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.Output 4)                "O1"     {X = float (2*64+30); Y=float (1*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.IOLabel)                 "IO1"    {X = float (3*64+30); Y=float (1*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.Constant (4, 15))        "C1"     {X = float (4*64+30); Y=float (1*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.BusSelection (4, 2))     "B1"     {X = float (5*64+30); Y=float (1*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.BusCompare (4, 10))      "EQ1"    {X = float (6*64+30); Y=float (1*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.Not)                     "G1"     {X = float (1*64+30); Y=float (2*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.And)                     "G2"     {X = float (2*64+30); Y=float (2*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.Or)                      "G3"     {X = float (3*64+30); Y=float (2*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.Xor)                     "G4"     {X = float (4*64+30); Y=float (2*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.Nand)                    "G5"     {X = float (5*64+30); Y=float (2*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.Nor)                     "G6"     {X = float (6*64+30); Y=float (2*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.Xnor)                    "G7"     {X = float (7*64+30); Y=float (2*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.Decode4)                 "DECO4"  {X = float (1*64+30); Y=float (3*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.Mux2)                    "MUX2"   {X = float (3*64+30); Y=float (3*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.Demux2)                  "DEMUX2" {X = float (4*64+30); Y=float (3*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.NbitsAdder 4)            "A1"     {X = float (5*64+30); Y=float (3*64+30)} Init 
-        createNewSymbol (CommonTypes.ComponentType.NbitsXor   7)            "XOR1"   {X = float (7*64+30); Y=float (3*64+30)} Init 
-        createNewSymbol (CommonTypes.ComponentType.MergeWires)              "MERGE"  {X = float (1*64+30); Y=float (6*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.SplitWire 3)             "SPLIT"  {X = float (2*64+30); Y=float (6*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.DFF)                     "FF1"    {X = float (3*64+30); Y=float (6*64+30)} Init 
-        createNewSymbol (CommonTypes.ComponentType.DFFE)                    "FFE1"   {X = float (5*64+30); Y=float (6*64+30)} Init 
-        createNewSymbol (CommonTypes.ComponentType.Register 5)              "REG1"   {X = float (1*64+30); Y=float (8*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.RegisterE 3)             "REG2"   {X = float (3*64+30); Y=float (8*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.AsyncROM fakeMemo)       "AROM1"  {X = float (1*64+30); Y=float (10*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.ROM fakeMemo)            "ROM1"   {X = float (3*64+30); Y=float (10*64+30)} Init 
-        createNewSymbol (CommonTypes.ComponentType.RAM fakeMemo)            "RAM1"   {X = float (5*64+30); Y=float (10*64+30)} Init
-        createNewSymbol (CommonTypes.ComponentType.Custom fakeCustomParams) "CUST1"  {X = float (8*64+30); Y=float (10*64+30)} Init
+        createNewSymbol (CommonTypes.ComponentType.Input 2)                 "I1"     {X = float (3*64+30); Y=float (1*64+30)} 
+        createNewSymbol (CommonTypes.ComponentType.Output 4)                "O1"     {X = float (4*64+30); Y=float (1*64+30)} 
+        createNewSymbol (CommonTypes.ComponentType.IOLabel)                 "IO1"    {X = float (5*64+30); Y=float (1*64+30)} 
+        createNewSymbol (CommonTypes.ComponentType.Constant (4, 15))        "C1"     {X = float (6*64+30); Y=float (1*64+30)} 
+        createNewSymbol (CommonTypes.ComponentType.BusSelection (4, 2))     "B1"     {X = float (7*64+30); Y=float (1*64+30)} 
+        createNewSymbol (CommonTypes.ComponentType.BusCompare (4, 10))      "EQ1"    {X = float (8*64+30); Y=float (1*64+30)} 
+        createNewSymbol (CommonTypes.ComponentType.Not)                     "G1"     {X = float (3*64+30); Y=float (2*64+30)} 
+        createNewSymbol (CommonTypes.ComponentType.And)                     "G2"     {X = float (4*64+30); Y=float (2*64+30)} 
+        createNewSymbol (CommonTypes.ComponentType.Or)                      "G3"     {X = float (5*64+30); Y=float (2*64+30)} 
+        createNewSymbol (CommonTypes.ComponentType.Xor)                     "G4"     {X = float (6*64+30); Y=float (2*64+30)} 
+        createNewSymbol (CommonTypes.ComponentType.Nand)                    "G5"     {X = float (7*64+30); Y=float (2*64+30)} 
+        createNewSymbol (CommonTypes.ComponentType.Nor)                     "G6"     {X = float (8*64+30); Y=float (2*64+30)} 
+        createNewSymbol (CommonTypes.ComponentType.Xnor)                    "G7"     {X = float (9*64+30); Y=float (2*64+30)} 
+        createNewSymbol (CommonTypes.ComponentType.Decode4)                 "DECO4"  {X = float (3*64+30); Y=float (3*64+30)} 
+        createNewSymbol (CommonTypes.ComponentType.Mux2)                    "MUX2"   {X = float (5*64+30); Y=float (3*64+30)} 
+        createNewSymbol (CommonTypes.ComponentType.Demux2)                  "DEMUX2" {X = float (6*64+30); Y=float (3*64+30)} 
+        createNewSymbol (CommonTypes.ComponentType.NbitsAdder 4)            "A1"     {X = float (7*64+30); Y=float (3*64+30)} 
+        createNewSymbol (CommonTypes.ComponentType.NbitsXor   7)            "XOR1"   {X = float (9*64+30); Y=float (3*64+30)} 
+        createNewSymbol (CommonTypes.ComponentType.MergeWires)              "MERGE"  {X = float (3*64+30); Y=float (6*64+30)} 
+        createNewSymbol (CommonTypes.ComponentType.SplitWire 3)             "SPLIT"  {X = float (4*64+30); Y=float (6*64+30)} 
+        createNewSymbol (CommonTypes.ComponentType.DFF)                     "FF1"    {X = float (5*64+30); Y=float (6*64+30)} 
+        createNewSymbol (CommonTypes.ComponentType.DFFE)                    "FFE1"   {X = float (7*64+30); Y=float (6*64+30)} 
+        createNewSymbol (CommonTypes.ComponentType.Register 5)              "REG1"   {X = float (3*64+30); Y=float (8*64+30)} 
+        createNewSymbol (CommonTypes.ComponentType.RegisterE 3)             "REG2"   {X = float (5*64+30); Y=float (8*64+30)} 
+        createNewSymbol (CommonTypes.ComponentType.AsyncROM fakeMemo)       "AROM1"  {X = float (3*64+30); Y=float (10*64+30)}
+        createNewSymbol (CommonTypes.ComponentType.ROM fakeMemo)            "ROM1"   {X = float (5*64+30); Y=float (10*64+30)}
+        createNewSymbol (CommonTypes.ComponentType.RAM fakeMemo)            "RAM1"   {X = float (7*64+30); Y=float (10*64+30)}
+        createNewSymbol (CommonTypes.ComponentType.Custom fakeCustomParams) "CUST1"  {X = float (10*64+30); Y=float (10*64+30)} 
+        createNewSymbol (CommonTypes.ComponentType.Catalogue)               "Catalogue"  {X = 0.; Y= 0.} 
     ]
     , Cmd.none
+
+
+
+
+
 
 
 let update (msg : Msg) (model : Model): Model*Cmd<'a> =
     match msg with
     | AddSymbol (sType, pos) -> 
         let name = initialNameOfComponent model sType
-        (createNewSymbol sType name pos Init) :: model, Cmd.none
+        (createNewSymbol sType name pos) :: model, Cmd.none
 
     | DeleteSymbols -> 
         let selectedIds = getSelectedSymbolIds model
@@ -657,72 +651,247 @@ let update (msg : Msg) (model : Model): Model*Cmd<'a> =
         )
         , Cmd.none
 
-    | AddErrorToErrorList (errorPortList) -> 
-        let newModel = 
-            (model, errorPortList)
-            ||>List.fold (fun mdl errorPort ->
-                                    List.map (fun sym -> 
-
-                                    if (sym.Id = errorPort.HostId) 
-                                    then 
-                                        
-                                        printf ($" AddZ {sym.HasError}")
-                                        let portNum = 
-                                            match errorPort.PortNumber with
-                                            |Some portNum -> portNum
-                                            |None -> failwithf "No Port Num"
-                                        {sym with HasError = (portNum :: sym.HasError)} 
-                                                             
-                                        
-                                    else 
-                                        sym ) mdl )
-                                        
-
-        newModel,Cmd.none
-
-                                                     
-    | RemoveErrorFromErrorList (deleteWirePortList) -> //remove error portNumbers 
-        let newModel = 
-            (model, deleteWirePortList)
-            ||>List.fold (fun mdl deleteWirePort -> 
-                                        List.map (fun (sym : Symbol)->  
-                                                    if (sym.Id = deleteWirePort.HostId) then  
-                                                        if ( sym.NumberOfConnections = 1 ) then
-                                                            printf ("GOD SEND")
-                                                            
-                                                            let newSymZ = addErrorToErrorList sym deleteWirePort
-                                                            autoCompleteWidths newSymZ
-                                                        else 
-                                                            addErrorToErrorList sym deleteWirePort
-                                                    else
-                                                        sym )
-                                                    mdl 
-                                   )
-        newModel,Cmd.none             
     | SelectSymbolsWithinRegion box ->
         selectSymbolsInRegion model box, Cmd.none
 
-    | EnforceBusWidth (busWidth,port,DU) ->  
-        let newModel = 
-            (model,[port])
-            ||> List.fold (fun mdl port ->
-                            List.map (fun sym ->            
-                                        if (sym.Id = port.HostId)
-                                        then                                                
-                                            let newSym: Symbol =
-                                                match DU with
-                                                |EnforceStartPort -> enforceBusWidth busWidth port sym EnforceStartPort
-                                                |EnforceEndPort -> enforceBusWidth busWidth port sym EnforceEndPort
-                                            newSym
-                                            |>autoCompleteWidths
+    | AddErrorToPorts (portOne, portTwo) -> 
+        (model, [portOne; portTwo])
+        ||> List.fold (fun symModel port ->
+            symModel
+            |> List.map (fun sym -> 
+                if sym.Id = port.HostId then 
+                    let newSym = changeNumOfConnections {port with NumOfErrors = port.NumOfErrors + 1} sym Increment
+                    {newSym with HasError = true}
+                else sym 
+            )  
+        )
+        , Cmd.none
 
-                                        else 
-                                            sym
-                                        ) mdl
-                        )
-        newModel,Cmd.none
+    | RemoveConnections connectionList ->
+        (model, connectionList)
+        ||> List.fold (fun symModel connection ->
+            removeConnection symModel connection
+        )
+        , Cmd.none
+    
+    | EnforceBusWidth (busWidth, undefinedPort) ->  
+        model
+        |> List.map (fun sym -> 
+            if sym.Id = undefinedPort.HostId then
+                let newPort = {undefinedPort with BusWidth = Some busWidth}
+                updateSymWithPort sym newPort
+                |> autoCompleteWidths
+            else sym
+        )
+        , Cmd.none
 
     | MouseMsg _ -> model, Cmd.none // allow unused mouse messags
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//---------------Other interface functions--------------------//
+
+let symbolPos (symModel: Model) (sId: CommonTypes.ComponentId) : XYPos = 
+    List.find (fun sym -> sym.Id = sId) symModel
+    |> (fun sym -> sym.Pos)
+
+/// Returns the symbol with given Id
+let getSymbolWithId (symModel: Model) (sId: CommonTypes.ComponentId) : Symbol option =
+    List.tryFind (fun sym -> sym.Id = sId) symModel 
+
+
+// Returns all Ports of all symbols in the model
+let getAllPorts (symModel: Model) : Port list =
+    symModel
+    |> List.collect (fun sym -> sym.InputPorts @ sym.OutputPorts)
+
+// Returns the bounding box of the symbol with the given Id
+let getBoundingBoxOf (symModel: Model) (sId: CommonTypes.ComponentId) : BoundingBox =
+    let sym = 
+        match (getSymbolWithId symModel sId) with
+        | Some sym -> sym
+        | None -> failwithf "The symbol with given Id not found"
+    sym.BBox
+    
+// Returns all ports of the symbol with the given Id
+let getPortsOf (symModel: Model) (sId: CommonTypes.ComponentId) : Port list =
+    let sym = 
+        match (getSymbolWithId symModel sId) with
+        | Some sym -> sym
+        | None -> failwithf "The symbol with given Id not found"
+    sym.InputPorts @ sym.OutputPorts
+
+    
+
+let getOrientationOfPort (symModel: Model) (port:Port) : PortOrientation = 
+    match getSymbolWithId symModel port.HostId with
+    | Some sym -> if port.PortType = CommonTypes.PortType.Input then sym.InputOrientation else sym.OutputOrientation
+    | _ -> failwithf "The hosting symbol of the given port is not found"
+
+
+
+/// Update the symbol with matching componentId to comp, or add a new symbol based on comp.
+let updateSymbolModelWithComponent (symModel: Model) (comp:CommonTypes.Component) =
+    failwithf "Not Implemented"
+
+
+/// Return the output Buswire width (in bits) if this can be calculated based on known
+/// input wire widths, for the symbol wId. The types used here are possibly wrong, since
+/// this calculation is based on ports, and the skeleton code does not implement ports or
+/// port ids. If This is done the inputs could be expressed in terms of port Ids.
+let calculateOutputWidth 
+        (wId: CommonTypes.ConnectionId) 
+        (outputPortNumber: int) 
+        (inputPortWidths: int option list) : int option =
+    failwithf "Not implemented"
+
+
+//----------------------interface to Issie-----------------------------//
+let extractComponent 
+        (symModel: Model) 
+        (sId:CommonTypes.ComponentId) : CommonTypes.Component= 
+    failwithf "Not implemented"
+
+let extractComponents (symModel: Model) : CommonTypes.Component list = 
+    failwithf "Not implemented"
+
+let createSymbolFromComponent (comp:CommonTypes.Component) (pos:XYPos) : Symbol =
+    let h, w = getHeightWidthOf comp.Type
+    let hostId = CommonTypes.ComponentId comp.Id
+    let inputPortsPosList, outputPortsPosList = getPortPositions comp.Type pos
+    let inputPorts, outputPorts = createPorts comp.Type hostId inputPortsPosList outputPortsPosList
+    {
+        Id = hostId 
+        Type = comp.Type
+        Label = comp.Label
+
+        InputPorts = inputPorts
+        OutputPorts = outputPorts
+
+        InputOrientation = Left
+        OutputOrientation = Right
+
+        Pos = pos
+        LastDragPos = {X=0. ; Y=0.} // initial value can always be this
+        IsDragging = false // initial value can always be this
+        IsSelected = false
+        HasError = false
+        NumberOfConnections = 0
+
+        H = h
+        W = w
+        BBox = calculateBoundingBox h w pos
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -743,7 +912,7 @@ let symbolShapeStyle (props : RenderSymbolProps) =
         match props.Symbol.IsSelected, props.Symbol.IsDragging, props.Symbol.HasError with
         | true, _, _ 
         | _, true, _ -> dragColor
-        | _, _, list when list <> []-> errorColor
+        | _, _, true -> errorColor
         | _ -> constColor
     Style [
         StrokeWidth 1
@@ -881,12 +1050,15 @@ let createRectangularSymbol (symName:string) (inputPortNames:string list) (outpu
     let portLabels =
         ((props.Symbol.InputPorts @ props.Symbol.OutputPorts), (inputPortNames @ outputPortNames))
         ||> List.map2 (fun port portName -> 
-            match port.Pos.X, port.Pos.Y with
-            | x, _ when x = fX -> createInSymbolText 10. "start" 0 {port.Pos with X = port.Pos.X + 8.} portName
-            | x, _ when x = fX + w -> createInSymbolText 10. "end" 0 {port.Pos with X = port.Pos.X - 8.} portName
-            | _, y when y = fY -> createInSymbolText 10. "middle" rotationOfTopAndBottomPorts {port.Pos with Y = port.Pos.Y + 10.} portName
-            | _, y when y = fY + h -> createInSymbolText 10. "middle" rotationOfTopAndBottomPorts {port.Pos with Y = port.Pos.Y - 10.} portName
+            match port.PortType, props.Symbol.InputOrientation, props.Symbol.OutputOrientation with
+            | CommonTypes.PortType.Input , Top   , _ 
+            | CommonTypes.PortType.Output, _     , Top    -> createInSymbolText 10. "middle" rotationOfTopAndBottomPorts {port.Pos with Y = port.Pos.Y + 10.} portName
+            | CommonTypes.PortType.Input , Left  , _      -> createInSymbolText 10. "start" 0 {port.Pos with X = port.Pos.X + 8.} portName
+            | CommonTypes.PortType.Input , Bottom, _ 
+            | CommonTypes.PortType.Output, _     , Bottom -> createInSymbolText 10. "middle" rotationOfTopAndBottomPorts {port.Pos with Y = port.Pos.Y - 10.} portName
+            | CommonTypes.PortType.Output, _     , Right  -> createInSymbolText 10. "end" 0 {port.Pos with X = port.Pos.X - 8.} portName
             | _ -> failwithf "Port position is not at the edge of the symbol!"
+
     
         )
     g   [ ] 
@@ -906,6 +1078,70 @@ let createRectangularSymbol (symName:string) (inputPortNames:string list) (outpu
             if includeClk then createClock 10. fX fY clkH
         ] @ portLabels
         )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1177,9 +1413,82 @@ let private renderRectSymbol =
     , equalsButFunctions
     )
 
+let standardText x y sz txt = 
+    text [ // a demo text svg element
+        X x; 
+        Y y; 
+        Style [
+            TextAnchor "left" // left/right/middle: horizontal algnment vs (X,Y)
+            DominantBaseline "hanging" // auto/middle/hanging: vertical alignment vs (X,Y)
+            FontSize (sprintf "%ipx"sz)
+            FontWeight "Normal"
+            Fill "Black" // demo font color
+        ]
+    ] [str <| txt]
+let private drawRect x y w h clr= 
+    rect
+        [ 
+            //OnMouseUp (mouseUpHelper pr hmm)
+            //OnMouseDown (mouseDownHelper pr hmm)
+            X x
+            Y y
+            SVGAttr.Width w
+            SVGAttr.Height h
+            SVGAttr.Fill clr
+            SVGAttr.Stroke "black"
+            SVGAttr.StrokeWidth 1
+        ]
+        [ ]
 
+let private renderCatalogue = 
+    FunctionComponent.Of(
+        fun (props : RenderSymbolProps) ->
+            //let lx = props.Symbol.Pos.X
+            //let ly = props.Symbol.Pos.Y
+            
+            g   [ Style [
+                     UserSelect UserSelectOptions.None
+                     PointerEvents "none"
+                    ]
+                ]
+                [   
+                    drawRect 0. 0. 200. "100%" "white"
+                    standardText 10 20 20 "Catalogue"
+                    drawRect 0. 50. 200. 30. "white"
+                    standardText 15 60 15 "Input"
+                    drawRect 0. 80. 200. 30. "white"
+                    standardText 15 90 15 "Output"
+                    drawRect 0. 110. 200. 30. "white"
+                    standardText 15 120 15 "Constant"
+                    drawRect 0. 140. 200. 30. "white"
+                    standardText 15 150 15 "Label"
+                    drawRect 0. 170. 200. 30. "white"
+                    standardText 15 180 15 "Bus Select"
+                    drawRect 0. 200. 200. 30. "white"
+                    standardText 15 210 15 "Bus Compare"
+                    drawRect 0. 230. 200. 30. "white"
+                    standardText 15 240 15 "Merge Wires"
+                    drawRect 0. 260. 200. 30. "white"
+                    standardText 15 270 15 "Split Wires"
 
-
+                    drawRect 0. 290. 50. 30. "white"
+                    standardText 15 300 15 "Not"
+                    drawRect 50. 290. 50. 30. "white"
+                    standardText 65 300 15 "And"
+                    drawRect 100. 290. 50. 30. "white"
+                    standardText 115 300 15 "Or"
+                    drawRect 150. 290. 50. 30. "white"
+                    standardText 165 300 15 "Xor"
+                    drawRect 0. 320. 67. 30. "white"
+                    standardText 15 330 15 "Nand"
+                    drawRect 67. 320. 67. 30. "white"
+                    standardText 82 330 15 "Nor"
+                    drawRect 134. 320. 66. 30. "white"
+                    standardText 146 330 15 "Xnor"
+                ]          
+    , "Catalogue"
+    , equalsButFunctions
+    )
 
 
 let private renderSymbol (props : RenderSymbolProps) = 
@@ -1212,7 +1521,7 @@ let private renderSymbol (props : RenderSymbolProps) =
     | CommonTypes.ComponentType.ROM _ -> renderRectSymbol props
     | CommonTypes.ComponentType.RAM _ -> renderRectSymbol props
     | CommonTypes.ComponentType.Custom _ -> renderRectSymbol props
-    // | _ -> failwithf "Shouldn't happen"
+    | CommonTypes.ComponentType.Catalogue -> renderCatalogue props
 
 
 /// View function for symbol layer of SVG
