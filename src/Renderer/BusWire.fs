@@ -272,7 +272,7 @@ let autosingleWireView (wModel: Model)=
         let displayWireSegment (start: XYPos) (final: XYPos) =
             let color =
                     if props.WireP.isSelected then
-                        "skyblue" 
+                        "green" 
                     else if props.WireP.hasError  then
                         "red"
                     else 
