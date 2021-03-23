@@ -76,12 +76,15 @@ type Msg =
     | EndDraggingWire of CommonTypes.ConnectionId
     | DuplicateWire of displacementPos : XYPos
     | DeselectWire 
-    | AddWire of Symbol.Port*Symbol.Port *CreateDU   
+    | AddWire of Symbol.Port*Symbol.Port *CreateDU 
+    
     //Snap2Alignment
     | AlignBoxes of Helpers.BoundingBox 
 
     //Catalogue
     | AddSymbol of symType : CommonTypes.ComponentType * name : string
+
+    | LoadCanvas of SheetDU
 
 
 /// Make all the graphical effects go to null (*For Undo and Redo)
@@ -982,13 +985,17 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
 
         newModel,Cmd.batch[Cmd.ofMsg(UpdatePorts)] 
 
+    | LoadCanvas sheetDU -> match sheetDU with
+                            |First -> loadCanvasState model model.FirstSheet First, Cmd.none
+                            |Second -> loadCanvasState model model.SecondSheet Second, Cmd.none
+
 
     | MouseMsg mMsg ->     
         let command = 
             match mMsg.Op with 
             | Move -> 
                 let portsWithinMinRange = getPortsWithinMinRange mMsg.Pos model 90.0 All
-                [RenderPorts (portsWithinMinRange, true)] //isHoverin
+                [RenderPorts (portsWithinMinRange, true)] //isHovering
             | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y<80. && mMsg.Pos.Y>50.) ->   [(AddSymbol ((CommonTypes.ComponentType.Input 2), "I2"))]
             | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>80. && mMsg.Pos.Y<110.) ->  [(AddSymbol ((CommonTypes.ComponentType.Output 2), "O2"))]
             | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>110. && mMsg.Pos.Y<140.) -> [(AddSymbol ((CommonTypes.ComponentType.Constant (4,2)), "O2"))]
@@ -1004,7 +1011,10 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             | Down when (mMsg.Pos.X<200.  && mMsg.Pos.X>150.  && mMsg.Pos.Y>290. && mMsg.Pos.Y<320.) -> [AddSymbol ((CommonTypes.ComponentType.Xor ), "XOG2")]  
             | Down when (mMsg.Pos.X<67.  && mMsg.Pos.X>0.  && mMsg.Pos.Y>320. && mMsg.Pos.Y<350.) ->    [AddSymbol ((CommonTypes.ComponentType.Nand ), "NAG2")]   
             | Down when (mMsg.Pos.X<134.  && mMsg.Pos.X>67.  && mMsg.Pos.Y>320. && mMsg.Pos.Y<350.) ->  [AddSymbol ((CommonTypes.ComponentType.Nor ), "NOG2")]   
-            | Down when (mMsg.Pos.X<200.  && mMsg.Pos.X>134.  && mMsg.Pos.Y>320. && mMsg.Pos.Y<350.) -> [AddSymbol ((CommonTypes.ComponentType.Xnor ), "XNG2")]     
+            | Down when (mMsg.Pos.X<200.  && mMsg.Pos.X>134.  && mMsg.Pos.Y>320. && mMsg.Pos.Y<350.) -> [AddSymbol ((CommonTypes.ComponentType.Xnor ), "XNG2")]  
+            | Down when (mMsg.Pos.X<100. && mMsg.Pos.X >0.  && mMsg.Pos.Y >800. && mMsg.Pos.Y < 830.) -> [LoadCanvas First]
+            | Down when (mMsg.Pos.X<200. && mMsg.Pos.X >100.  && mMsg.Pos.Y >800. && mMsg.Pos.Y < 830.) -> [LoadCanvas Second]
+
             | Down -> 
                 isClicked model mMsg
             

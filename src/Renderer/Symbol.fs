@@ -1486,6 +1486,11 @@ let private renderCatalogue =
                     standardText 82 330 15 "Nor"
                     drawRect 134. 320. 66. 30. "white"
                     standardText 146 330 15 "Xnor"
+                    drawRect 0. 800. 100. 30. "skyblue"
+                    standardText 15 810 15 "Sheet1"
+                    drawRect 100. 800. 100. 30. "skyblue"
+                    standardText 115 810 15 "Sheet2"
+                    
                 ]          
     , "Catalogue"
     , equalsButFunctions
