@@ -1538,13 +1538,6 @@ let view (model : Model) (dispatch : Msg -> unit) =
     |> ofList
 
 
-
-
-
-
-//---------------Other interface functions--------------------//
-
-
     
 // Returns all ports of the symbol with the given Id
 let getPortOf (symModel: Model) (sId: CommonTypes.ComponentId) : Port list =
@@ -1557,10 +1550,9 @@ let getPortOf (symModel: Model) (sId: CommonTypes.ComponentId) : Port list =
 // let getBusWidthOfPortWithId () ->>> we need an interface function 
     
 
-
-
-
-/// Update the symbol with matching componentId to comp, or add a new symbol based on comp.
+///// Update the symbol with matching componentId to comp, or add a new symbol based on comp.
+//let updateSymbolModelWithComponent (symModel: Model) (comp:CommonTypes.Component) =
+//    failwithf "Not Implemented"
 
 
 // change this to get parametersOfSym
@@ -1593,14 +1585,14 @@ let getBusWidthOf (symModel: Model) (sId: CommonTypes.ComponentId) : Option<int 
 /// input wire widths, for the symbol wId. The types used here are possibly wrong, since
 /// this calculation is based on ports, and the skeleton code does not implement ports or
 /// port ids. If This is done the inputs could be expressed in terms of port Ids.
-//let calculateOutputWidth =
-  //      (wId: CommonTypes.ConnectionId) 
-    //    (outputPortNumber: int) 
-      //  (inputPortWidths: int option list) : int option 
-    //failwithf "Not implemented"
+//let calculateOutputWidth 
+//        (wId: CommonTypes.ConnectionId) 
+//        (outputPortNumber: int) 
+//        (inputPortWidths: int option list) : int option =
+//    failwithf "Not implemented"
 
 
 //----------------------interface to Issie-----------------------------//
-
+    
 
 

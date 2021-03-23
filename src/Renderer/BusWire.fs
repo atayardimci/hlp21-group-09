@@ -372,7 +372,7 @@ let view (model:Model) (dispatch: Msg -> unit)=
     g [] [(g [] wires) ; symbols; lineToCursor]
 
 
-let init n () =
+let init () =
     let symbols, cmd = Symbol.init()   
     {WX=[];Symbol=symbols; Color=CommonTypes.Red  ; Countselected = 0 ; PortToCursor = ({X = 0.0; Y= 0.0},{X = 0.0; Y= 0.0}, None)},Cmd.none 
 

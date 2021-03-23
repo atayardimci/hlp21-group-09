@@ -26,14 +26,20 @@ type Model = {
     OverallBBoxToBeRendered : Helpers.BoundingBox
     AlignmentLinesToBeRendered : Line list 
     StartDrawingPosition : XYPos option
-    UndoStates :Model list
-    RedoStates : Model list
+    UndoStates  : Model list
+    RedoStates  : Model list
+    FirstSheet  : BusWire.Model
+    SecondSheet : BusWire.Model
+    CurrentSheet : SheetDU
     }
+
+
 
 type KeyboardMsg =
     | CtrlS | AltC | AltV | AltZ | AltShiftZ | DEL |AltQ
+    | AltOne | AltTwo
     | AltW | AltA | AltS | AltD
-    | AltShiftW | AltShiftA | AltShiftS | AltShiftD
+    | AltShiftW | AltShiftA | AltShiftS | AltShiftD 
 
 type Msg =
     | Wire of BusWire.Msg
@@ -658,6 +664,41 @@ let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispat
             ]    
        ] 
 
+let init() =
+    let wModel, wMsg = BusWire.init()
+    {
+        Wire = wModel
+        Canvas = {height = CommonTypes.draw2dCanvasHeight ; width = CommonTypes.draw2dCanvasWidth; zoom = 1.00}
+        SymIdList =  []
+        HoveringPortsToBeRendered = []
+        DraggingPortsToBeRendered = []
+        IsPortDragging = false
+        IdOfPortBeingDragged = "null"
+        IsWireSelected = false
+        IsDrawingRegion = false
+        RegionToBeRendered = nullBBox
+        AlignmentLinesToBeRendered = []
+        StartDrawingPosition = None
+        SelectedWire = None
+        OnePortToBeRendered = nullPos,None
+        OverallBBoxToBeRendered = nullBBox
+        UndoStates = []
+        RedoStates = []
+        FirstSheet = wModel
+        SecondSheet = wModel
+        CurrentSheet = First
+    }, Cmd.none
+
+let loadCanvasState (model : Model) (wModel : BusWire.Model) (sheetDU: SheetDU) =
+    let newCanvas,xMsg = init()
+    match sheetDU with 
+    |First  when model.CurrentSheet = Second -> {newCanvas with Wire = wModel; SecondSheet = model.Wire ; CurrentSheet = First}
+    |Second when model.CurrentSheet = First ->  {newCanvas with Wire = wModel; FirstSheet = model.Wire  ; CurrentSheet = Second}
+    | _ -> printfn $"You're already here ! " 
+           model
+    
+
+
 
 let view (model:Model) (dispatch : Msg -> unit) =
     let wDispatch wMsg = dispatch (Wire wMsg)
@@ -948,6 +989,22 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             | Move -> 
                 let portsWithinMinRange = getPortsWithinMinRange mMsg.Pos model 90.0 All
                 [RenderPorts (portsWithinMinRange, true)] //isHoverin
+            | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y<80. && mMsg.Pos.Y>50.) ->   [(AddSymbol ((CommonTypes.ComponentType.Input 2), "I2"))]
+            | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>80. && mMsg.Pos.Y<110.) ->  [(AddSymbol ((CommonTypes.ComponentType.Output 2), "O2"))]
+            | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>110. && mMsg.Pos.Y<140.) -> [(AddSymbol ((CommonTypes.ComponentType.Constant (4,2)), "O2"))]
+            | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>140. && mMsg.Pos.Y<170.) -> [AddSymbol ((CommonTypes.ComponentType.IOLabel ), "IO2")]
+            | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>170. && mMsg.Pos.Y<200.) -> [AddSymbol ((CommonTypes.ComponentType.BusSelection (4,0) ), "B2")]
+            | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>200. && mMsg.Pos.Y<230.) -> [AddSymbol ((CommonTypes.ComponentType.BusCompare (4,0) ), "BC2")]      
+            | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>230. && mMsg.Pos.Y<260.) -> [AddSymbol ((CommonTypes.ComponentType.MergeWires ), "MW2")] 
+            | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>260. && mMsg.Pos.Y<290.) -> [AddSymbol ((CommonTypes.ComponentType.SplitWire 4 ), "SW2")]  
+
+            | Down when (mMsg.Pos.X<50.  && mMsg.Pos.X>0.  && mMsg.Pos.Y>290. && mMsg.Pos.Y<320.) ->    [AddSymbol ((CommonTypes.ComponentType.Not ), "NG2")]  
+            | Down when (mMsg.Pos.X<100.  && mMsg.Pos.X>50.  && mMsg.Pos.Y>290. && mMsg.Pos.Y<320.) ->  [AddSymbol ((CommonTypes.ComponentType.And ), "AG2")]  
+            | Down when (mMsg.Pos.X<150.  && mMsg.Pos.X>100.  && mMsg.Pos.Y>290. && mMsg.Pos.Y<320.) -> [AddSymbol ((CommonTypes.ComponentType.Or ), "OG2")]  
+            | Down when (mMsg.Pos.X<200.  && mMsg.Pos.X>150.  && mMsg.Pos.Y>290. && mMsg.Pos.Y<320.) -> [AddSymbol ((CommonTypes.ComponentType.Xor ), "XOG2")]  
+            | Down when (mMsg.Pos.X<67.  && mMsg.Pos.X>0.  && mMsg.Pos.Y>320. && mMsg.Pos.Y<350.) ->    [AddSymbol ((CommonTypes.ComponentType.Nand ), "NAG2")]   
+            | Down when (mMsg.Pos.X<134.  && mMsg.Pos.X>67.  && mMsg.Pos.Y>320. && mMsg.Pos.Y<350.) ->  [AddSymbol ((CommonTypes.ComponentType.Nor ), "NOG2")]   
+            | Down when (mMsg.Pos.X<200.  && mMsg.Pos.X>134.  && mMsg.Pos.Y>320. && mMsg.Pos.Y<350.) -> [AddSymbol ((CommonTypes.ComponentType.Xnor ), "XNG2")]     
             | Down -> 
                 isClicked model mMsg
             
@@ -986,78 +1043,43 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
 
     | Zoom msg -> {model with Canvas = msg}, Cmd.none 
     
-    | KeyPress undoRedo -> 
-        let newModel = 
-            match undoRedo with
-            | AltZ ->  let undoModel =  List.tryHead model.UndoStates
-                       printf ($"Length of this list = {model.UndoStates.Length}")
-                       match undoModel with 
-                       |Some undoModel -> {undoModel with RedoStates = storeRedoState model}
-                       |None -> model 
-            | AltShiftZ -> let redoModel =  List.tryHead model.RedoStates
-                           printf ($"Length of this list = {model.RedoStates.Length}")
-                           match redoModel with 
-                           |Some redoModel -> {redoModel with UndoStates = storeUndoState model}
-                           |None -> model 
-   
-        newModel,Cmd.none
-    | KeyPress s -> // Updates Symbol Orientation Key Pressess
-        let newSymModel,newCmd =
+    //| KeyPress s -> 
+    //    let newModel = 
+    //        match s with
+            
+
+
+                         
+    //    newModel,Cmd.none
+    | KeyPress s -> // Updates Symbol Orientation KeyPressess
+        let newModel =
             match s with 
-            | AltA -> Symbol.update (Symbol.Msg.UpdateInputOrientation Left) model.Wire.Symbol
-            | AltW -> Symbol.update (Symbol.Msg.UpdateInputOrientation Top) model.Wire.Symbol
-            | AltS -> Symbol.update (Symbol.Msg.UpdateInputOrientation Bottom) model.Wire.Symbol
-            | AltShiftW -> Symbol.update (Symbol.Msg.UpdateOutputOrientation Top) model.Wire.Symbol
-            | AltShiftS -> Symbol.update (Symbol.Msg.UpdateOutputOrientation Bottom) model.Wire.Symbol
-            | AltShiftD -> Symbol.update (Symbol.Msg.UpdateOutputOrientation Right) model.Wire.Symbol
-        
-        let newModel = {
-            model with
-                Wire = {model.Wire with Symbol = newSymModel}
-                SymIdList = []
-            }
-        newModel, Cmd.ofMsg (UpdatePorts) 
+            | AltA -> let newSymModel,newMsg = Symbol.update (Symbol.Msg.UpdateInputOrientation Left) model.Wire.Symbol
+                      {model with Wire = {model.Wire with Symbol = newSymModel}; SymIdList = []}
+            | AltW -> let newSymModel,newMsg = Symbol.update (Symbol.Msg.UpdateInputOrientation Top) model.Wire.Symbol
+                      {model with Wire = {model.Wire with Symbol = newSymModel}; SymIdList = []}
+            | AltS -> let newSymModel,newMsg =  Symbol.update (Symbol.Msg.UpdateInputOrientation Bottom) model.Wire.Symbol
+                      {model with Wire = {model.Wire with Symbol = newSymModel}; SymIdList = []}
+            | AltShiftW -> let newSymModel,newMsg =  Symbol.update (Symbol.Msg.UpdateOutputOrientation Top) model.Wire.Symbol
+                           {model with Wire = {model.Wire with Symbol = newSymModel}; SymIdList = []}
+            | AltShiftS -> let newSymModel,newMsg =  Symbol.update (Symbol.Msg.UpdateOutputOrientation Bottom) model.Wire.Symbol
+                           {model with Wire = {model.Wire with Symbol = newSymModel}; SymIdList = []}
+            | AltShiftD -> let newSymModel,newMsg =  Symbol.update (Symbol.Msg.UpdateOutputOrientation Right) model.Wire.Symbol
+                           {model with Wire = {model.Wire with Symbol = newSymModel}; SymIdList = []}
+            | AltZ ->  
+                    let undoModel =  List.tryHead model.UndoStates
+                    printf ($"Length of this list = {model.UndoStates.Length}")
+                    match undoModel with 
+                    |Some undoModel -> {undoModel with RedoStates = storeRedoState model}
+                    |None -> model 
+            | AltShiftZ -> 
+                    let redoModel =  List.tryHead model.RedoStates
+                    printf ($"Length of this list = {model.RedoStates.Length}")
+                    match redoModel with 
+                    |Some redoModel -> {redoModel with UndoStates = storeUndoState model}
+                    |None -> model 
+            | AltOne  -> loadCanvasState model model.FirstSheet First
 
-
-let init() = 
-    let wModel,cmdw = (BusWire.init 0)()
-    {
-        Wire = wModel
-        Canvas = {height = CommonTypes.draw2dCanvasHeight ; width = CommonTypes.draw2dCanvasWidth; zoom = 1.00}
-        SymIdList =  []
-        HoveringPortsToBeRendered = []
-        DraggingPortsToBeRendered = []
-        IsPortDragging = false
-        IdOfPortBeingDragged = "null"
-        IsWireSelected = false
-        IsDrawingRegion = false
-        RegionToBeRendered = nullBBox
-        AlignmentLinesToBeRendered = []
-        StartDrawingPosition = None
-        SelectedWire = None
-        OnePortToBeRendered = nullPos,None
-        OverallBBoxToBeRendered = nullBBox
-        UndoStates = []
-        RedoStates = []
-    }, Cmd.map Wire cmdw
-
-
-
-
-    /////Clicking order : Catalogue -> Ports -> Wire -> Symbol     
-    //| Down when (mMsg.Pos.X<200. && mMsg.Pos.Y<80. && mMsg.Pos.Y>50.) ->   [(AddSymbol ((CommonTypes.ComponentType.Input 2), "I2"))]
-    //| Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>80. && mMsg.Pos.Y<110.) ->  [(AddSymbol ((CommonTypes.ComponentType.Output 2), "O2"))]
-    //| Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>110. && mMsg.Pos.Y<140.) -> [(AddSymbol ((CommonTypes.ComponentType.Constant (4,2)), "O2"))]
-    //| Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>140. && mMsg.Pos.Y<170.) -> [AddSymbol ((CommonTypes.ComponentType.IOLabel ), "IO2")]
-    //| Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>170. && mMsg.Pos.Y<200.) -> [AddSymbol ((CommonTypes.ComponentType.BusSelection (4,0) ), "B2")]
-    //| Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>200. && mMsg.Pos.Y<230.) -> [AddSymbol ((CommonTypes.ComponentType.BusCompare (4,0) ), "BC2")]      
-    //| Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>230. && mMsg.Pos.Y<260.) -> [AddSymbol ((CommonTypes.ComponentType.MergeWires ), "MW2")] 
-    //| Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>260. && mMsg.Pos.Y<290.) -> [AddSymbol ((CommonTypes.ComponentType.SplitWire 4 ), "SW2")]  
-
-    //| Down when (mMsg.Pos.X<50.  && mMsg.Pos.X>0.  && mMsg.Pos.Y>290. && mMsg.Pos.Y<320.) ->    [AddSymbol ((CommonTypes.ComponentType.Not ), "NG2")]  
-    //| Down when (mMsg.Pos.X<100.  && mMsg.Pos.X>50.  && mMsg.Pos.Y>290. && mMsg.Pos.Y<320.) ->  [AddSymbol ((CommonTypes.ComponentType.And ), "AG2")]  
-    //| Down when (mMsg.Pos.X<150.  && mMsg.Pos.X>100.  && mMsg.Pos.Y>290. && mMsg.Pos.Y<320.) -> [AddSymbol ((CommonTypes.ComponentType.Or ), "OG2")]  
-    //| Down when (mMsg.Pos.X<200.  && mMsg.Pos.X>150.  && mMsg.Pos.Y>290. && mMsg.Pos.Y<320.) -> [AddSymbol ((CommonTypes.ComponentType.Xor ), "XOG2")]  
-    //| Down when (mMsg.Pos.X<67.  && mMsg.Pos.X>0.  && mMsg.Pos.Y>320. && mMsg.Pos.Y<350.) ->    [AddSymbol ((CommonTypes.ComponentType.Nand ), "NAG2")]   
-    //| Down when (mMsg.Pos.X<134.  && mMsg.Pos.X>67.  && mMsg.Pos.Y>320. && mMsg.Pos.Y<350.) ->  [AddSymbol ((CommonTypes.ComponentType.Nor ), "NOG2")]   
-    //| Down when (mMsg.Pos.X<200.  && mMsg.Pos.X>134.  && mMsg.Pos.Y>320. && mMsg.Pos.Y<350.) -> [AddSymbol ((CommonTypes.ComponentType.Xnor ), "XNG2")]        
+            | AltTwo  -> loadCanvasState model model.SecondSheet Second
+   
+        newModel, Cmd.ofMsg (UpdatePorts)    
