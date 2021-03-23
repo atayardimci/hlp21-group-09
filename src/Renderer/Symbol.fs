@@ -768,12 +768,12 @@ let getPortsOf (symModel: Model) (sId: CommonTypes.ComponentId) : Port list =
     sym.InputPorts @ sym.OutputPorts
 
     
-
 let getOrientationOfPort (symModel: Model) (port:Port) : PortOrientation = 
     match getSymbolWithId symModel port.HostId with
-    | Some sym -> if port.PortType = CommonTypes.PortType.Input then sym.InputOrientation else sym.OutputOrientation
+    | Some sym -> if (sym.Type=CommonTypes.Mux2 && port.PortNumber=Some 2) then Bottom
+                  else if (sym.Type=CommonTypes.Demux2 && port.PortNumber=Some 2) then Bottom
+                  else if port.PortType = CommonTypes.PortType.Input then sym.InputOrientation else sym.OutputOrientation
     | _ -> failwithf "The hosting symbol of the given port is not found"
-
 
 
 /// Update the symbol with matching componentId to comp, or add a new symbol based on comp.
@@ -1544,28 +1544,7 @@ let view (model : Model) (dispatch : Msg -> unit) =
 
 //---------------Other interface functions--------------------//
 
-let symbolPos (symModel: Model) (sId: CommonTypes.ComponentId) : XYPos = 
-    List.find (fun sym -> sym.Id = sId) symModel
-    |> (fun sym -> sym.Pos)
 
-/// Returns the symbol with given Id
-let getSymbolWithId (symModel: Model) (sId: CommonTypes.ComponentId) : Symbol option =
-    List.tryFind (fun sym -> sym.Id = sId) symModel 
-
-
-// Returns all Ports of all symbols in the model
-let getAllPorts (symModel: Model) : Port List =
-    symModel
-    |> List.collect (fun sym -> sym.InputPorts @ sym.OutputPorts)
-
-// Returns the bounding box of the symbol with the given Id
-let getBoundingBoxOf (symModel: Model) (sId: CommonTypes.ComponentId) : BoundingBox =
-    let sym = 
-        match (getSymbolWithId symModel sId) with
-        | Some sym -> sym
-        | None -> failwithf "Symbol with given Id not found"
-    
-    sym.BBox
     
 // Returns all ports of the symbol with the given Id
 let getPortOf (symModel: Model) (sId: CommonTypes.ComponentId) : Port list =
@@ -1578,18 +1557,10 @@ let getPortOf (symModel: Model) (sId: CommonTypes.ComponentId) : Port list =
 // let getBusWidthOfPortWithId () ->>> we need an interface function 
     
 
-let getOrientationOfPort (symModel: Model) (port:Port) : PortOrientation = 
-    match getSymbolWithId symModel port.HostId with
-    | Some sym -> if (sym.Type=CommonTypes.Mux2 && port.PortNumber=Some 2) then Bottom
-                  else if (sym.Type=CommonTypes.Demux2 && port.PortNumber=Some 2) then Bottom
-                  else if port.PortType = CommonTypes.PortType.Input then sym.InputOrientation else sym.OutputOrientation
-    | _ -> failwithf "The hosting symbol of the given port is not found"
 
 
 
 /// Update the symbol with matching componentId to comp, or add a new symbol based on comp.
-let updateSymbolModelWithComponent (symModel: Model) (comp:CommonTypes.Component) =
-    failwithf "Not Implemented"
 
 
 // change this to get parametersOfSym
@@ -1622,49 +1593,14 @@ let getBusWidthOf (symModel: Model) (sId: CommonTypes.ComponentId) : Option<int 
 /// input wire widths, for the symbol wId. The types used here are possibly wrong, since
 /// this calculation is based on ports, and the skeleton code does not implement ports or
 /// port ids. If This is done the inputs could be expressed in terms of port Ids.
-let calculateOutputWidth 
-        (wId: CommonTypes.ConnectionId) 
-        (outputPortNumber: int) 
-        (inputPortWidths: int option list) : int option =
-    failwithf "Not implemented"
+//let calculateOutputWidth =
+  //      (wId: CommonTypes.ConnectionId) 
+    //    (outputPortNumber: int) 
+      //  (inputPortWidths: int option list) : int option 
+    //failwithf "Not implemented"
 
 
 //----------------------interface to Issie-----------------------------//
-let extractComponent 
-        (symModel: Model) 
-        (sId:CommonTypes.ComponentId) : CommonTypes.Component= 
-    failwithf "Not implemented"
 
-let extractComponents (symModel: Model) : CommonTypes.Component list = 
-    failwithf "Not implemented"
-
-let createSymbolFromComponent (comp:CommonTypes.Component) (pos:XYPos) : Symbol =
-    let h, w = getHeightWidthOf comp.Type
-    let hostId = CommonTypes.ComponentId comp.Id
-    let inputPortsPosList, outputPortsPosList = getPortPositions comp.Type pos
-    let inputPorts, outputPorts = getPorts comp.Type hostId inputPortsPosList outputPortsPosList
-    {
-        Id = hostId 
-        Type = comp.Type
-        Label = comp.Label
-
-        InputPorts = inputPorts
-        OutputPorts = outputPorts
-
-        InputOrientation = Left
-        OutputOrientation = Right
-
-        Pos = pos
-        LastDragPos = {X=0. ; Y=0.} // initial value can always be this
-        IsDragging = false // initial value can always be this
-        IsSelected = false
-        HasError = []
-        NumberOfConnections = 0
-
-
-        H = h
-        W = w
-        BBox = calculateBoundingBox h w pos
-    }
 
 
