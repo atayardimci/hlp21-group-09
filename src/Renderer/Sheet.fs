@@ -342,11 +342,10 @@ let duplicateComponent (model : Model) =
         ||> List.fold (fun m tuple -> 
                 match tuple  with
                 | (Some sourcePort , Some targetPort, _) -> 
-                                    let newBusModel = fst (BusWire.update (BusWire.AddWire (sourcePort,targetPort,Duplicate)) m.Wire)
-                                                  
-                                    {m with 
-                                        Wire = newBusModel
-                                    } 
+                    let newBusModel = fst (BusWire.update (BusWire.AddWire (sourcePort,targetPort,Duplicate)) m.Wire)   
+                    {m with 
+                        Wire = newBusModel
+                    } 
                 | _ , _ , _-> m
         )
     newModel
@@ -838,9 +837,9 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         }
         , Cmd.none
 
-    | AddWire (startPort,endPort,createDU) -> 
+    | AddWire (startPort, endPort, createDU) -> 
         let newBusModel, newCmd = 
-            BusWire.update (BusWire.Msg.AddWire (startPort,endPort,createDU)) model.Wire
+            BusWire.update (BusWire.Msg.AddWire (startPort, endPort, createDU)) model.Wire
         {model with
             Wire = newBusModel
             UndoStates = storeUndoState (nullRender model)
