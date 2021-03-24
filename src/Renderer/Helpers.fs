@@ -66,7 +66,7 @@ type PortDU =
 
 type CreateDU =
     | Init      //initialized
-    | Duplicate // duplicated
+    | Duplicated // duplicated
 
 type ChangeDU = 
     | Increment
