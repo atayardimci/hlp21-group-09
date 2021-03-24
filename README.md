@@ -1,10 +1,38 @@
 # HLP21 GROUP 9 
-// start tonight //
-This repo includes the skeleton code we were provided in the commencement of the project. 
+
+This markdown file contains a summary of all the features implemented in the group stage of our project, this is divided into Symbol, Buswire and Sheet features.
 
 Our interface documentation can be found under ./docs directory. A document is included for each of the three modules, that is Symbol, BusWire, and Sheet.
 
+Symbol Features: 
+# 27/27 issie symbols implemented
+# buswidth inference -> explain here 
+# symbol creation -> symbol or sheet 
+# 
+#
+#
+#
+#
+#
+#
 
+Sheet features:
+# symbol deletion
+# symbol drag and drop on canvas
+# undo
+# zoom -> zoom in and zoom out
+# highlight elements on canvas
+# bounding box -> symbol or sheet ?
+#
+
+Buswire features
+#
+#
+#
+#
+#
+#
+#
 # SVG Draw Application Project Skeleton Code For HLP Project 2021
 
 See [The SVG Demo README](https://github.com/tomcl/hlp21-svg-elmish-demo/blob/master/README.md) for 
