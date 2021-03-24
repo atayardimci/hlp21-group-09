@@ -28,7 +28,7 @@ type Model = {
     StartDrawingPosition : XYPos option
     UndoStates  : Model list
     RedoStates  : Model list
-    CopyState   : (Symbol.Symbol list * BusWire.Wire list)
+    CopyState   : (Symbol.Symbol list option * BusWire.Wire list option)
     FirstSheet  : BusWire.Model
     SecondSheet : BusWire.Model
     CurrentSheet : SheetDU
@@ -316,48 +316,12 @@ let tryFindPortByPortId (id : string) (ports : Symbol.Port list) : Symbol.Port o
 
 // ------------------------------------ UPDATE FUNCTINOS ------------------------------------- //
 ///returns a new Sheet.Model that has it's selected components duplicated upon ALT+C keypress
-let duplicateComponent (model : Model) =
-    
+let copyComponentAndConnections (model : Model) =
     let symbolsToBeDup = Symbol.getSelectedSymbols(model.Wire.Symbol) //duplicate symbol
-    let dupSymbol = Symbol.duplicateSymbol (symbolsToBeDup)
-    let newSymModel =        
-        model.Wire.Symbol
-        |> List.map (fun sym -> {sym with IsSelected = false})
-        |> List.append (snd dupSymbol)
-    let displacementPos = fst dupSymbol
-    let overallBBox =  Symbol.getOverallBBox newSymModel
-
-
-    let tmpModel =          //Sym duplicated model
-        { model with 
-            Wire = {model.Wire with Symbol = newSymModel}
-            OverallBBoxToBeRendered = overallBBox
-        }
-
     let selectedWireList =   // Duplicate Wire
-        BusWire.getSelectedWireList tmpModel.Wire.WX
-    let portList = Symbol.getAllPorts (tmpModel.Wire.Symbol)
-    let dupWireList = BusWire.getWiresToBeDuplicated displacementPos selectedWireList portList
-    
-    let copyWireList = dupWireList
-                       |>List.unzip3
-                       |>(fun (p1,p2,wireList) -> wireList )
-    let copySymWire = snd dupSymbol,copyWireList
-
-    let newtmpModel = {tmpModel with Wire ={tmpModel.Wire with WX =  BusWire.deselectWire tmpModel.Wire.WX}}
-    let newModel =          //Wire duplicated model
-        (newtmpModel,dupWireList)
-        ||> List.fold (fun m tuple -> 
-                match tuple  with
-                | (Some sourcePort , Some targetPort, _) -> 
-                                    let newBusModel = fst (BusWire.update (BusWire.AddWire (sourcePort,targetPort,Duplicate)) m.Wire)
-                                                  
-                                    {m with 
-                                        Wire = newBusModel
-                                    } 
-                | _ , _ , _-> m
-        )
-    newModel
+        BusWire.getSelectedWireList model.Wire.WX
+    let copySymWire = Some symbolsToBeDup,Some selectedWireList                
+    {model with CopyState = copySymWire}
 
 /// Returns a Msg to do depending on what is Clicked ? 
 let isClicked (model : Model) (mMsg : MouseT)  =
@@ -413,8 +377,8 @@ let getPortsWithinMinRange (mousePos : XYPos ) (model : Model) (minDist : float)
     let portsWithinMinRange = List.map (filterPortsMatchingHostId portList portDU) symbolsWithinMinRange
 
     portsWithinMinRange
-/// Handles portDragging
-let portDragging (model : Model) (mousePos : XYPos) =
+/// Handles dragging of Port
+let draggingPort (model : Model) (mousePos : XYPos) =
     
     let portList = Symbol.getAllPorts (model.Wire.Symbol)
     let draggedPort = tryFindPortByPortId model.IdOfPortBeingDragged portList
@@ -620,12 +584,12 @@ let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispat
     let mouseOp op (ev:Types.MouseEvent) (scrollPos : (float*float)) = 
         dispatch <| MouseMsg { Op = op ; 
                                Pos = { X = (ev.clientX  + (fst scrollPos))/ (model.Canvas.zoom) ;
-                                       Y = ( ev.clientY + (snd scrollPos))/ (model.Canvas.zoom)
+                                       Y = (ev.clientY +  (snd scrollPos))/ (model.Canvas.zoom)
                                      }
                               }
 
     let wheelOp op (ev:Types.WheelEvent) =   
-        let newZoom = model.Canvas.zoom - (model.Canvas.zoom*ev.deltaY*0.0007)
+        let newZoom = model.Canvas.zoom - (model.Canvas.zoom*ev.deltaY*0.0010)
         dispatch <| Zoom  {model.Canvas with zoom = newZoom;}
 
 
@@ -695,6 +659,7 @@ let init() =
         OverallBBoxToBeRendered = nullBBox
         UndoStates = []
         RedoStates = []
+        CopyState = None, None
         FirstSheet = wModel
         SecondSheet = wModel
         CurrentSheet = First
@@ -745,12 +710,47 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         newModel2, Cmd.batch [Cmd.ofMsg (RenderPorts ([],true))]
     
     ///Duplication : Duplicate Symbols first then duplicate Wires.
-    | KeyPress AltC  ->  
-        let newModel = duplicateComponent model
+    | Duplicate ->  
+        let newModel = copyComponentAndConnections model
 
         {newModel with 
                 UndoStates = storeUndoState (nullRender model)
-        }, Cmd.ofMsg(UpdatePorts)
+        },Cmd.ofMsg (UpdatePorts)
+
+    |Paste -> 
+        let cSymList,cWireList =
+           match (model.CopyState) with 
+           |Some symLst,Some wireLst  -> symLst, wireLst
+           |Some symLst, _ -> symLst, []
+           |None , Some wireLst -> [], wireLst
+           |None , None -> [] , []
+
+        let dupSymbol = Symbol.duplicateSymbol cSymList
+        let newSymModel =        
+            model.Wire.Symbol
+            |> List.map (fun sym -> {sym with IsSelected = false})
+            |> List.append (snd dupSymbol)
+        let displacementPos = fst dupSymbol
+        let overallBBox =  Symbol.getOverallBBox newSymModel
+
+        let tmpModel =          //Sym duplicated model
+            { model with 
+                Wire = {model.Wire with Symbol = newSymModel}
+                OverallBBoxToBeRendered = overallBBox
+            }
+
+        let portList = Symbol.getAllPorts (tmpModel.Wire.Symbol)
+        let dupWireList = BusWire.getWiresToBeDuplicated displacementPos cWireList portList
+        let newModel =          //Wire duplicated model
+            (tmpModel,dupWireList)
+            ||> List.fold (fun m tuple -> 
+                    match tuple  with
+                    | (Some sourcePort , Some targetPort, _) -> 
+                            let newBusModel = fst (BusWire.update (BusWire.AddWire (sourcePort,targetPort,Duplicated)) m.Wire)
+                            {m with Wire = newBusModel}
+                    | _ , _ , _-> m
+            )
+        newModel,Cmd.none
 
     | RenderPorts (floatPortListTuple,isHovering) -> 
         match model.SymIdList with
@@ -769,7 +769,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
 
 
     | DraggingPort (mousePos) -> 
-        let msgs = portDragging model mousePos
+        let msgs = draggingPort model mousePos
 
         model, Cmd.batch msgs
 
@@ -1061,43 +1061,39 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
 
     | Zoom msg -> {model with Canvas = msg}, Cmd.none 
     
-    //| KeyPress s -> 
-    //    let newModel = 
-    //        match s with
-            
-
-
-                         
-    //    newModel,Cmd.none
     | KeyPress s -> // Updates Symbol Orientation KeyPressess
-        let newModel =
+        let newModel,newMsg =
             match s with 
-            | AltA -> let newSymModel,newMsg = Symbol.update (Symbol.Msg.UpdateInputOrientation Left) model.Wire.Symbol
-                      {model with Wire = {model.Wire with Symbol = newSymModel}; SymIdList = []}
-            | AltW -> let newSymModel,newMsg = Symbol.update (Symbol.Msg.UpdateInputOrientation Top) model.Wire.Symbol
-                      {model with Wire = {model.Wire with Symbol = newSymModel}; SymIdList = []}
-            | AltS -> let newSymModel,newMsg =  Symbol.update (Symbol.Msg.UpdateInputOrientation Bottom) model.Wire.Symbol
-                      {model with Wire = {model.Wire with Symbol = newSymModel}; SymIdList = []}
+            | AltA ->      let newSymModel,newMsg = Symbol.update (Symbol.Msg.UpdateInputOrientation Left) model.Wire.Symbol
+                           updateModelWithSym model newSymModel, Cmd.none
+            | AltW ->      let newSymModel,newMsg = Symbol.update (Symbol.Msg.UpdateInputOrientation Top) model.Wire.Symbol
+                           updateModelWithSym model newSymModel, Cmd.none
+            | AltS ->      let newSymModel,newMsg =  Symbol.update (Symbol.Msg.UpdateInputOrientation Bottom) model.Wire.Symbol
+                           updateModelWithSym model newSymModel, Cmd.none
             | AltShiftW -> let newSymModel,newMsg =  Symbol.update (Symbol.Msg.UpdateOutputOrientation Top) model.Wire.Symbol
-                           {model with Wire = {model.Wire with Symbol = newSymModel}; SymIdList = []}
+                           updateModelWithSym model newSymModel, Cmd.none
             | AltShiftS -> let newSymModel,newMsg =  Symbol.update (Symbol.Msg.UpdateOutputOrientation Bottom) model.Wire.Symbol
-                           {model with Wire = {model.Wire with Symbol = newSymModel}; SymIdList = []}
+                           updateModelWithSym model newSymModel, Cmd.none
             | AltShiftD -> let newSymModel,newMsg =  Symbol.update (Symbol.Msg.UpdateOutputOrientation Right) model.Wire.Symbol
-                           {model with Wire = {model.Wire with Symbol = newSymModel}; SymIdList = []}
-            | AltZ ->  
+                           updateModelWithSym model newSymModel, Cmd.none
+            | AltZ ->      
                     let undoModel =  List.tryHead model.UndoStates
                     printf ($"Length of this list = {model.UndoStates.Length}")
                     match undoModel with 
-                    |Some undoModel -> {undoModel with RedoStates = storeRedoState model}
-                    |None -> model 
+                    |Some undoModel -> {undoModel with RedoStates = storeRedoState model},Cmd.none
+                    |None -> model,Cmd.none
             | AltShiftZ -> 
                     let redoModel =  List.tryHead model.RedoStates
                     printf ($"Length of this list = {model.RedoStates.Length}")
                     match redoModel with 
-                    |Some redoModel -> {redoModel with UndoStates = storeUndoState model}
-                    |None -> model 
-            | AltOne  -> loadCanvasState model model.FirstSheet First
+                    |Some redoModel -> {redoModel with UndoStates = storeUndoState model},Cmd.none
+                    |None -> model,Cmd.none 
+            | AltOne  -> loadCanvasState model model.FirstSheet First, Cmd.none
 
-            | AltTwo  -> loadCanvasState model model.SecondSheet Second
-   
-        newModel, Cmd.ofMsg (UpdatePorts)    
+            | AltTwo  -> loadCanvasState model model.SecondSheet Second,Cmd.none
+
+            | AltC -> model,Cmd.ofMsg (Duplicate)
+
+            | AltV -> model,Cmd.ofMsg (Paste)
+        newModel,Cmd.batch [newMsg ; Cmd.ofMsg (UpdatePorts)]
+        

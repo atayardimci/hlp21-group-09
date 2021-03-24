@@ -565,8 +565,8 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         | Some newWire, symModel -> 
             let newSymModel  =
                 symModel
-                |> List.map (fun sym -> if sym.Id = startPort.HostId then Symbol.changeNumOfConnections Increment startPort.Id sym  else sym)
-                |> List.map (fun sym -> if sym.Id = endPort.HostId   then Symbol.changeNumOfConnections Increment endPort.Id   sym  else sym)
+                |> List.map (fun sym -> if sym.Id = startPort.HostId then Symbol.changeNumOfConnections startPort  sym Increment  else sym)
+                |> List.map (fun sym -> if sym.Id = endPort.HostId   then Symbol.changeNumOfConnections endPort  sym Increment  else sym)
             {model with WX = newWire :: model.WX ; Symbol = newSymModel} , Cmd.none
         | None , symModel -> model,Cmd.none
     
