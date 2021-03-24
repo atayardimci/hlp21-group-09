@@ -441,7 +441,7 @@ let addWire (startPortTmp : Symbol.Port) (endPortTmp : Symbol.Port) (createDU : 
     let duplicate =      
         match createDU with 
         | Init -> false
-        | Duplicate -> true
+        | Duplicated-> true
 
     let startPort = {startPortTmp with NumOfConnections = startPortTmp.NumOfConnections + 1}
     let endPort   = {endPortTmp   with NumOfConnections = endPortTmp.NumOfConnections   + 1}
@@ -600,10 +600,10 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             let wireRender,wireDelete =
                 model.WX
                 |>List.partition (fun w -> w.isSelected = false)
-            let wireRender2,wireDelete2 = 
+            let wireRender2,wireDelete2 =  //when a symbol is deleted remove wire as well
                 wireRender
                 |>List.partition (fun w -> (Symbol.getSymbolWithId (model.Symbol) (w.SourcePort.HostId)) <> None) 
-            let wireRender3,wireDelete3 =
+            let wireRender3,wireDelete3 =  //when a symbol is deleted remove wire as well
                 wireRender2                              
                 |>List.partition (fun w -> (Symbol.getSymbolWithId (model.Symbol) (w.TargetPort.HostId)) <> None) // when symbol is deleted, delete wire as well 
             let tmpRender = wireRender3 

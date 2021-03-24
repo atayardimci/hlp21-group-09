@@ -505,10 +505,11 @@ let createNewSymbol (sType:CommonTypes.ComponentType) (name:string) (pos:XYPos) 
         BBox = calculateBoundingBox h w pos
     }
 
-let duplicateSymbol (symList : Symbol list) : XYPos*Symbol list = 
+let duplicateSymbol (symList : Symbol list) : Symbol list*XYPos = 
     let overallBBox = getOverallBBox (symList)
     let maxY,minY = overallBBox.BottomRight.Y,overallBBox.TopLeft.Y
-    let posDisplacement = {X = 0.0; Y = maxY - minY + 50.0}
+    let maxX,minX = overallBBox.BottomRight.X,overallBBox.TopLeft.X
+    let posDisplacement = {X = (maxX-minX)/4.0; Y = (maxY - minY)/4.0 + 25.0}
     
     let dupList = 
         symList
@@ -518,7 +519,7 @@ let duplicateSymbol (symList : Symbol list) : XYPos*Symbol list =
             // {newSym with HasError = sym.HasError}
         |> List.map (fun sym -> {sym with IsSelected = true})
         
-    posDisplacement, dupList
+    dupList, posDisplacement
                            
 let insertSymbol symType name  =
     createNewSymbol (symType) name {X = float (10*64+30); Y=float (1*64+30)} 

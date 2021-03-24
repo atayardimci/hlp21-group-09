@@ -75,7 +75,7 @@ type Msg =
     | StartDraggingWire of CommonTypes.ConnectionId*XYPos
     | DraggingWire of CommonTypes.ConnectionId option *XYPos
     | EndDraggingWire of CommonTypes.ConnectionId
-    | DuplicateWire of displacementPos : XYPos
+    //| Copy of displacementPos : XYPos
     | DeselectWire 
     | AddWire of Symbol.Port*Symbol.Port *CreateDU 
     
@@ -86,7 +86,7 @@ type Msg =
     | AddSymbol of symType : CommonTypes.ComponentType * name : string
 
     | LoadCanvas of SheetDU
-    | Duplicate
+    | Copy
     | Paste 
 
 
@@ -215,13 +215,13 @@ let updateModelWithSym (model : Model) (symModel : Symbol.Model) =
     {model with Wire = {model.Wire with Symbol = symModel}; }
 
 let storeUndoState (model : Model) : Model list = 
-    if (model.UndoStates.Length >= 20) then 
+    if (model.UndoStates.Length >= 30) then 
         model :: List.take 15 model.UndoStates
     else 
         model :: model.UndoStates 
 
 let storeRedoState (model : Model) : Model list = 
-    if (model.UndoStates.Length >= 20) then 
+    if (model.UndoStates.Length >= 30) then 
         model :: List.take 15 model.UndoStates
     else 
         model :: model.UndoStates 
@@ -668,8 +668,10 @@ let init() =
 let loadCanvasState (model : Model) (wModel : BusWire.Model) (sheetDU: SheetDU) =
     let newCanvas,xMsg = init()
     match sheetDU with 
-    |First  when model.CurrentSheet = Second -> {newCanvas with Wire = wModel; SecondSheet = model.Wire ; CurrentSheet = First}
-    |Second when model.CurrentSheet = First ->  {newCanvas with Wire = wModel; FirstSheet = model.Wire  ; CurrentSheet = Second}
+    |First  when model.CurrentSheet = Second -> 
+                {newCanvas with Wire = wModel; SecondSheet = model.Wire ; CurrentSheet = First ; CopyState = model.CopyState}
+    |Second when model.CurrentSheet = First ->  
+                {newCanvas with Wire = wModel; FirstSheet = model.Wire  ; CurrentSheet = Second ; CopyState = model.CopyState}
     | _ -> printfn $"You're already here ! " 
            model
     
@@ -710,14 +712,14 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         newModel2, Cmd.batch [Cmd.ofMsg (RenderPorts ([],true))]
     
     ///Duplication : Duplicate Symbols first then duplicate Wires.
-    | Duplicate ->  
+    | Copy ->  
         let newModel = copyComponentAndConnections model
 
         {newModel with 
                 UndoStates = storeUndoState (nullRender model)
         },Cmd.ofMsg (UpdatePorts)
 
-    |Paste -> 
+    | Paste -> 
         let cSymList,cWireList =
            match (model.CopyState) with 
            |Some symLst,Some wireLst  -> symLst, wireLst
@@ -729,8 +731,8 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         let newSymModel =        
             model.Wire.Symbol
             |> List.map (fun sym -> {sym with IsSelected = false})
-            |> List.append (snd dupSymbol)
-        let displacementPos = fst dupSymbol
+            |> (fun lst -> fst dupSymbol @ lst )
+        let displacementPos = snd dupSymbol
         let overallBBox =  Symbol.getOverallBBox newSymModel
 
         let tmpModel =          //Sym duplicated model
@@ -766,7 +768,6 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             IsPortDragging = true 
             IdOfPortBeingDragged = startPort.Id
         }, Cmd.none
-
 
     | DraggingPort (mousePos) -> 
         let msgs = draggingPort model mousePos
@@ -953,11 +954,11 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
     | AlignBoxes bbox -> 
         let flineList = model.Wire.Symbol
                        |>isSymAligned bbox 
-        let firstDiff = flineList             //this calculates the diff in distance from overall bbox to the edges you want to align to.
+        let firstDiff = flineList                                                         //this calculates the diff in distance from overall bbox to the edges you want to align to.
                         |>List.tryFind (fun (diffPos,line) -> diffPos <> nullPos)  
         let newSym,newOverallBBox = 
             match firstDiff with 
-            |Some (diffPos,line) -> shiftSelectedSymbols model.Wire.Symbol diffPos, {//SNAPS2GRID
+            |Some (diffPos,line) -> shiftSelectedSymbols model.Wire.Symbol diffPos, {     //SNAPS2OTHERSYMBOL
                                     TopLeft = (posAdd model.OverallBBoxToBeRendered.TopLeft diffPos ) ;
                                     BottomRight = (posAdd model.OverallBBoxToBeRendered.BottomRight diffPos);
                                  }
@@ -1092,7 +1093,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
 
             | AltTwo  -> loadCanvasState model model.SecondSheet Second,Cmd.none
 
-            | AltC -> model,Cmd.ofMsg (Duplicate)
+            | AltC -> model,Cmd.ofMsg (Copy)
 
             | AltV -> model,Cmd.ofMsg (Paste)
         newModel,Cmd.batch [newMsg ; Cmd.ofMsg (UpdatePorts)]
