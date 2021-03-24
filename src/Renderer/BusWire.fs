@@ -382,8 +382,8 @@ let createWire (startPort: Symbol.Port) (endPort: Symbol.Port) (*(createDU : Cre
         Id = CommonTypes.ConnectionId (uuid())
         SourcePort = startPort
         TargetPort = endPort
-        isSelected = false //if (createDU = Duplicate || createDU = DuplicateError) then true else false
-        hasError =  false // if (createDU = Error || createDU = DuplicateError) then true else false
+        isSelected = false 
+        hasError =  false 
         relativPositions = [{X=0.0 ; Y=0.0} ; origin ; origin]
         PrevPositions = [origin ; origin ; origin]
         BeingDragged = -1
@@ -410,7 +410,7 @@ let addWire (startPort : Symbol.Port) (endPort : Symbol.Port) (createDU : Create
     let duplicate =      
         match createDU with 
         | Init -> false
-        | Duplicate -> true
+        | Duplicated -> true
     
     let newWire,newSym = 
         match startPort, startPort.BusWidth, endPort, endPort.BusWidth with 
