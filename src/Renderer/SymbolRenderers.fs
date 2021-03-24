@@ -232,6 +232,8 @@ let private renderIOLabel =
     FunctionComponent.Of(
         fun (props : RenderSymbolProps) ->
             let fX, fY = props.Symbol.Pos.X, props.Symbol.Pos.Y
+            printfn $"props.Symbol.NumOfConnections = {props.Symbol.NumOfConnections}"
+
             g   [ ] 
                 [
                     polygon [ 
@@ -362,12 +364,18 @@ let private renderMergeWires =
             let fX, fY = props.Symbol.Pos.X, props.Symbol.Pos.Y
             let h, w = props.Symbol.H, props.Symbol.W
             
-            let topWidth, bottomWidth = 1, 1 // will be infered from ports
+            let topWidth, bottomWidth = // wil
+                match props.Symbol.InputPorts.[0].BusWidth, props.Symbol.InputPorts.[1].BusWidth with
+                | Some w1, Some w2 -> w1, w2
+                | Some w1, None    -> w1, 1
+                | None   , Some w2 -> 1 , w2
+                | _ -> 1, 1
 
             let opacity = if props.Symbol.IsDragging then 0.4 else 1.
             let topStyle = if topWidth > 1 then busWireStyle opacity else wireStyle opacity
             let bottomStyle = if bottomWidth > 1 then busWireStyle opacity else wireStyle opacity
 
+            printfn $"props.Symbol.NumOfConnections = {props.Symbol.NumOfConnections}"
             g   [ ] 
                 [
                     line [ X1 fX; Y1 fY; X2 (fX+w/2.); Y2 fY; topStyle] []
@@ -390,10 +398,12 @@ let private renderSplitWire =
             let fX, fY = props.Symbol.Pos.X, props.Symbol.Pos.Y
             let h, w = props.Symbol.H, props.Symbol.W
             
-            let topWidth, bottomWidth = // will be infered from ports
-                match props.Symbol.Type with 
-                | CommonTypes.ComponentType.SplitWire w -> w, 1
-                | _ -> failwithf "Shouldn't happen"
+            let topWidth, bottomWidth = // wil
+                match props.Symbol.OutputPorts.[0].BusWidth, props.Symbol.OutputPorts.[1].BusWidth with
+                | Some w1, Some w2 -> w1, w2
+                | Some w1, None    -> w1, 1
+                | _ -> failwithf "Something wrong with SplitWire"
+
 
             let opacity = if props.Symbol.IsDragging then 0.4 else 1.
             let topStyle = if topWidth > 1 then busWireStyle opacity else wireStyle opacity

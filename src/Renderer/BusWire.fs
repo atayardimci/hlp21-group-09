@@ -387,8 +387,8 @@ let view (model:Model) (dispatch: Msg -> unit)=
                 SrcP = w.SourcePort.Pos 
                 TgtP = w.TargetPort.Pos
                 ColorP = model.Color.Text()
-                StrokeWidthP = if w.hasError then "2px" 
-                               else if w.BusWidth > 1 then "2px"
+                StrokeWidthP = if w.hasError then "3px" 
+                               else if w.BusWidth > 1 then "3px"
                                else "1px"
                 SrcOrient = Symbol.getOrientationOfPort model.Symbol w.SourcePort
                 TgtOrient = Symbol.getOrientationOfPort model.Symbol w.TargetPort
@@ -434,34 +434,41 @@ let getWiresToBeDuplicated (displacementPos : XYPos ) (wireList : Wire list) (po
                 (sourcePort,endPort,wire)
                 )
 
-let addWire (startPort : Symbol.Port) (endPort : Symbol.Port) (createDU : CreateDU) (symModel : Symbol.Symbol list) =
+let addWire (startPortTmp : Symbol.Port) (endPortTmp : Symbol.Port) (createDU : CreateDU) (symModel : Symbol.Symbol list) =
+    let inputPort = if startPortTmp.PortType = CommonTypes.Input then startPortTmp else endPortTmp
+    if inputPort.NumOfConnections <> 0 then failwithf "createError : InputPort can only have One Driver. If you want to merge two wires use MergeWire"
+    
     let duplicate =      
         match createDU with 
         | Init -> false
         | Duplicate -> true
+
+
+    let startPort = {startPortTmp with NumOfConnections = startPortTmp.NumOfConnections + 1}
+    let endPort   = {endPortTmp   with NumOfConnections = endPortTmp.NumOfConnections   + 1}
+    let tmpSymModel  =
+        symModel
+        |> List.map (fun sym -> if sym.Id = startPort.HostId then Symbol.changeNumOfConnections Increment startPort.Id sym  else sym)
+        |> List.map (fun sym -> if sym.Id = endPort.HostId   then Symbol.changeNumOfConnections Increment endPort.Id   sym  else sym)
     
     let newWire, newSym = 
         match startPort, startPort.BusWidth, endPort, endPort.BusWidth with 
         | _, Some startWidth, _,  Some endWidth ->
-            let inputPort = if startPort.PortType = CommonTypes.Input then startPort else endPort
-            match startWidth = endWidth, inputPort.NumberOfConnections = 0 with
-            | true, true -> 
-                let wire = 
-                    createWire startPort endPort 
-                Some wire, symModel
-            | _, false -> 
-                printf ("createError : InputPort can only have One Driver. If you want to merge two wires you a MergeWire Component")
-                None, symModel
-            | false, _ -> 
+            match startWidth = endWidth with
+            | true -> 
+                let wire = createWire startPort endPort 
+                Some wire, tmpSymModel
+            | false -> 
                 let errorWire = { (createWire startPort endPort) with hasError = true} 
-                let newSymModel, symMsg = Symbol.update (Symbol.Msg.AddErrorToPorts (startPort, endPort)) symModel
+                let newSymModel, symMsg = 
+                    Symbol.update (Symbol.Msg.AddErrorToPorts (startPort, endPort)) tmpSymModel
                 Some errorWire, newSymModel
        
         | _, Some width, undefinedPort, None | undefinedPort, None, _, Some width ->
             let wire = createWire startPort endPort  
-            let sym, symMsg = 
-                Symbol.update (Symbol.Msg.EnforceBusWidth (width, undefinedPort)) symModel
-            Some wire, sym
+            let newSymModel, symMsg = 
+                Symbol.update (Symbol.Msg.EnforceBusWidth (width, undefinedPort)) tmpSymModel
+            Some wire, newSymModel
 
         | _ -> failwithf " BusWidths of sourcePort and targetPort are not specified !!!!"
     
@@ -562,12 +569,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
     | AddWire (startPort, endPort, createDU) ->  
         let newWireSym = addWire startPort endPort createDU model.Symbol
         match newWireSym with 
-        | Some newWire, symModel -> 
-            let newSymModel  =
-                symModel
-                |> List.map (fun sym -> if sym.Id = startPort.HostId then Symbol.changeNumOfConnections Increment startPort.Id sym  else sym)
-                |> List.map (fun sym -> if sym.Id = endPort.HostId   then Symbol.changeNumOfConnections Increment endPort.Id   sym  else sym)
-            {model with WX = newWire :: model.WX ; Symbol = newSymModel} , Cmd.none
+        | Some newWire, symModel -> {model with WX = newWire :: model.WX ; Symbol = symModel} , Cmd.none
         | None , symModel -> model,Cmd.none
     
 

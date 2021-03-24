@@ -18,7 +18,7 @@ type Port =
         Pos : XYPos
         BBox : BoundingBox
         IsDragging : bool
-        NumberOfConnections : int
+        NumOfConnections : int
         BusWidth : int Option
         NumOfErrors : int
     }
@@ -40,7 +40,7 @@ type Symbol =
         IsDragging : bool
         IsSelected : bool
         HasError : bool
-        NumberOfConnections : int
+        NumOfConnections : int
         
         H : float
         W : float
@@ -97,7 +97,7 @@ let boxesCollide (boxOne: BoundingBox) (boxTwo: BoundingBox) =
     let oneTL, oneBR, twoTL, twoBR = boxOne.TopLeft, boxOne.BottomRight, boxTwo.TopLeft, boxTwo.BottomRight
     not (oneBR.X < twoTL.X || oneBR.Y < twoTL.Y || oneTL.X > twoBR.X || oneTL.Y > twoBR.Y)
 
-let updateSymWithPort (sym: Symbol) (newPort: Port) : Symbol =
+let updateSymWithPort (newPort: Port) (sym: Symbol) : Symbol =
     let newInputPorts, newOutputPorts = 
         sym.InputPorts  |> List.map (fun port -> if port.Id = newPort.Id then newPort else port),
         sym.OutputPorts |> List.map (fun port -> if port.Id = newPort.Id then newPort else port)
@@ -142,13 +142,96 @@ let getPortWithId sym portId =
 let changeNumOfConnections (change: ChangeDU) (portToChangeID: string) (symToChange: Symbol) : Symbol = 
     let operand = if change = Increment then 1 else -1
     let portToChange = getPortWithId symToChange portToChangeID
-    let newPort = {portToChange with NumberOfConnections = portToChange.NumberOfConnections + operand}
-    {updateSymWithPort symToChange newPort with NumberOfConnections = symToChange.NumberOfConnections + operand}
+    let newPort = {portToChange with NumOfConnections = portToChange.NumOfConnections + operand}
+    {updateSymWithPort newPort symToChange with NumOfConnections = symToChange.NumOfConnections + operand}
 
 /// Returns true if any of the ports of a symbol has an error, else false
 let checkSymbolForError (sym:Symbol) : bool = 
     (false, sym.InputPorts @ sym.OutputPorts)
     ||> List.fold (fun hasError port -> if port.NumOfErrors <> 0 then true else hasError)
+
+
+
+
+/// Auto Completed Widths of 5 special components
+let autoCompleteWidths (sym: Symbol) =  
+    let inputs, outputs = sym.InputPorts, sym.OutputPorts
+
+    match sym.Type with
+    | CommonTypes.SplitWire w ->
+        match inputs.[0].BusWidth, outputs.[1].BusWidth with
+        | Some inW, None -> 
+            let outW = if inW > w then (inW - w) else failwithf $"Input width of SplitWire should be larger than {w}"
+            updateSymWithPort {outputs.[1] with BusWidth = Some outW} sym
+        | None, Some outW -> 
+            updateSymWithPort {inputs.[0] with BusWidth = Some (outW + w)} sym
+        | _, _ when inputs.[0].NumOfConnections = 0 && outputs.[1].NumOfConnections = 0 ->
+            sym
+            |> updateSymWithPort {inputs.[0] with BusWidth = None} 
+            |> updateSymWithPort {outputs.[1] with BusWidth = None} 
+        | _ -> sym
+
+    | CommonTypes.MergeWires ->
+        match inputs.[0].BusWidth, inputs.[1].BusWidth, outputs.[0].BusWidth with
+        | Some inW0, Some inW1, None ->
+            updateSymWithPort {outputs.[0] with BusWidth = Some (inW0 + inW1)} sym
+        | Some inW, None, Some outW ->
+            let otherInW = if outW > inW then (outW - inW) else failwithf $"Input widths of MergeWires should be less than {outW}"
+            updateSymWithPort {inputs.[1] with BusWidth = Some otherInW} sym
+        | None, Some inW, Some outW ->
+            let otherInW = if outW > inW then (outW - inW) else failwithf $"Input widths of MergeWires should be less than {outW}"
+            updateSymWithPort {inputs.[0] with BusWidth = Some otherInW} sym
+        | _ when sym.NumOfConnections < 2 ->
+            sym
+            |> updateSymWithPort {inputs.[0] with BusWidth = if inputs.[0].NumOfConnections = 1 && inputs.[0].NumOfErrors = 0 then inputs.[0].BusWidth else None} 
+            |> updateSymWithPort {inputs.[1] with BusWidth = if inputs.[1].NumOfConnections = 1 && inputs.[1].NumOfErrors = 0 then inputs.[1].BusWidth else None} 
+            |> updateSymWithPort {outputs.[0] with BusWidth = if outputs.[0].NumOfConnections = 1 && outputs.[0].NumOfErrors = 0 then outputs.[0].BusWidth else None} 
+        | _ -> sym
+
+    | CommonTypes.IOLabel ->
+        match inputs.[0].BusWidth, outputs.[0].BusWidth with
+        | Some inW, None -> 
+            updateSymWithPort {outputs.[0] with BusWidth = Some inW} sym
+        | None, Some outW -> 
+            updateSymWithPort {inputs.[0] with BusWidth = Some outW} sym
+        | _ when sym.NumOfConnections = 0 ->
+            sym
+            |> updateSymWithPort {inputs.[0]  with BusWidth = None} 
+            |> updateSymWithPort {outputs.[0] with BusWidth = None} 
+        | _ -> sym
+
+    | CommonTypes.Mux2 ->
+        match inputs.[0].BusWidth, inputs.[1].BusWidth, outputs.[0].BusWidth with 
+        | Some w, None, None | None, Some w, None | None, None, Some w ->
+            sym
+            |> updateSymWithPort {inputs.[0]  with BusWidth = Some w} 
+            |> updateSymWithPort {inputs.[1]  with BusWidth = Some w} 
+            |> updateSymWithPort {outputs.[0] with BusWidth = Some w} 
+        | _ when sym.NumOfConnections - inputs.[2].NumOfConnections = 0 ->
+            sym
+            |> updateSymWithPort {inputs.[0]  with BusWidth = None} 
+            |> updateSymWithPort {inputs.[1]  with BusWidth = None} 
+            |> updateSymWithPort {outputs.[0] with BusWidth = None} 
+        | _ -> sym
+
+    | CommonTypes.Demux2 ->
+        match inputs.[0].BusWidth, outputs.[0].BusWidth, outputs.[1].BusWidth with 
+        | Some w, None, None | None, Some w, None | None, None, Some w ->
+            sym
+            |> updateSymWithPort {inputs.[0]  with BusWidth = Some w} 
+            |> updateSymWithPort {outputs.[0] with BusWidth = Some w} 
+            |> updateSymWithPort {outputs.[1] with BusWidth = Some w} 
+        | _ when sym.NumOfConnections - inputs.[1].NumOfConnections = 0 ->
+            sym
+            |> updateSymWithPort {inputs.[0]  with BusWidth = None} 
+            |> updateSymWithPort {outputs.[0] with BusWidth = None} 
+            |> updateSymWithPort {outputs.[1] with BusWidth = None} 
+        | _ -> sym
+
+    | _ -> sym
+
+
+
 
 /// Removes a connection which can have an error or not and returns the model with the updated symbols
 let removeConnection (model:Model) (portOne:Port, portTwo:Port, connectionHasError:bool) : Model = 
@@ -159,19 +242,18 @@ let removeConnection (model:Model) (portOne:Port, portTwo:Port, connectionHasErr
             if sym.Id = port.HostId then
                 if connectionHasError then
                     let newSym = 
-                        updateSymWithPort sym {port with NumOfErrors = port.NumOfErrors - 1}
+                        updateSymWithPort {port with NumOfErrors = port.NumOfErrors - 1} sym
                         |> changeNumOfConnections Decrement port.Id
                     let newSymHasError = checkSymbolForError newSym
                     {newSym with HasError = newSymHasError}
                 else
-                    changeNumOfConnections Decrement port.Id sym 
+                    sym
+                    |> changeNumOfConnections Decrement port.Id 
+                |> autoCompleteWidths
             else
                 sym
         )
     )
-
-
-
 
 
 /// Selects all symbols which have their bounding box collide with the given box and returns the updated model
@@ -183,111 +265,117 @@ let selectSymbolsInRegion (symModel: Model) (box: BoundingBox) : Model =
 
 
 
-///Auto Completed Widths of 5 special components
-let autoCompleteWidths (sym : Symbol)  = 
-        let newSym = 
-            match (sym.Type) with 
-            |CommonTypes.SplitWire num ->  
-                                    let completedSymbol =  
-                                        match (sym.InputPorts,sym.OutputPorts) with              //For Ata : These part needs some changing as discussed before 
-                                                                                                 //          especially when connecting SpitWire from the top right.
-                                        | [in1],[out1;out2] when sym.NumberOfConnections = 0 ->  //For Ata : when zero connections refresh the symbol to original state.
-                                                                {sym with InputPorts = [{in1 with BusWidth = None}] ; 
-                                                                          OutputPorts = [{out1 with BusWidth = None}; {out2 with BusWidth = None}]}
-                                        | [in1],[out1;out2] -> let tmp = 
-                                                                match (in1.BusWidth,out1.BusWidth,out2.BusWidth) with
-                                                                | None, Some given, Some x ->   let newInPort = {in1 with BusWidth = Some (given + x) } 
-                                                                                                {sym with InputPorts = [newInPort]}
-                                                                | Some x , Some given, None ->  let newOutPort = {out2 with BusWidth = Some (x - given) }
-                                                                                                {sym with OutputPorts = [out1;newOutPort]}
-                                                                | _ -> sym
-                                                               tmp
-                                        | _ -> failwithf "Error : Something wrong with SplitWire"
-                                    completedSymbol         
-            |CommonTypes.MergeWires  ->  
-                                    let completedSymbol = 
-                                        match (sym.InputPorts,sym.OutputPorts) with 
-                                        | [in1;in2],[out1] when sym.NumberOfConnections = 0 ->  //For Ata : when zero connections refresh the symbol to original state.
-                                                                {sym with InputPorts = [{in1 with BusWidth = None}; {in2 with BusWidth = None}] ; 
-                                                                          OutputPorts = [{out1 with BusWidth = None}]}
-                                        | [in1;in2],[out1] -> let tmp =
-                                                                match (in1.BusWidth,in2.BusWidth,out1.BusWidth) with
-                                                                | None, Some given, Some x ->   let newInPort = {in1 with BusWidth = Some (x- given)} 
-                                                                                                {sym with InputPorts = [newInPort; in2]}
-                                                                | Some given , None, Some x ->  let newIn2Port = {in2 with BusWidth = Some (x - given)}
-                                                                                                {sym with InputPorts = [in1; newIn2Port]}
-                                                                | Some x , Some given, None ->  let newOutPort = {out1 with BusWidth = Some (x + given) }
-                                                                                                {sym with OutputPorts = [newOutPort]}
-                                                                | _ -> sym
-                                                              tmp
-                                        | _ -> failwithf "Error : Something wrong with MergeWires"
-                                    completedSymbol
+             
 
-            |CommonTypes.IOLabel  ->
-                                   let completedSymbol =
-                                     match (sym.InputPorts,sym.OutputPorts) with 
-                                     | [in1],[out1] when sym.NumberOfConnections = 0 -> //For Ata : when zero connections refresh the symbol to original state.
-                                                        {sym with InputPorts = [{in1 with BusWidth = None}] ; 
-                                                                  OutputPorts = [{out1 with BusWidth = None}]}
-                                     | [in1],[out1] -> let tmp = 
-                                                         match (in1.BusWidth,out1.BusWidth) with
-                                                         | None, Some x -> let newInPort = {in1 with BusWidth = Some (x)} 
-                                                                           {sym with InputPorts = [newInPort]} 
-                                                         | Some x, None -> let newOutPort = {out1 with BusWidth = Some (x)}
-                                                                           {sym with OutputPorts = [newOutPort]}
-                                                         | _ -> sym
-                                                       tmp
-                                     | _ -> failwithf "Error : Something wrong with MergeWires"
-                                   completedSymbol
-            |CommonTypes.Mux2     ->
-                                  let completedSymbol =
-                                    match (sym.InputPorts,sym.OutputPorts) with 
-                                    | [in1;in2;sel],[out1] when sym.NumberOfConnections = 0 -> //For Ata : when zero connections refresh the symbol to original state.
-                                                                {sym with InputPorts = [{in1 with BusWidth = None};{in2 with BusWidth = None}; sel] ; 
-                                                                          OutputPorts = [{out1 with BusWidth = None}]}
-                                    | [in1;in2;sel],[out1] -> let tmp = 
-                                                               match (in1.BusWidth,in2.BusWidth,out1.BusWidth) with
-                                                               | None, None, Some x -> let newIn1Port = {in1 with BusWidth = Some (x)} 
-                                                                                       let newIn2Port = {in2 with BusWidth = Some (x)}
-                                                                                       {sym with InputPorts = [newIn1Port;newIn2Port;sel]} 
 
-                                                               | None, Some x, None -> let newIn1Port = {in1 with BusWidth = Some (x)} 
-                                                                                       let newOutPort = {out1 with BusWidth = Some (x)}
-                                                                                       {sym with InputPorts = [newIn1Port; in2;sel]; OutputPorts = [newOutPort]}  
-                                                               | Some x,None, None ->  let newIn2Port = {in2 with BusWidth = Some (x)} 
-                                                                                       let newOutPort = {out1 with BusWidth = Some (x)}
-                                                                                       {sym with InputPorts = [in1 ; newIn2Port; sel]; OutputPorts = [newOutPort]}  
-                                                               | _ -> sym
-                                                              tmp      
-                                    | _ -> failwithf "Error : Something wrong with Mux2"
-                                  completedSymbol
-            |CommonTypes.Demux2      ->
-                                     let completedSymbol =
-                                       match (sym.InputPorts,sym.OutputPorts) with 
-                                       | [in1;sel],[out1;out2] when sym.NumberOfConnections = 0 -> //For Ata : when zero connections refresh the symbol to original state.
-                                                                {sym with InputPorts = [{in1 with BusWidth = None};{sel with BusWidth = None}] ; 
-                                                                          OutputPorts = [{out1 with BusWidth = None};{out2 with BusWidth = None}]}
-                                       | [in1;sel],[out1;out2] -> let tmp = 
-                                                                   match (in1.BusWidth,out1.BusWidth,out2.BusWidth) with
-                                                                   | Some x,None, None -> let newOut1Port = {out1 with BusWidth = Some (x)} 
-                                                                                          let newOut2Port = {out2 with BusWidth = Some (x)}
-                                                                                          {sym with  OutputPorts = [newOut1Port;newOut2Port]}  
-                                                                   | None, None, Some x -> let newIn1Port = {in1 with BusWidth = Some (x)} 
-                                                                                           let newOut1Port = {out1 with BusWidth = Some (x)}
-                                                                                           {sym with InputPorts = [newIn1Port;sel] ; OutputPorts = [newOut1Port; out2]} 
-                                                                   | None, Some x, None -> let newIn1Port = {in1 with BusWidth = Some (x)} 
-                                                                                           let newOut2Port = {out2 with BusWidth = Some (x)}
-                                                                                           {sym with InputPorts = [newIn1Port; sel]; OutputPorts = [out1; newOut2Port]}  
+
+
+
+// ///Auto Completed Widths of 5 special components
+// let autoCompleteWidths (sym : Symbol)  = 
+//         let newSym = 
+//             match (sym.Type) with 
+//             |CommonTypes.SplitWire num ->  
+//                                     let completedSymbol =  
+//                                         match (sym.InputPorts,sym.OutputPorts) with              //For Ata : These part needs some changing as discussed before 
+//                                                                                                  //          especially when connecting SpitWire from the top right.
+//                                         | [in1],[out1;out2] when sym.NumberOfConnections = 0 ->  //For Ata : when zero connections refresh the symbol to original state.
+//                                                                 {sym with InputPorts = [{in1 with BusWidth = None}] ; 
+//                                                                           OutputPorts = [{out1 with BusWidth = None}; {out2 with BusWidth = None}]}
+//                                         | [in1],[out1;out2] -> let tmp = 
+//                                                                 match (in1.BusWidth,out1.BusWidth,out2.BusWidth) with
+//                                                                 | None, Some given, Some x ->   let newInPort = {in1 with BusWidth = Some (given + x) } 
+//                                                                                                 {sym with InputPorts = [newInPort]}
+//                                                                 | Some x , Some given, None ->  let newOutPort = {out2 with BusWidth = Some (x - given) }
+//                                                                                                 {sym with OutputPorts = [out1;newOutPort]}
+//                                                                 | _ -> sym
+//                                                                tmp
+//                                         | _ -> failwithf "Error : Something wrong with SplitWire"
+//                                     completedSymbol         
+//             |CommonTypes.MergeWires  ->  
+//                                     let completedSymbol = 
+//                                         match (sym.InputPorts,sym.OutputPorts) with 
+//                                         | [in1;in2],[out1] when sym.NumberOfConnections = 0 ->  //For Ata : when zero connections refresh the symbol to original state.
+//                                                                 {sym with InputPorts = [{in1 with BusWidth = None}; {in2 with BusWidth = None}] ; 
+//                                                                           OutputPorts = [{out1 with BusWidth = None}]}
+//                                         | [in1;in2],[out1] -> let tmp =
+//                                                                 match (in1.BusWidth,in2.BusWidth,out1.BusWidth) with
+//                                                                 | None, Some given, Some x ->   let newInPort = {in1 with BusWidth = Some (x- given)} 
+//                                                                                                 {sym with InputPorts = [newInPort; in2]}
+//                                                                 | Some given , None, Some x ->  let newIn2Port = {in2 with BusWidth = Some (x - given)}
+//                                                                                                 {sym with InputPorts = [in1; newIn2Port]}
+//                                                                 | Some x , Some given, None ->  let newOutPort = {out1 with BusWidth = Some (x + given) }
+//                                                                                                 {sym with OutputPorts = [newOutPort]}
+//                                                                 | _ -> sym
+//                                                               tmp
+//                                         | _ -> failwithf "Error : Something wrong with MergeWires"
+//                                     completedSymbol
+
+//             |CommonTypes.IOLabel  ->
+//                                    let completedSymbol =
+//                                      match (sym.InputPorts,sym.OutputPorts) with 
+//                                      | [in1],[out1] when sym.NumberOfConnections = 0 -> //For Ata : when zero connections refresh the symbol to original state.
+//                                                         {sym with InputPorts = [{in1 with BusWidth = None}] ; 
+//                                                                   OutputPorts = [{out1 with BusWidth = None}]}
+//                                      | [in1],[out1] -> let tmp = 
+//                                                          match (in1.BusWidth,out1.BusWidth) with
+//                                                          | None, Some x -> let newInPort = {in1 with BusWidth = Some (x)} 
+//                                                                            {sym with InputPorts = [newInPort]} 
+//                                                          | Some x, None -> let newOutPort = {out1 with BusWidth = Some (x)}
+//                                                                            {sym with OutputPorts = [newOutPort]}
+//                                                          | _ -> sym
+//                                                        tmp
+//                                      | _ -> failwithf "Error : Something wrong with MergeWires"
+//                                    completedSymbol
+//             |CommonTypes.Mux2     ->
+//                                   let completedSymbol =
+//                                     match (sym.InputPorts,sym.OutputPorts) with 
+//                                     | [in1;in2;sel],[out1] when sym.NumberOfConnections = 0 -> //For Ata : when zero connections refresh the symbol to original state.
+//                                                                 {sym with InputPorts = [{in1 with BusWidth = None};{in2 with BusWidth = None}; sel] ; 
+//                                                                           OutputPorts = [{out1 with BusWidth = None}]}
+//                                     | [in1;in2;sel],[out1] -> let tmp = 
+//                                                                match (in1.BusWidth,in2.BusWidth,out1.BusWidth) with
+//                                                                | None, None, Some x -> let newIn1Port = {in1 with BusWidth = Some (x)} 
+//                                                                                        let newIn2Port = {in2 with BusWidth = Some (x)}
+//                                                                                        {sym with InputPorts = [newIn1Port;newIn2Port;sel]} 
+
+//                                                                | None, Some x, None -> let newIn1Port = {in1 with BusWidth = Some (x)} 
+//                                                                                        let newOutPort = {out1 with BusWidth = Some (x)}
+//                                                                                        {sym with InputPorts = [newIn1Port; in2;sel]; OutputPorts = [newOutPort]}  
+//                                                                | Some x,None, None ->  let newIn2Port = {in2 with BusWidth = Some (x)} 
+//                                                                                        let newOutPort = {out1 with BusWidth = Some (x)}
+//                                                                                        {sym with InputPorts = [in1 ; newIn2Port; sel]; OutputPorts = [newOutPort]}  
+//                                                                | _ -> sym
+//                                                               tmp      
+//                                     | _ -> failwithf "Error : Something wrong with Mux2"
+//                                   completedSymbol
+//             |CommonTypes.Demux2      ->
+//                                      let completedSymbol =
+//                                        match (sym.InputPorts,sym.OutputPorts) with 
+//                                        | [in1;sel],[out1;out2] when sym.NumberOfConnections = 0 -> //For Ata : when zero connections refresh the symbol to original state.
+//                                                                 {sym with InputPorts = [{in1 with BusWidth = None};{sel with BusWidth = None}] ; 
+//                                                                           OutputPorts = [{out1 with BusWidth = None};{out2 with BusWidth = None}]}
+//                                        | [in1;sel],[out1;out2] -> let tmp = 
+//                                                                    match (in1.BusWidth,out1.BusWidth,out2.BusWidth) with
+//                                                                    | Some x,None, None -> let newOut1Port = {out1 with BusWidth = Some (x)} 
+//                                                                                           let newOut2Port = {out2 with BusWidth = Some (x)}
+//                                                                                           {sym with  OutputPorts = [newOut1Port;newOut2Port]}  
+//                                                                    | None, None, Some x -> let newIn1Port = {in1 with BusWidth = Some (x)} 
+//                                                                                            let newOut1Port = {out1 with BusWidth = Some (x)}
+//                                                                                            {sym with InputPorts = [newIn1Port;sel] ; OutputPorts = [newOut1Port; out2]} 
+//                                                                    | None, Some x, None -> let newIn1Port = {in1 with BusWidth = Some (x)} 
+//                                                                                            let newOut2Port = {out2 with BusWidth = Some (x)}
+//                                                                                            {sym with InputPorts = [newIn1Port; sel]; OutputPorts = [out1; newOut2Port]}  
                                                                    
-                                                                   | _ -> sym
-                                                                  tmp      
-                                       | _ -> failwithf "Error : Something wrong with DeMux2"
-                                     completedSymbol
+//                                                                    | _ -> sym
+//                                                                   tmp      
+//                                        | _ -> failwithf "Error : Something wrong with DeMux2"
+//                                      completedSymbol
 
-            | _ -> sym
+//             | _ -> sym
 
                            
-        newSym
+//         newSym
                         
 
 //---------------------------------helper types and functions----------------//
@@ -436,7 +524,7 @@ let createPorts (sType:CommonTypes.ComponentType) hostId inputPortsPosList outpu
                 Pos = pos
                 BBox = calcBBoxWithRadius 6.0 pos
                 IsDragging = false
-                NumberOfConnections = 0
+                NumOfConnections = 0
                 BusWidth = getBusWidthOfPort sType CommonTypes.PortType.Input idx
                 NumOfErrors = 0
             }
@@ -452,7 +540,7 @@ let createPorts (sType:CommonTypes.ComponentType) hostId inputPortsPosList outpu
                 Pos = pos
                 BBox = calcBBoxWithRadius 6.0 pos
                 IsDragging = false
-                NumberOfConnections = 0
+                NumOfConnections = 0
                 BusWidth = getBusWidthOfPort sType CommonTypes.PortType.Output idx
                 NumOfErrors = 0
             }
@@ -515,7 +603,7 @@ let createNewSymbol (sType:CommonTypes.ComponentType) (name:string) (pos:XYPos) 
         IsDragging = false
         IsSelected = false
         HasError = false
-        NumberOfConnections = 0
+        NumOfConnections = 0
         
         H = h
         W = w
@@ -644,7 +732,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<'a> =
             symModel
             |> List.map (fun sym -> 
                 if sym.Id = port.HostId then 
-                    let newSym = updateSymWithPort sym {port with NumOfErrors = port.NumOfErrors + 1}
+                    let newSym = updateSymWithPort {port with NumOfErrors = port.NumOfErrors + 1} sym
                     {newSym with HasError = true}
                 else sym 
             )  
@@ -663,7 +751,8 @@ let update (msg : Msg) (model : Model): Model*Cmd<'a> =
         |> List.map (fun sym -> 
             if sym.Id = undefinedPort.HostId then
                 let newPort = {undefinedPort with BusWidth = Some busWidth}
-                updateSymWithPort sym newPort
+                sym
+                |> updateSymWithPort newPort 
                 |> autoCompleteWidths
             else sym
         )
@@ -806,7 +895,7 @@ let createSymbolFromComponent (comp:CommonTypes.Component) (pos:XYPos) : Symbol 
         IsDragging = false // initial value can always be this
         IsSelected = false
         HasError = false
-        NumberOfConnections = 0
+        NumOfConnections = 0
 
         H = h
         W = w
