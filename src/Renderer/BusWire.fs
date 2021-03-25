@@ -54,6 +54,7 @@ type Msg =
     | DraggingWire of CommonTypes.ConnectionId*XYPos
     | RemoveDrawnLine
     | SelectWiresWithinRegion of Helpers.BoundingBox
+    | EnforceBusWidth of int * Wire
 
 let origin = {X=0.0 ; Y=0.0}
 
@@ -433,6 +434,18 @@ let getWiresToBeDuplicated (displacementPos : XYPos ) (wireList : Wire list) (po
                                              (dist < 0.001) ) portList
                 (sourcePort,endPort,wire)
                 )
+                
+let enforceBusWidth (symModel : Symbol.Symbol list) (busWidth : int) (unDefPort: Symbol.Port) : Symbol.Symbol list =
+    symModel
+    |> List.map (fun sym -> 
+        match (sym.Id = unDefPort.HostId) with 
+        | true  ->  let newPort = {unDefPort with BusWidth = Some busWidth}
+                    sym
+                    |> Symbol.updateSymWithPort newPort 
+                    |> Symbol.autoCompleteWidths
+        | false->   sym        
+    )
+    
 
 let addWire (startPortTmp : Symbol.Port) (endPortTmp : Symbol.Port) (createDU : CreateDU) (symModel : Symbol.Symbol list) =
     let inputPort = if startPortTmp.PortType = CommonTypes.Input then startPortTmp else endPortTmp
@@ -465,8 +478,7 @@ let addWire (startPortTmp : Symbol.Port) (endPortTmp : Symbol.Port) (createDU : 
        
         | _, Some width, undefinedPort, None | undefinedPort, None, _, Some width ->
             let wire = createWire startPort endPort  
-            let newSymModel, symMsg = 
-                Symbol.update (Symbol.Msg.EnforceBusWidth (width, undefinedPort)) tmpSymModel
+            let newSymModel = enforceBusWidth tmpSymModel width undefinedPort
             Some wire, newSymModel
 
         | _ -> failwithf " BusWidths of sourcePort and targetPort are not specified !!!!"
@@ -624,7 +636,6 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             Symbol.update (Symbol.Msg.RemoveConnections allToBeDeletedPorts) model.Symbol
 
         {model with WX = wireToBeRendered; Symbol = newSymModel} , Cmd.none
-
 
     | DrawFromPortToCursor (startPos,endPos,endPort) -> 
         {model with PortToCursor = (startPos,endPos,endPort)}, Cmd.none

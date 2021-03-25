@@ -60,7 +60,7 @@ type Msg =
     | UpdateOutputOrientation of outputOrientation: PortOrientation 
     | AddErrorToPorts of (Port * Port)
     | RemoveConnections of (Port * Port * bool) list
-    | EnforceBusWidth of int * Port
+ 
     | SelectSymbolsWithinRegion of box: BoundingBox
 
     // | UpdateSymbolModelWithComponent of CommonTypes.Component 
@@ -641,19 +641,6 @@ let update (msg : Msg) (model : Model): Model*Cmd<'a> =
             removeConnection symModel connection
         )
         , Cmd.none
-    
-    | EnforceBusWidth (busWidth, undefinedPort) ->  
-        model
-        |> List.map (fun sym -> 
-            if sym.Id = undefinedPort.HostId then
-                let newPort = {undefinedPort with BusWidth = Some busWidth}
-                sym
-                |> updateSymWithPort newPort 
-                |> autoCompleteWidths
-            else sym
-        )
-        , Cmd.none
-
     | MouseMsg _ -> model, Cmd.none // allow unused mouse messags
 
 
