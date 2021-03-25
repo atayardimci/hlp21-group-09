@@ -24,7 +24,7 @@ type Wire = {
     SourcePort : Symbol.Port
     TargetPort : Symbol.Port
     IsSelected : bool
-    hasError : bool 
+    HasError : bool 
     relativPositions : XYPos list
     PrevPositions : XYPos list
     BeingDragged : int
@@ -46,9 +46,9 @@ type Msg =
     | MouseMsg of MouseT
     | DrawFromPortToCursor of XYPos*XYPos* Symbol.Port option
     | AddWire of Symbol.Port*Symbol.Port*CreateDU
-    | SelectWire of CommonTypes.ConnectionId*XYPos
+    | SelectWire of CommonTypes.ConnectionId
     | DeleteWire
-    | UpdatedPortsToBusWire of sId : Symbol.Port list
+    | UpdateBusWirePorts
     | DeselectWire
     | StartDraggingWire of CommonTypes.ConnectionId*XYPos
     | DraggingWire of CommonTypes.ConnectionId*XYPos
@@ -69,17 +69,27 @@ let wire (wModel: Model) (wId: CommonTypes.ConnectionId): Wire =
     | Some wr -> wr
     | None    -> failwithf "Ghost"
 
-type WireRenderProps = {
+type RenderWireProps = {
     key : CommonTypes.ConnectionId
     WireP: Wire
-    SrcP: XYPos 
-    TgtP: XYPos
     ColorP: string
     StrokeWidthP: string 
     SrcOrient: PortOrientation
     TgtOrient: PortOrientation
-    //Dispatch : Dispatch<Msg>
+    Dispatch : Dispatch<Msg>
     }
+
+let getPortsOfWire (model :Model) (w : Wire)  = 
+    let sym1,sym2 =
+        match  Symbol.getSymbolWithId model.Symbol w.SourcePort.HostId, 
+               Symbol.getSymbolWithId model.Symbol w.TargetPort.HostId with 
+        | Some sym1, Some sym2 -> sym1,sym2
+        | _ ,_ -> failwithf "Impossible : You can't have wires floating around unconnected !"
+
+    let srcPort = (Symbol.getPortWithId sym1 w.SourcePort.Id)
+    let tgtPort = (Symbol.getPortWithId sym2 w.TargetPort.Id)
+    
+    (srcPort,tgtPort)
 
 
 let selectBoundedWires (wModel: Model) (boundary: BoundingBox) =
@@ -216,7 +226,7 @@ let vertexlstZero (cable: Wire) (wModel: Model) (srcOrient: PortOrientation) (tg
         | false, false -> [startpt ; {X=startpt.X;Y=startpt.Y+100.0} ; {X=endpt.X+15.0;Y=startpt.Y+100.0} ; {X=endpt.X+15.0;Y=endpt.Y} ; endpt]
     | _ ->  [startpt ; {X=midX;Y=startpt.Y} ; {X=midX;Y=endpt.Y} ; endpt]
 
-let vertexlist (cable: Wire) (wModel: Model) (srcOrient: PortOrientation) (tgtOrient: PortOrientation)= 
+let vertexList (cable: Wire) (srcOrient: PortOrientation) (tgtOrient: PortOrientation)= 
     let [a ; b ; c] = cable.relativPositions
     let startpt = cable.SourcePort.Pos 
     let endpt = cable.TargetPort.Pos
@@ -317,93 +327,85 @@ let bounds (cable: Wire) (wModel: Model) =
              BottomRight = {X=final.X+10.0;Y=final.Y+10.0}}
          else {TopLeft = {X=final.X-10.0;Y=final.Y-10.0} ;
              BottomRight = {X=start.X+10.0;Y=start.Y+10.0}}
-    let vlst = vertexlist cable wModel (Symbol.getOrientationOfPort wModel.Symbol cable.SourcePort) (Symbol.getOrientationOfPort wModel.Symbol cable.TargetPort)
+    let vlst = vertexList cable (Symbol.getOrientationOfPort wModel.Symbol cable.SourcePort) (Symbol.getOrientationOfPort wModel.Symbol cable.TargetPort)
     let startlst , endlst = pairListElements vlst
     List.map2 individualBound startlst endlst
 
-let autosingleWireView (wModel: Model)= 
-    let displayFullWire (cable: Wire) (props: WireRenderProps) (vertices: list<XYPos>) = 
-        let displayWireSegment (start: XYPos) (final: XYPos) =
-            let color =
-                match props.WireP.IsSelected, props.WireP.hasError, props.WireP.BusWidth with
-                | true, _, _ -> "green" 
-                | _, true, _ -> "red" 
-                | _, _, Some w when w > 1 -> "purple"
-                | _, _, None -> "purple"
-                | _ -> "black"
+let displayWireSegment (props: RenderWireProps) (start: XYPos) (final: XYPos) =
+    let color =
+        match props.WireP.IsSelected, props.WireP.HasError, props.WireP.BusWidth with
+        | true, _, _ -> "green" 
+        | _, true, _ -> "red" 
+        | _, _, Some w when w > 1 -> "purple"
+        | _, _, None -> "purple"
+        | _ -> "black"
 
-            g   [ Style [ 
-                    TransformOrigin "0px 50px" 
-                    Transform (sprintf "translate(%fpx,%fpx) rotate(%ddeg) scale(%f)" 0.0 0.0 0 1.0)
-                    ]
-                ]
-                [    
-                    line [
-                        X1 start.X
-                        Y1 start.Y
-                        X2 final.X
-                        Y2 final.Y
-                        SVGAttr.Stroke color
-                        SVGAttr.StrokeWidth props.StrokeWidthP
-                    ] []
-                ]
+    g   []
+        [    
+            line [
+                X1 start.X
+                Y1 start.Y
+                X2 final.X
+                Y2 final.Y
+                SVGAttr.Stroke color
+                SVGAttr.StrokeWidth props.StrokeWidthP
+            ] []
+        ]
 
-        let startlst,endlst = pairListElements vertices
-        let reactlst = List.map2 displayWireSegment startlst endlst 
-        let annotatePos = if (props.WireP.SourcePort.PortType = CommonTypes.Output) then props.SrcP else props.TgtP
+let displayFullWire (props: RenderWireProps) (vertices: list<XYPos>) = 
+    let srcPos = props.WireP.SourcePort.Pos
+    let tgtPos = props.WireP.TargetPort.Pos
 
-        text [
-                        X (annotatePos.X + 20.0)
-                        Y (annotatePos.Y + 2.0)
-                        Style [
-                            TextAnchor "middle" // left/right/middle: horizontal algnment vs (X,Y)
-                            DominantBaseline "hanging" // auto/middle/hanging: vertical alignment vs (X,Y)
-                            FontSize "10px"
-                            FontWeight "Bold"
-                            Fill "Black"                // demo font color
-                            UserSelect UserSelectOptions.None
-                            PointerEvents "none"
-                        ]
-                    ]  (busWidthAnnotation props.WireP) :: reactlst
-         |> (fun lineEl -> 
-            g [] lineEl)
+    let startlst,endlst = pairListElements vertices
+    let reactlst = List.map2 (displayWireSegment props) startlst endlst 
+    let annotatePos = if (props.WireP.SourcePort.PortType = CommonTypes.Output) then srcPos else tgtPos 
 
+    text [
+        X (annotatePos.X + 20.0)
+        Y (annotatePos.Y + 2.0)
+        Style [
+            TextAnchor "middle" // left/right/middle: horizontal algnment vs (X,Y)
+            DominantBaseline "hanging" // auto/middle/hanging: vertical alignment vs (X,Y)
+            FontSize "10px"
+            FontWeight "Bold"
+            Fill "Black"                // demo font color
+            UserSelect UserSelectOptions.None
+            PointerEvents "none"
+        ]
+    ]  (busWidthAnnotation props.WireP) :: reactlst
+        |> (fun reactElemLst -> 
+        g [] reactElemLst)
+  
+
+let autoSingleWireView  = 
     FunctionComponent.Of (
-        fun (props: WireRenderProps) ->                                         
-            g   [ Style [ 
-                TransformOrigin "0px 50px"
-                Transform (sprintf "translate(%fpx,%fpx) rotate(%ddeg) scale(%f) " 0.0 0.0 0 1.0)
-                ]
-                ]
+        fun (props: RenderWireProps) ->  
+
+            g   []
                 [
-                displayFullWire props.WireP props (vertexlist props.WireP wModel props.SrcOrient props.TgtOrient)
+                    displayFullWire props (vertexList props.WireP props.SrcOrient props.TgtOrient)
                 ]
         , "Wire"
-        , equalsButFunctions
-    )      
-    
-
-
+        ,equalsButFunctions)
 
 let view (model:Model) (dispatch: Msg -> unit)= 
     let wires = 
         model.WX
         |> List.map (fun w ->
+            let srcPort, tgtPort = getPortsOfWire model w
             let props = {
-                //Dispatch = dispatch
+                Dispatch = dispatch
                 key = w.Id
-                WireP = w
-                SrcP = w.SourcePort.Pos 
-                TgtP = w.TargetPort.Pos
+                WireP = {w with SourcePort = srcPort ; TargetPort = tgtPort}
                 ColorP = model.Color.Text()
                 StrokeWidthP = 
-                    match w.hasError, w.BusWidth with
+                    match w.HasError, w.BusWidth with
                     | false, Some w when w = 1 -> "1px"
                     | _ -> "3px" 
                 SrcOrient = Symbol.getOrientationOfPort model.Symbol w.SourcePort
                 TgtOrient = Symbol.getOrientationOfPort model.Symbol w.TargetPort
             }
-            autosingleWireView model props
+            autoSingleWireView props
         )
     let symbols = SymbolRenderers.view model.Symbol (fun sMsg -> dispatch (Symbol sMsg))
     let lineToCursor= drawLineToCursor model.PortToCursor
@@ -422,7 +424,7 @@ let createWire (startPort: Symbol.Port) (endPort: Symbol.Port)  =
         SourcePort = startPort
         TargetPort = endPort
         IsSelected = false 
-        hasError = false 
+        HasError = false 
         relativPositions = [{X=0.0 ; Y=0.0} ; origin ; origin]
         PrevPositions = [origin ; origin ; origin]
         BeingDragged = -1
@@ -483,7 +485,7 @@ let addWire (startPortTmp : Symbol.Port) (endPortTmp : Symbol.Port) (createDU : 
                 let wire = createWire startPort endPort 
                 Some wire, tmpSymModel
             | false -> 
-                let errorWire = { (createWire startPort endPort) with hasError = true} 
+                let errorWire = { (createWire startPort endPort) with HasError = true} 
                 let newSymModel, symMsg = 
                     Symbol.update (Symbol.Msg.AddErrorToPorts (startPort, endPort)) tmpSymModel
                 Some errorWire, newSymModel
@@ -571,7 +573,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         let sm,sCmd = Symbol.update sMsg model.Symbol
         {model with Symbol=sm}, Cmd.map Symbol sCmd
     | SetColor c -> {model with Color = c}, Cmd.none
-    | SelectWire (wId,p) ->         
+    | SelectWire wId->         
         let clickedWire =
             List.map (fun w ->
                         if w.Id <> wId then w
@@ -579,16 +581,17 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                       )
         let newWls = clickedWire model.WX 
         {model with WX = newWls} ,Cmd.none
-    | UpdatedPortsToBusWire plst ->
+    | UpdateBusWirePorts ->
+        let portList = Symbol.getAllPorts (model.Symbol)
         let newW wir =
             let updateWS wr =
                 let foundsrc (prt: Symbol.Port) = (wr.SourcePort.Id = prt.Id)
-                match List.tryFind (foundsrc) plst with
+                match List.tryFind (foundsrc) portList with
                 | Some pt -> {wr with SourcePort = pt}
                 | None -> wr
             let updateWT wr =
                 let foundtgt (prt: Symbol.Port) = (wr.TargetPort.Id = prt.Id)
-                match List.tryFind (foundtgt) plst with
+                match List.tryFind (foundtgt) portList with
                 | Some pt -> {wr with TargetPort = pt}
                 | None -> wr
             wir |> updateWS |> updateWT
@@ -608,21 +611,25 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                                ) 
         {model with WX = newWls} , Cmd.none
         
-    | StartDraggingWire (wid , p) ->
-        let newWls wLs = wLs |> List.map (fun w ->
-                                if w.Id <> wid then w
-                                else 
-                                    startWireDragging w p model)
-        {model with WX = newWls model.WX} , Cmd.ofMsg( SelectWire (wid, p))
+    | StartDraggingWire (wId , p) ->
+        let newWls wLs = 
+            wLs 
+            |> List.map (fun w ->
+                if w.Id <> wId then w
+                else 
+                   startWireDragging w p model)
+        {model with WX = newWls model.WX} , Cmd.ofMsg( SelectWire wId)
     | DraggingWire (wid,p) ->      
-        let nwWls wLs = wLs |> List.map (fun w ->
-                                if w.Id <> wid then
-                                    w
-                                else
-                                    let srcO = Symbol.getOrientationOfPort model.Symbol w.SourcePort
-                                    let tgtO = Symbol.getOrientationOfPort model.Symbol w.TargetPort  
-                                    dragAWire w p model srcO tgtO
-                              ) 
+        let nwWls wLs = 
+            wLs 
+            |> List.map (fun w ->
+                if w.Id <> wid then
+                    w
+                else
+                    let srcO = Symbol.getOrientationOfPort model.Symbol w.SourcePort
+                    let tgtO = Symbol.getOrientationOfPort model.Symbol w.TargetPort  
+                    dragAWire w p model srcO tgtO
+                ) 
         {model with WX = nwWls model.WX} , Cmd.none
     | DeleteWire -> 
         let wireToBeRenderedFirst, wireToBeDeletedFirst =
@@ -641,7 +648,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
 
         let allToBeDeletedPorts= //for all the wires that are gonna be deleted check if it has createError 
             wireToBeDeletedFirst
-            |> List.collect (fun w -> [(w.SourcePort, w.TargetPort, w.hasError)])
+            |> List.collect (fun w -> [(w.SourcePort, w.TargetPort, w.HasError)])
             |> Set.ofList
             |> Set.toList
         let wireToBeRendered =
@@ -706,9 +713,9 @@ let getSelectedWireList (wireList : Wire list) : Wire list =
 
 let deselectWire (WX : Wire list)  =
     let newWX =
-        WX |> List.map (fun w ->
-                           {w with IsSelected = false}
-                        ) 
+        WX 
+        |> List.map (fun w ->
+           {w with IsSelected = false})        
     newWX
 
 //----------------------interface to Issie-----------------------//

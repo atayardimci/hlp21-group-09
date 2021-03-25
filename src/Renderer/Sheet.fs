@@ -11,6 +11,10 @@ type Model = {
     Wire: BusWire.Model
     Canvas: CanvasProps
     SymIdList : CommonTypes.ComponentId list
+    
+    RegionToBeRendered  : Helpers.BoundingBox
+    OverallBBoxToBeRendered : Helpers.BoundingBox
+    AlignmentLinesToBeRendered : Line list 
     HoveringPortsToBeRendered : (float* Symbol.Port list) list
     DraggingPortsToBeRendered : (float* Symbol.Port list) list
     OnePortToBeRendered : XYPos * Symbol.Port option
@@ -18,14 +22,12 @@ type Model = {
     IdOfPortBeingDragged : string
 
     IsDrawingRegion : bool
+    StartDrawingPosition : XYPos option
 
     IsWireSelected : bool
     SelectedWire : CommonTypes.ConnectionId option
 
-    RegionToBeRendered  : Helpers.BoundingBox
-    OverallBBoxToBeRendered : Helpers.BoundingBox
-    AlignmentLinesToBeRendered : Line list 
-    StartDrawingPosition : XYPos option
+
     UndoStates  : Model list
     RedoStates  : Model list
     CopyState   : (Symbol.Symbol list option * BusWire.Wire list option)
@@ -539,15 +541,14 @@ let private renderBackground =
                        SVGAttr.Fill "url(#smallGrid)"
                    ] []
             ]
-let renderPortOfWireSelected (w:BusWire.Wire)  =
-    let src = w.SourcePort.Pos
-    let tgt = w.TargetPort.Pos
+let renderPortOfWireSelected (model: Model) (w:BusWire.Wire)  =
+    let srcPort, tgtPort = BusWire.getPortsOfWire model.Wire w
     let radius = 6.0 
     g  [] 
         [
         circle
             [ 
-                Cx src.X ;Cy src.Y
+                Cx srcPort.Pos.X ;Cy srcPort.Pos.Y
                 R radius;
                 SVGAttr.Fill "skyblue"
                 SVGAttr.Stroke "black"
@@ -556,7 +557,7 @@ let renderPortOfWireSelected (w:BusWire.Wire)  =
             ] [ ]
         circle
             [
-                Cx tgt.X ;Cy tgt.Y
+                Cx tgtPort.Pos.X ;Cy tgtPort.Pos.Y
                 R radius;
                 SVGAttr.Fill "skyblue"
                 SVGAttr.Stroke "black"
@@ -575,7 +576,7 @@ let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispat
     let renderDraggingPortsByDistance = g [] (List.map renderPortsDragging  model.DraggingPortsToBeRendered)
                                         |> renderOnePort model.OnePortToBeRendered
 
-    let renderPortsOfWireSelection    = g[] ((List.map renderPortOfWireSelected) (BusWire.getSelectedWireList model.Wire.WX))
+    let renderPortsOfWireSelection    = g[] (List.map (renderPortOfWireSelected model) (BusWire.getSelectedWireList model.Wire.WX))
     
 
 
@@ -722,7 +723,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
 
         {newModel with 
                 UndoStates = storeUndoState (nullRender model)
-        },Cmd.ofMsg (UpdatePorts)
+        },Cmd.none
 
     | Paste -> 
         let cSymList,cWireList =
@@ -809,11 +810,10 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                 }, Cmd.batch ([Cmd.ofMsg(RemoveDrawnLine); Cmd.ofMsg(UpdatePorts)])
       
     | UpdatePorts  ->
-        let portList = Symbol.getAllPorts (model.Wire.Symbol)
         let newBusModel, newCmd = 
-            BusWire.update (BusWire.Msg.UpdatedPortsToBusWire portList) model.Wire
-            |>fst 
-            |>BusWire.update (BusWire.Msg.UpdateWires )
+            BusWire.update (BusWire.Msg.UpdateBusWirePorts) model.Wire
+            //|>fst 
+            //|>BusWire.update (BusWire.Msg.UpdateWires )
         {model with 
             Wire = newBusModel
         }
@@ -941,7 +941,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             OverallBBoxToBeRendered = overallBBox
 
         }
-        , Cmd.batch [Cmd.ofMsg(AlignBoxes overallBBox);Cmd.ofMsg(UpdatePorts)]
+        , Cmd.batch [Cmd.ofMsg(AlignBoxes overallBBox)]
 
     | EndDraggingSymbol sIdList ->
         let newSymModel = 
@@ -955,7 +955,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                 AlignmentLinesToBeRendered = []
             }
     
-        newModel,Cmd.none
+        newModel,Cmd.ofMsg(UpdatePorts)
 
     | AlignBoxes bbox -> 
         let flineList = model.Wire.Symbol

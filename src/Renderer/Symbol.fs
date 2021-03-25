@@ -128,6 +128,7 @@ let getPortWithId sym portId =
     | Some port -> port
     | None -> failwithf "Port with given Id in the given symbol was not found"
 
+
     
 /// Increments or decrements the number of connections of the given port and symbol according to the given ChangeDU and returns the updated symbol
 let changeNumOfConnections (change: ChangeDU) (portToChangeID: string) (symToChange: Symbol) : Symbol = 
