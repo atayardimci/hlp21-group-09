@@ -55,6 +55,7 @@ type Msg =
     | RemoveDrawnLine
     | SelectWiresWithinRegion of Helpers.BoundingBox
     | EnforceBusWidth of int * Wire
+    | UpdateWires
 
 let origin = {X=0.0 ; Y=0.0}
 
@@ -77,6 +78,7 @@ type WireRenderProps = {
     StrokeWidthP: string 
     SrcOrient: PortOrientation
     TgtOrient: PortOrientation
+    //Dispatch : Dispatch<Msg>
     }
 
 
@@ -378,13 +380,17 @@ let autosingleWireView (wModel: Model)=
                 ]
         , "Wire"
         , equalsButFunctions
-    )            
+    )      
+    
+
+
 
 let view (model:Model) (dispatch: Msg -> unit)= 
     let wires = 
         model.WX
         |> List.map (fun w ->
             let props = {
+                //Dispatch = dispatch
                 key = w.Id
                 WireP = w
                 SrcP = w.SourcePort.Pos 
@@ -648,6 +654,29 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         {model with PortToCursor = ({X = 0.0; Y = 0.0}, {X = 0.0; Y=0.0}, None)}, Cmd.none //zack 
     | SelectWiresWithinRegion bbox ->
         {model with WX =  selectBoundedWires (model) bbox},Cmd.none
+    | UpdateWires ->
+        let newWireModel,newSymModel =
+            ( (model.WX,model.Symbol), model.WX )
+            ||>List.fold  (fun (wModel,sModel) wire ->
+                let srcPort,endPort = wire.SourcePort,wire.TargetPort 
+                let wBusWidth =    
+                    match (srcPort.BusWidth, endPort.BusWidth) with
+                    | Some width, None -> Some width
+                    | _ ,Some width -> Some width
+                    | None, None    -> None
+
+                wModel
+                |>List.map (fun w -> if (w.Id = wire.Id) then {w with BusWidth = wBusWidth} else w),
+                sModel
+                |>List.map (fun sym -> 
+                    sym
+                    |>Symbol.updateSymWithPort {srcPort with BusWidth = wBusWidth}
+                    |>Symbol.updateSymWithPort {endPort with BusWidth = wBusWidth}
+                    |>Symbol.autoCompleteWidths
+                )
+            )   
+        
+        {model with WX = newWireModel; Symbol = newSymModel},Cmd.none
 
     | MouseMsg mMsg -> model, Cmd.ofMsg (Symbol (Symbol.MouseMsg mMsg))
 
@@ -667,6 +696,7 @@ let wireToSelectOpt (wModel: Model) (pos: XYPos) : CommonTypes.ConnectionId opti
 
 let getSelectedWireList (wireList : Wire list) : Wire list = 
     List.filter (fun w -> w.isSelected) wireList
+
 
 let deselectWire (WX : Wire list)  =
     let newWX =

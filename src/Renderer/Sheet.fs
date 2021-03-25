@@ -807,7 +807,8 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         let portList = Symbol.getAllPorts (model.Wire.Symbol)
         let newBusModel, newCmd = 
             BusWire.update (BusWire.Msg.UpdatedPortsToBusWire portList) model.Wire
-        
+            |>fst 
+            |>BusWire.update (BusWire.Msg.UpdateWires )
         {model with 
             Wire = newBusModel
         }
@@ -935,7 +936,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             OverallBBoxToBeRendered = overallBBox
 
         }
-        , Cmd.batch [Cmd.ofMsg (UpdatePorts) ;Cmd.ofMsg(AlignBoxes overallBBox)]
+        , Cmd.batch [Cmd.ofMsg(AlignBoxes overallBBox);Cmd.ofMsg(UpdatePorts)]
 
     | EndDraggingSymbol sIdList ->
         let newSymModel = 
@@ -979,7 +980,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             SymIdList = []
             OverallBBoxToBeRendered = nullBBox
         }
-         ,Cmd.ofMsg (UpdatePorts)
+         ,Cmd.none
     
     | AddSymbol (symType , name) -> 
         let newInput = Symbol.insertSymbol symType name

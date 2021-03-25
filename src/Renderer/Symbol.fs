@@ -62,16 +62,6 @@ type Msg =
     | RemoveConnections of (Port * Port * bool) list
  
     | SelectSymbolsWithinRegion of box: BoundingBox
-
-    // | UpdateSymbolModelWithComponent of CommonTypes.Component 
-
-
-
-
-
-
-
-
 //--------------------------some interface functions------------------------//
 
 /// Returns true if pos is within the bounds of the bounding box of the given symbol; else returns false.
