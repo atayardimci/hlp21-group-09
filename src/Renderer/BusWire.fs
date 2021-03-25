@@ -28,8 +28,8 @@ type Wire = {
     relativPositions : XYPos list
     PrevPositions : XYPos list
     BeingDragged : int
-    BusWidth: int// create a list of boundingboxes
-    }
+    BusWidth : int Option
+}
 
 type Model = {
     Symbol: Symbol.Model
@@ -37,7 +37,7 @@ type Model = {
     Color: CommonTypes.HighLightColor
     Countselected: int // Capitalize start of words
     PortToCursor : XYPos * XYPos * Symbol.Port option
-    }
+}
 
 //----------------------------Message Type-----------------------------------//
 type Msg =
@@ -110,8 +110,10 @@ let drawLineToCursor (startPos : XYPos, endPos : XYPos, endPort : Symbol.Port op
         ]
 
 let busWidthAnnotation (wire : Wire) = 
-    if wire.BusWidth = 0 then [] else [sprintf "%d" wire.BusWidth|> str]
-    
+    match wire.BusWidth with
+    | None | Some 1 -> [] 
+    | Some w -> [str $"{w}"]
+
 
 let pairListElements sequence  = 
     let revseq = List.rev sequence
@@ -306,7 +308,7 @@ let vertexlist (cable: Wire) (wModel: Model) (srcOrient: PortOrientation) (tgtOr
         | false, false -> [startpt ; startpt |> movedown (100.0+a.Y) ; {X=endpt.X+15.0+b.X;Y=startpt.Y+100.0+a.Y} ; endpt |> moveright (100.0+b.X) ; endpt]
     | _ ->  [startpt ; {X=midX;Y=startpt.Y} ; {X=midX;Y=endpt.Y} ; endpt]
 
-let bounds (cable: Wire) (wModel: Model)=
+let bounds (cable: Wire) (wModel: Model) =
     let individualBound (start:XYPos) (final: XYPos) =
         if (final.Y > start.Y || final.X > start.X) then
             {TopLeft = {X=start.X-10.0;Y=start.Y-10.0} ;
@@ -321,13 +323,13 @@ let autosingleWireView (wModel: Model)=
     let displayFullWire (cable: Wire) (props: WireRenderProps) (vertices: list<XYPos>) = 
         let displayWireSegment (start: XYPos) (final: XYPos) =
             let color =
-                    if props.WireP.isSelected then
-                        "green" 
-                    else if props.WireP.hasError  then
-                        "red"
-                    else if props.WireP.BusWidth > 1 then
-                        "purple"
-                    else "black"
+                match props.WireP.isSelected, props.WireP.hasError, props.WireP.BusWidth with
+                | true, _, _ -> "green" 
+                | _, true, _ -> "red" 
+                | _, _, Some w when w > 1 -> "purple"
+                | _, _, None -> "purple"
+                | _ -> "black"
+
             g   [ Style [ 
                     TransformOrigin "0px 50px" 
                     Transform (sprintf "translate(%fpx,%fpx) rotate(%ddeg) scale(%f)" 0.0 0.0 0 1.0)
@@ -388,9 +390,10 @@ let view (model:Model) (dispatch: Msg -> unit)=
                 SrcP = w.SourcePort.Pos 
                 TgtP = w.TargetPort.Pos
                 ColorP = model.Color.Text()
-                StrokeWidthP = if w.hasError then "3px" 
-                               else if w.BusWidth > 1 then "3px"
-                               else "1px"
+                StrokeWidthP = 
+                    match w.hasError, w.BusWidth with
+                    | false, Some w when w = 1 -> "1px"
+                    | _ -> "3px" 
                 SrcOrient = Symbol.getOrientationOfPort model.Symbol w.SourcePort
                 TgtOrient = Symbol.getOrientationOfPort model.Symbol w.TargetPort
                 }
@@ -412,13 +415,15 @@ let createWire (startPort: Symbol.Port) (endPort: Symbol.Port)  =
         SourcePort = startPort
         TargetPort = endPort
         isSelected = false 
-        hasError =  false 
+        hasError = false 
         relativPositions = [{X=0.0 ; Y=0.0} ; origin ; origin]
         PrevPositions = [origin ; origin ; origin]
         BeingDragged = -1
-        BusWidth = match startPort.BusWidth with
-                   |Some w -> w
-                   |None -> 0
+        BusWidth = 
+            match startPort.BusWidth, endPort.BusWidth with
+            | Some wStart, Some wEnd -> Some wStart
+            | None, Some w | Some w, None -> Some w
+            | None, None -> None
     }
 
 let getWiresToBeDuplicated (displacementPos : XYPos ) (wireList : Wire list) (portList : Symbol.Port list) : (Symbol.Port option *Symbol.Port option* Wire) list  =    

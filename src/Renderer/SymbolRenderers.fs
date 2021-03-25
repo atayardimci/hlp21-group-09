@@ -248,18 +248,22 @@ let private renderConstant =
     FunctionComponent.Of(
         fun (props : RenderSymbolProps) ->
             let fX, fY = props.Symbol.Pos.X, props.Symbol.Pos.Y
-            let valueInfo = 
+            let busW, valueInfo = 
                 match props.Symbol.Type with
                 | CommonTypes.ComponentType.Constant (w, v) ->
-                    if w > 1 then sprintf "0x%0x"v else $"{v}"
+                    w, if w > 1 then sprintf "0x%0x"v else $"{v}"
                 | _ -> failwithf "Shouldn't happen"
             
+            let opacity = if props.Symbol.IsDragging then 0.4 else 1.
+            let wireStyle = if busW > 1 then busWireStyle opacity else wireStyle opacity
+
             g   [] 
                 [
                     polygon [ 
-                        Points $"{fX},{fY} {fX+10.},{fY+10.} {fX+39.6},{fY+10.} {fX+10.},{fY+10.} {fX},{fY+20.}"
+                        Points $"{fX},{fY} {fX+10.},{fY+10.} {fX},{fY+20.}"
                         symbolShapeStyle props
                     ] [ ]
+                    line [ X1 (fX+10.); Y1 (fY+10.); X2 (fX+39.6); Y2 (fY+10.); wireStyle] []
                     text [ 
                         X (fX + 10.); 
                         Y (fY + 19.)
