@@ -109,14 +109,15 @@ let drawLineToCursor (startPos : XYPos, endPos : XYPos, endPort : Symbol.Port op
         ] []
         ]
 
-
-
+let busWidthAnnotation (wire : Wire) = 
+    if wire.BusWidth = 0 then [] else [sprintf "%d" wire.BusWidth|> str]
+    
 
 let pairListElements sequence  = 
-        let revseq = List.rev sequence
-        match sequence,revseq with 
-        |hd::bodyone , tl::bodytwo -> List.rev bodytwo , bodyone
-        |_ -> sequence,sequence
+    let revseq = List.rev sequence
+    match sequence,revseq with 
+    |hd::bodyone , tl::bodytwo -> List.rev bodytwo , bodyone
+    |_ -> sequence,sequence
 
 let vertexlstZero (cable: Wire) (wModel: Model) (srcOrient: PortOrientation) (tgtOrient: PortOrientation) =
     let startpt = cable.SourcePort.Pos 
@@ -328,9 +329,7 @@ let autosingleWireView (wModel: Model)=
                         "purple"
                     else "black"
             g   [ Style [ 
-            // the transform here does rotation, scaling, and translation
-            // the rotation and scaling happens with TransformOrigin as fixed point first
-                    TransformOrigin "0px 50px" // so that rotation is around centre of line
+                    TransformOrigin "0px 50px" 
                     Transform (sprintf "translate(%fpx,%fpx) rotate(%ddeg) scale(%f)" 0.0 0.0 0 1.0)
                     ]
                 ]
@@ -347,10 +346,11 @@ let autosingleWireView (wModel: Model)=
 
         let startlst,endlst = pairListElements vertices
         let reactlst = List.map2 displayWireSegment startlst endlst 
-        
+        let annotatePos = if (props.WireP.SourcePort.PortType = CommonTypes.Output) then props.SrcP else props.TgtP
+
         text [
-                        X (props.SrcP.X + 20.0)
-                        Y (props.SrcP.Y + 2.0)
+                        X (annotatePos.X + 20.0)
+                        Y (annotatePos.Y + 2.0)
                         Style [
                             TextAnchor "middle" // left/right/middle: horizontal algnment vs (X,Y)
                             DominantBaseline "hanging" // auto/middle/hanging: vertical alignment vs (X,Y)
@@ -360,7 +360,7 @@ let autosingleWireView (wModel: Model)=
                             UserSelect UserSelectOptions.None
                             PointerEvents "none"
                         ]
-                    ]  [sprintf "%d" props.WireP.BusWidth|> str] :: reactlst
+                    ]  (busWidthAnnotation props.WireP) :: reactlst
          |> (fun lineEl -> 
             g [] lineEl)
 
@@ -406,7 +406,7 @@ let init () =
     {WX=[];Symbol=symbols; Color=CommonTypes.Red  ; Countselected = 0 ; PortToCursor = ({X = 0.0; Y= 0.0},{X = 0.0; Y= 0.0}, None)},Cmd.none 
 
 
-let createWire (startPort: Symbol.Port) (endPort: Symbol.Port) (*(createDU : CreateDU)*) =
+let createWire (startPort: Symbol.Port) (endPort: Symbol.Port)  =
     {
         Id = CommonTypes.ConnectionId (uuid())
         SourcePort = startPort
@@ -418,7 +418,7 @@ let createWire (startPort: Symbol.Port) (endPort: Symbol.Port) (*(createDU : Cre
         BeingDragged = -1
         BusWidth = match startPort.BusWidth with
                    |Some w -> w
-                   |None -> 1
+                   |None -> 0
     }
 
 let getWiresToBeDuplicated (displacementPos : XYPos ) (wireList : Wire list) (portList : Symbol.Port list) : (Symbol.Port option *Symbol.Port option* Wire) list  =    
@@ -481,8 +481,8 @@ let addWire (startPortTmp : Symbol.Port) (endPortTmp : Symbol.Port) (createDU : 
             let newSymModel = enforceBusWidth tmpSymModel width undefinedPort
             Some wire, newSymModel
 
-        | _ -> failwithf " BusWidths of sourcePort and targetPort are not specified !!!!"
-    
+        | _-> let wire = createWire startPort endPort   //failwithf " BusWidths of sourcePort and targetPort are not specified !!!!"
+              Some wire, tmpSymModel
     if (duplicate) then 
         match newWire with
         | Some w -> Some {w with isSelected = true}, newSym
