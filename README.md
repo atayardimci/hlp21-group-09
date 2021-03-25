@@ -8,9 +8,9 @@ Symbol Features:
 # 27/27 issie symbols implemented
 # buswidth inference -> explain here 
 # symbol creation -> symbol or sheet 
+# symbol selection
+# symbol deselection
 # 
-#
-#
 #
 #
 #
@@ -21,9 +21,11 @@ Sheet features:
 # symbol drag and drop on canvas
 # undo
 # zoom -> zoom in and zoom out
-# highlight elements on canvas
+# highlight elements on canvas -> same as below ?
+# selecting multiple symbols on the canvas
 # bounding box -> symbol or sheet ?
-#
+# copy and paste symbols
+# renders circles on ports of a symbol that become darker as you move closer to the symbol 
 
 Buswire features
 #
@@ -33,7 +35,7 @@ Buswire features
 #
 #
 #
-# SVG Draw Application Project Skeleton Code For HLP Project 2021
+# 
 
 See [The SVG Demo README](https://github.com/tomcl/hlp21-svg-elmish-demo/blob/master/README.md) for 
 code structure and how to build the dev environment: this is the same as the WS 3 SVG demo.
