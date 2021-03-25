@@ -402,8 +402,9 @@ let view (model:Model) (dispatch: Msg -> unit)=
                     | _ -> "3px" 
                 SrcOrient = Symbol.getOrientationOfPort model.Symbol w.SourcePort
                 TgtOrient = Symbol.getOrientationOfPort model.Symbol w.TargetPort
-                }
-            autosingleWireView model props)
+            }
+            autosingleWireView model props
+        )
     let symbols = SymbolRenderers.view model.Symbol (fun sMsg -> dispatch (Symbol sMsg))
     let lineToCursor= drawLineToCursor model.PortToCursor
     
@@ -432,29 +433,29 @@ let createWire (startPort: Symbol.Port) (endPort: Symbol.Port)  =
             | None, None -> None
     }
 
-let getWiresToBeDuplicated (displacementPos : XYPos ) (wireList : Wire list) (portList : Symbol.Port list) : (Symbol.Port option *Symbol.Port option* Wire) list  =    
+let getWiresToBeDuplicated (displacementPos: XYPos ) (wireList: Wire list) (portList: Symbol.Port list) : (Symbol.Port option * Symbol.Port option* Wire) list  =    
     wireList
     |> List.map (fun wire ->  
-        
-                let sourcePort =  List.tryFind (fun (p : Symbol.Port)  ->  
-                                                let dist = calcDistance (posAdd (wire.SourcePort.Pos)(displacementPos)) p.Pos
-                                                (dist < 0.001) ) portList
-                                        
-                let endPort =  List.tryFind (fun (p : Symbol.Port)  ->  
-                                             let dist = calcDistance (posAdd (wire.TargetPort.Pos)(displacementPos)) p.Pos
-                                             (dist < 0.001) ) portList
-                (sourcePort,endPort,wire)
-                )
+        let sourcePort =  
+            portList
+            |> List.tryFind (fun port ->  
+                (calcDistance (posAdd wire.SourcePort.Pos displacementPos) port.Pos) < 0.001)                   
+        let endPort = 
+            portList
+            |> List.tryFind (fun port ->  
+                (calcDistance (posAdd wire.TargetPort.Pos displacementPos) port.Pos) < 0.001) 
+        sourcePort, endPort, wire
+    )
                 
-let enforceBusWidth (symModel : Symbol.Symbol list) (busWidth : int) (unDefPort: Symbol.Port) : Symbol.Symbol list =
+let enforceBusWidth (symModel: Symbol.Symbol list) (busWidth: int) (undefPort: Symbol.Port) : Symbol.Symbol list =
     symModel
     |> List.map (fun sym -> 
-        match (sym.Id = unDefPort.HostId) with 
-        | true  ->  let newPort = {unDefPort with BusWidth = Some busWidth}
-                    sym
-                    |> Symbol.updateSymWithPort newPort 
-                    |> Symbol.autoCompleteWidths
-        | false->   sym        
+        match (sym.Id = undefPort.HostId) with 
+        | true ->  
+            sym
+            |> Symbol.updateSymWithPort {undefPort with BusWidth = Some busWidth} 
+            |> Symbol.autoCompleteWidths
+        | false -> sym        
     )
     
 
@@ -519,40 +520,46 @@ let startWireDragging (cable: Wire) (pos: XYPos) (wModel: Model)=
     {cable with BeingDragged = draggedSegment}
 
 let dragAWire (cable: Wire) (pos: XYPos) (wModel: Model) (srcOrient: PortOrientation) (tgtOrient: PortOrientation) =
-    let vLs = match vertexlstZero cable wModel srcOrient tgtOrient with
-              | [g ; h; i ; j ; k ; u] ->  h , i , j
-              | [s ; t ; u ; v ; w] -> t , u , v
-              | [l ; m ; n ; v] -> m , n , v
-              | _ -> origin , origin , origin
-    let o , p , q = vLs
-    let (a,b,c) = match cable.relativPositions with
-                  | [g ; h ; i] -> g , h , i
-                  | _ -> origin , origin , origin 
-    let (d,e,f) = match cable.PrevPositions with
-                  | [g ; h ; i] -> g , h , i
-                  | _ -> origin , origin , origin 
+    let vLs = 
+        match vertexlstZero cable wModel srcOrient tgtOrient with
+        | [g ; h; i ; j ; k ; u] -> h, i, j
+        | [s ; t ; u ; v ; w] -> t, u, v
+        | [l ; m ; n ; v] -> m, n, v
+        | _ -> origin, origin, origin
+    let o, p, q = vLs
+    let a, b, c = 
+        match cable.relativPositions with
+        | [g ; h ; i] -> g , h , i
+        | _ -> origin , origin , origin 
+    let d, e, f = 
+        match cable.PrevPositions with
+        | [g ; h ; i] -> g , h , i
+        | _ -> origin , origin , origin 
     match cable.BeingDragged with
-    | 0 ->  let offset = o
-            let correctedPos = posDiff pos offset 
-            let diff = posDiff correctedPos d           
-            { cable  with
-                relativPositions = [(posAdd a diff) ; b ; c]
-                PrevPositions = [correctedPos ; e ; f]
-            }
-    | 1 ->  let offset = p
-            let correctedPos = posDiff pos offset
-            let diff = posDiff correctedPos e 
-            { cable with 
-                relativPositions = [a ; (posAdd diff b) ; c]
-                PrevPositions = [d ; correctedPos ; f]
-            }
-    | 2 ->  let offset = q
-            let correctedPos = posDiff pos offset
-            let diff = posDiff correctedPos f
-            { cable with 
-                relativPositions = [a ; b ; (posAdd diff) c]
-                PrevPositions = [d ; e ; correctedPos]
-            }   
+    | 0 ->  
+        let offset = o
+        let correctedPos = posDiff pos offset 
+        let diff = posDiff correctedPos d           
+        { cable  with
+            relativPositions = [(posAdd a diff) ; b ; c]
+            PrevPositions = [correctedPos ; e ; f]
+        }
+    | 1 ->  
+        let offset = p
+        let correctedPos = posDiff pos offset
+        let diff = posDiff correctedPos e 
+        { cable with 
+            relativPositions = [a ; (posAdd diff b) ; c]
+            PrevPositions = [d ; correctedPos ; f]
+        }
+    | 2 ->  
+        let offset = q
+        let correctedPos = posDiff pos offset
+        let diff = posDiff correctedPos f
+        { cable with 
+            relativPositions = [a ; b ; (posAdd diff) c]
+            PrevPositions = [d ; e ; correctedPos]
+        }   
     | _ -> cable      
 
 let endWireDragging (cable: Wire) =
@@ -594,14 +601,13 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         | Some newWire, symModel -> {model with WX = newWire :: model.WX ; Symbol = symModel} , Cmd.none
         | None , symModel -> model,Cmd.none
     
-
-    
     | DeselectWire  ->
         let newWls =
             model.WX |> List.map (fun w ->
                                {w with isSelected = false}
                                ) 
         {model with WX = newWls} , Cmd.none
+        
     | StartDraggingWire (wid , p) ->
         let newWls wLs = wLs |> List.map (fun w ->
                                 if w.Id <> wid then w
