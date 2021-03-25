@@ -23,7 +23,7 @@ type Wire = {
     Id : CommonTypes.ConnectionId 
     SourcePort : Symbol.Port
     TargetPort : Symbol.Port
-    isSelected : bool
+    IsSelected : bool
     hasError : bool 
     relativPositions : XYPos list
     PrevPositions : XYPos list
@@ -87,7 +87,7 @@ let selectBoundedWires (wModel: Model) (boundary: BoundingBox) =
         let inBounds (point: XYPos) =
             point.X > boundary.TopLeft.X && point.X < boundary.BottomRight.X && point.Y > boundary.TopLeft.Y && point.Y < boundary.BottomRight.Y
         if (inBounds wr.SourcePort.Pos && inBounds wr.TargetPort.Pos) then
-            {wr with isSelected = true}
+            {wr with IsSelected = true}
         else wr
     List.map selectWireinBounds wModel.WX
 
@@ -325,7 +325,7 @@ let autosingleWireView (wModel: Model)=
     let displayFullWire (cable: Wire) (props: WireRenderProps) (vertices: list<XYPos>) = 
         let displayWireSegment (start: XYPos) (final: XYPos) =
             let color =
-                match props.WireP.isSelected, props.WireP.hasError, props.WireP.BusWidth with
+                match props.WireP.IsSelected, props.WireP.hasError, props.WireP.BusWidth with
                 | true, _, _ -> "green" 
                 | _, true, _ -> "red" 
                 | _, _, Some w when w > 1 -> "purple"
@@ -421,7 +421,7 @@ let createWire (startPort: Symbol.Port) (endPort: Symbol.Port)  =
         Id = CommonTypes.ConnectionId (uuid())
         SourcePort = startPort
         TargetPort = endPort
-        isSelected = false 
+        IsSelected = false 
         hasError = false 
         relativPositions = [{X=0.0 ; Y=0.0} ; origin ; origin]
         PrevPositions = [origin ; origin ; origin]
@@ -497,7 +497,7 @@ let addWire (startPortTmp : Symbol.Port) (endPortTmp : Symbol.Port) (createDU : 
               Some wire, tmpSymModel
     if (duplicate) then 
         match newWire with
-        | Some w -> Some {w with isSelected = true}, newSym
+        | Some w -> Some {w with IsSelected = true}, newSym
         | None -> None, newSym
     else newWire, newSym
 
@@ -575,7 +575,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         let clickedWire =
             List.map (fun w ->
                         if w.Id <> wId then w
-                        else {w with isSelected = true}
+                        else {w with IsSelected = true}
                       )
         let newWls = clickedWire model.WX 
         {model with WX = newWls} ,Cmd.none
@@ -604,7 +604,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
     | DeselectWire  ->
         let newWls =
             model.WX |> List.map (fun w ->
-                               {w with isSelected = false}
+                               {w with IsSelected = false}
                                ) 
         {model with WX = newWls} , Cmd.none
         
@@ -628,7 +628,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         let wireToBeRenderedFirst, wireToBeDeletedFirst =
             let wireRender,wireDelete =
                 model.WX
-                |>List.partition (fun w -> w.isSelected = false)
+                |>List.partition (fun w -> w.IsSelected = false)
             let wireRender2,wireDelete2 =  //when a symbol is deleted remove wire as well
                 wireRender
                 |>List.partition (fun w -> (Symbol.getSymbolWithId (model.Symbol) (w.SourcePort.HostId)) <> None) 
@@ -701,13 +701,13 @@ let wireToSelectOpt (wModel: Model) (pos: XYPos) : CommonTypes.ConnectionId opti
 
 
 let getSelectedWireList (wireList : Wire list) : Wire list = 
-    List.filter (fun w -> w.isSelected) wireList
+    List.filter (fun w -> w.IsSelected) wireList
 
 
 let deselectWire (WX : Wire list)  =
     let newWX =
         WX |> List.map (fun w ->
-                           {w with isSelected = false}
+                           {w with IsSelected = false}
                         ) 
     newWX
 

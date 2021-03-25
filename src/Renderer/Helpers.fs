@@ -17,16 +17,12 @@ type XYPos =
     }
 
 type MouseOp = 
-    /// button up
     | Up
-    /// button down
     | Down
-    /// Move with button up
     | Move 
-    /// Move with button Down
     | Drag
     | CtrlScroll
-    | Scroll
+    | AltDown
 
 type CanvasProps = 
     {

@@ -39,7 +39,7 @@ type Model = {
 type KeyboardMsg =
     | CtrlS | AltC | AltV | AltZ | AltShiftZ | DEL |AltQ
     | AltOne | AltTwo
-    | AltW | AltA | AltS | AltD
+    | AltW | AltA | AltS | AltD | Alt
     | AltShiftW | AltShiftA | AltShiftS | AltShiftD 
 
 type Msg =
@@ -47,6 +47,7 @@ type Msg =
     | KeyPress of KeyboardMsg
     | Zoom of CanvasProps
     | MouseMsg of MouseT
+    | AltClickMsg  of MouseT
     | Msg of string
 
     //Symbols
@@ -581,13 +582,12 @@ let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispat
     let mDown (ev:Types.MouseEvent) = 
         if ev.buttons <> 0. then true else false
 
-    let mouseOp op (ev:Types.MouseEvent) (scrollPos : (float*float)) = 
-        dispatch <| MouseMsg { Op = op ; 
-                               Pos = { X = (ev.clientX  + (fst scrollPos))/ (model.Canvas.zoom) ;
-                                       Y = (ev.clientY +  (snd scrollPos))/ (model.Canvas.zoom)
-                                     }
-                              }
-
+    let mouseOp dispatchMsg op (ev:Types.MouseEvent) (scrollPos : (float*float)) = 
+        dispatch <| dispatchMsg  { Op = op ; 
+                                   Pos = { X = (ev.clientX  + (fst scrollPos))/ (model.Canvas.zoom) ;
+                                           Y = (ev.clientY +  (snd scrollPos))/ (model.Canvas.zoom)
+                                         }
+                                 }
     let wheelOp op (ev:Types.WheelEvent) =   
         let newZoom = model.Canvas.zoom - (model.Canvas.zoom*ev.deltaY*0.0010)
         dispatch <| Zoom  {model.Canvas with zoom = newZoom;}
@@ -608,9 +608,14 @@ let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispat
               | Some (scrollLeft,scrollRight) -> (scrollLeft, scrollRight)
               | None -> (0.0,0.0)
 
-          OnMouseDown (fun ev -> (mouseOp Down ev (scrollTop,scrollLeft)))
-          OnMouseUp (fun ev -> (mouseOp Up ev (scrollTop,scrollLeft)))
-          OnMouseMove (fun ev -> mouseOp (if mDown ev then Drag else Move) ev (scrollTop,scrollLeft) )
+          OnMouseDown (fun ev ->
+                    if ev.altKey = true then (mouseOp AltClickMsg Down ev (scrollTop,scrollLeft)) else
+                    (mouseOp MouseMsg Down ev (scrollTop,scrollLeft)))
+
+          OnMouseUp (fun ev -> 
+                    (mouseOp MouseMsg Up ev (scrollTop,scrollLeft)))
+          OnMouseMove (fun ev -> 
+                     if ev.altKey <> true then mouseOp MouseMsg (if mDown ev then Drag else Move) ev (scrollTop,scrollLeft))
           OnWheel (fun ev -> if ev.ctrlKey = true then wheelOp CtrlScroll ev else ())
           
        ] 
@@ -998,7 +1003,36 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
     | LoadCanvas sheetDU -> match sheetDU with
                             |First -> loadCanvasState model model.FirstSheet First, Cmd.none
                             |Second -> loadCanvasState model model.SecondSheet Second, Cmd.none
+    
+    | AltClickMsg mMsg -> 
+        let clickedWire = BusWire.wireToSelectOpt model.Wire mMsg.Pos
+        let newWires = 
+            match clickedWire with 
+            | Some wireId -> 
+                model.Wire.WX
+                |>List.map (fun w -> if w.Id = wireId then {w with IsSelected = true} else w)
+            | None -> model.Wire.WX
 
+        let newSymModel = 
+            let clickedSym = List.tryFind (Symbol.isSymClicked mMsg.Pos) model.Wire.Symbol
+            match clickedSym with
+            | Some sym -> 
+                model.Wire.Symbol
+                |> List.map 
+                    (fun x -> 
+                        if x.Id = sym.Id then 
+                            if(x.IsSelected = false) then 
+                                {x with IsSelected = true; LastDragPos = mMsg.Pos}
+                             else 
+                                {x with IsSelected = false; LastDragPos = mMsg.Pos}
+                        else x)
+
+            | None -> model.Wire.Symbol   
+        
+        let newWireModel = {model.Wire with WX = newWires; Symbol = newSymModel}
+        {model with Wire = newWireModel},Cmd.none
+
+        
 
     | MouseMsg mMsg ->     
         let command = 
@@ -1109,5 +1143,6 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             | AltC -> model,Cmd.ofMsg (Copy)
 
             | AltV -> model,Cmd.ofMsg (Paste)
+
         newModel,Cmd.batch [newMsg ; Cmd.ofMsg (UpdatePorts)]
         
