@@ -102,35 +102,36 @@ let nullRender model  =
                 HoveringPortsToBeRendered = [];
                 DraggingPortsToBeRendered = [];
         }
+let alignRange = 2.5
 
 let within num1 num2 = 
-    if (num1 < (num2 + 2.5) ) && (num1 > (num2 - 2.5) ) then true else false
+    if (num1 < (num2 + alignRange) ) && (num1 > (num2 - alignRange) ) then true else false
 
 let withinPosX pos1 pos2 =
-    if (pos1.X < (pos2.X + 2.5) ) && (pos1.X > (pos2.X - 2.5)) then true else false
+    if (pos1.X < (pos2.X + alignRange) ) && (pos1.X > (pos2.X - alignRange)) then true else false
 
 let withinPosY pos1 pos2 =
-    if (pos1.Y < (pos2.Y + 2.5) ) && (pos1.Y > (pos2.Y - 2.5)) then true else false
+    if (pos1.Y < (pos2.Y + alignRange) ) && (pos1.Y > (pos2.Y - alignRange)) then true else false
 
 let symIsWithin (bBox : BoundingBox) (symList : Symbol.Symbol list) = 
-            let boxTL =  bBox.TopLeft 
-            let boxBR = bBox.BottomRight
+    let boxTL =  bBox.TopLeft 
+    let boxBR = bBox.BottomRight
 
-            List.exists (fun (s : Symbol.Symbol) -> 
-                let sTL =  s.BBox.TopLeft
-                let sBR = s.BBox.BottomRight
-                // check if we should snap2alignment,  TL = TopLeft BR = BottomRight 
-                withinPosX  (calcCentreBBox bBox) (calcCentre ({X = sTL.X ; Y = sTL.Y + 15.0 },{X = sBR.X ; Y = sBR.Y}))  ||
-                withinPosY  (calcCentreBBox bBox) (calcCentre ({X = sTL.X ; Y = sTL.Y + 15.0 },{X = sBR.X ; Y = sBR.Y}))  ||
-                (within boxTL.X sTL.X) ||
-                (within boxTL.X sBR.X)||   
-                (within boxBR.X sTL.X) ||
-                (within boxBR.X sBR.X) ||
-                (within boxTL.Y  (sTL.Y + 15.0)) ||
-                (within boxTL.Y sBR.Y )||
-                (within boxBR.Y (sTL.Y + 15.0)) ||
-                (within boxBR.Y sBR.Y) 
-             ) symList
+    List.exists (fun (s : Symbol.Symbol) -> 
+        let sTL =  s.BBox.TopLeft
+        let sBR = s.BBox.BottomRight
+        // check if we should snap2alignment,  TL = TopLeft BR = BottomRight 
+        withinPosX  (calcCentreBBox bBox) (calcCentre ({X = sTL.X ; Y = sTL.Y + 15.0 },{X = sBR.X ; Y = sBR.Y}))  ||
+        withinPosY  (calcCentreBBox bBox) (calcCentre ({X = sTL.X ; Y = sTL.Y + 15.0 },{X = sBR.X ; Y = sBR.Y}))  ||
+        (within boxTL.X sTL.X) ||
+        (within boxTL.X sBR.X)||   
+        (within boxBR.X sTL.X) ||
+        (within boxBR.X sBR.X) ||
+        (within boxTL.Y  (sTL.Y + 15.0)) ||
+        (within boxTL.Y sBR.Y )||
+        (within boxBR.Y (sTL.Y + 15.0)) ||
+        (within boxBR.Y sBR.Y) 
+        ) symList
 
 let getCornersFromBBox (bBox : BoundingBox) = 
     match bBox with 
@@ -228,7 +229,7 @@ let storeRedoState (model : Model) : Model list =
         model :: List.take 15 model.UndoStates
     else 
         model :: model.UndoStates 
-
+///shifts one symbol by a X and Y value.
 let shiftSymbol (sym : Symbol.Symbol) (diffPos : XYPos ) = 
     { sym with
         Pos = posAdd sym.Pos diffPos
@@ -246,7 +247,7 @@ let shiftSymbol (sym : Symbol.Symbol) (diffPos : XYPos ) =
             BottomRight = (posAdd sym.BBox.BottomRight diffPos)
     }
         }
-
+///shifts all Selected symbols by a X and Y value
 let shiftSelectedSymbols (symList : Symbol.Symbol list ) (diffPos : XYPos ) = 
     symList 
     |>List.map (fun sym -> 
@@ -254,7 +255,7 @@ let shiftSelectedSymbols (symList : Symbol.Symbol list ) (diffPos : XYPos ) =
                 sym
             else
                 shiftSymbol sym diffPos)
-
+/// sorts Symbols according to distance from pos.
 let sortDistToSymbol (pos : XYPos) (symList : Symbol.Symbol list) : (float * CommonTypes.ComponentId) list=
     let getDistToCentreofSymbol (pos : XYPos) (sym : Symbol.Symbol) : float * CommonTypes.ComponentId = 
         let dist = calcDistance pos (calcCentreBBox sym.BBox)
@@ -274,6 +275,7 @@ let startDraggingSymbol (pagePos: XYPos)  (model : Symbol.Symbol list) sId  =
                     IsDragging = true
                 }
         )
+
 let draggingSymbol (pagePos: XYPos)  (model : Symbol.Symbol list) sId  = 
     model
     |> List.map (fun sym -> 
@@ -283,6 +285,7 @@ let draggingSymbol (pagePos: XYPos)  (model : Symbol.Symbol list) sId  =
             let diffPos = posDiff pagePos sym.LastDragPos      
             shiftSymbol sym diffPos
     )
+
 let endDraggingSymbol (model : Symbol.Symbol list) sId =
     model
     |> List.map (fun sym ->
@@ -301,7 +304,7 @@ let isPortClicked (pos : XYPos) (port: Symbol.Port) : bool =
              (p.Y >= port.BBox.TopLeft.Y) && (p.Y <= port.BBox.BottomRight.Y)  
          -> true
     | _ -> false
-
+/// returns true if pos is within a certain distance to port.
 let isWithinDistanceToPort (pos : XYPos ) (dist : float) (port: Symbol.Port)   : bool = 
     if ( (calcDistance pos port.Pos) < dist ) then true else false
 
@@ -314,8 +317,6 @@ let tryFindPortByPortId (id : string) (ports : Symbol.Port list) : Symbol.Port o
        id = port.Id
 
     List.tryFind(findPortByPortId id) ports
-
-
 
 // ------------------------------------ UPDATE FUNCTINOS ------------------------------------- //
 ///returns a new Sheet.Model that has it's selected components duplicated upon ALT+C keypress
@@ -345,8 +346,6 @@ let isClicked (model : Model) (mMsg : MouseT)  =
             | None -> [StartDrawingRegion mMsg.Pos]          
             | _ -> failwithf "Won't Happen"
 
-
-
 ///Return a dist and either Input, Output or All Ports 
 let filterPortsMatchingHostId (portList: Symbol.Port list) (portDU : Helpers.PortDU) 
                             (dist : float , hostId : CommonTypes.ComponentId)  
@@ -368,8 +367,8 @@ let filterPortsMatchingHostId (portList: Symbol.Port list) (portDU : Helpers.Por
                         when (hostId = hId) -> true 
                      | _ -> false
         )
-
     (dist,newPortList)
+
 ///Returns ports that are within a minimum range to the cursor
 let getPortsWithinMinRange (mousePos : XYPos ) (model : Model) (minDist : float) (portDU : PortDU)  = 
     let sortedSymbols = sortDistToSymbol (mousePos) model.Wire.Symbol
@@ -380,6 +379,7 @@ let getPortsWithinMinRange (mousePos : XYPos ) (model : Model) (minDist : float)
     let portsWithinMinRange = List.map (filterPortsMatchingHostId portList portDU) symbolsWithinMinRange
 
     portsWithinMinRange
+
 /// Handles dragging of Port
 let draggingPort (model : Model) (mousePos : XYPos) =
     
@@ -404,9 +404,6 @@ let draggingPort (model : Model) (mousePos : XYPos) =
     [firstMsg; secondMsg; thirdMsg]
     |> List.map Cmd.ofMsg
 
-/// EndPortDraging = 
-    //let endPortDragging = 
-
 /// Function that renders BoundingBoxes
 let private renderBBox (bBox : BoundingBox) = 
     let fX, fY = bBox.TopLeft.X, bBox.TopLeft.Y
@@ -424,6 +421,7 @@ let private renderBBox (bBox : BoundingBox) =
             ]
             ]   [ ]
         ])
+
 ///Function that renders AlignmentLines
 let private renderAlignmentLines (lines : Line list) = 
     g   [](
@@ -441,8 +439,7 @@ let private renderAlignmentLines (lines : Line list) =
         ) lines
     )
 
-
-///function that renders Ports close to your cursor
+///function that renders Ports close to your cursor when moving 
 let private renderPortsHovering (distance: float , portList: Symbol.Port list) = 
     let radius = 6.0
     let opacity = 1.0/distance * 55.0
@@ -524,23 +521,24 @@ let private renderBackground =
             SVGAttr.Height "100%"
             ]
             [
-                   defs[]
-                    [ 
-                    pattern [
-                        Id "smallGrid"
-                        SVGAttr.Width 24.0;
-                        SVGAttr.Height 24.0;
-                        SVGAttr.PatternUnits "userSpaceOnUse"
-                        ] [path [SVGAttr.D "M 24 0 L 0 0 0 24" ; SVGAttr.Fill "none" ; 
-                                 SVGAttr.Stroke "silver"; SVGAttr.StrokeWidth 0.5] []]
-                    ]
+                defs[]
+                [ 
+                pattern [
+                    Id "smallGrid"
+                    SVGAttr.Width 24.0;
+                    SVGAttr.Height 24.0;
+                    SVGAttr.PatternUnits "userSpaceOnUse"
+                    ] [path [SVGAttr.D "M 24 0 L 0 0 0 24" ; SVGAttr.Fill "none" ; 
+                                SVGAttr.Stroke "silver"; SVGAttr.StrokeWidth 0.5] []]
+                ]
                
-                   rect [
-                       SVGAttr.Width "100%"
-                       SVGAttr.Height "100%"
-                       SVGAttr.Fill "url(#smallGrid)"
-                   ] []
+                rect [
+                    SVGAttr.Width "100%"
+                    SVGAttr.Height "100%"
+                    SVGAttr.Fill "url(#smallGrid)"
+                ] []
             ]
+
 let renderPortOfWireSelected (model: Model) (w:BusWire.Wire)  =
     let srcPort, tgtPort = BusWire.getPortsOfWire model.Wire w
     let radius = 6.0 
