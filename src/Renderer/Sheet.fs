@@ -811,8 +811,8 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
     | UpdatePorts  ->
         let newBusModel, newCmd = 
             BusWire.update (BusWire.Msg.UpdateBusWirePorts) model.Wire
-            //|>fst 
-            //|>BusWire.update (BusWire.Msg.UpdateWires )
+            |>fst 
+            |>BusWire.update (BusWire.Msg.UpdateWires )
         {model with 
             Wire = newBusModel
         }
