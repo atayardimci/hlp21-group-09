@@ -192,8 +192,8 @@ let vertexlstZero (cable: Wire) (wModel: Model) (srcOrient: PortOrientation) (tg
     |Bottom,Right -> match (startpt |> rightof endpt) , (startpt |> above endpt) with
                      |true,true -> [startpt ; startpt |> moveVerticallyTo endpt.Y ; endpt]
                      |true,false
-                     |false,true -> [startpt ; {X=startpt.X;Y=startpt.Y+15.0} ; {X=endpt.X+15.0;Y=startpt.Y+15.0} ; {X=endpt.X+15.0;Y=endpt.Y} ; endpt]
-                     |false,false -> [startpt ; {X=startpt.X;Y=startpt.Y+100.0} ; {X=endpt.X+15.0;Y=startpt.Y+100.0} ; {X=endpt.X+15.0;Y=endpt.Y} ; endpt]
+                     |false,true -> [startpt ; startpt |> movedown(15.0) ; {X=endpt.X+15.0;Y=startpt.Y+15.0} ; endpt |> moveright(15.0) ; endpt]
+                     |false,false -> [startpt ; startpt |> movedown(100.0) ; {X=endpt.X+15.0;Y=startpt.Y+100.0} ; endpt |> moveright(15.0) ; endpt]
     |_ ->  [startpt ; {X=midX;Y=startpt.Y} ; {X=midX;Y=endpt.Y} ; endpt]
 
 let vertexlist (cable: Wire) (wModel: Model) (srcOrient: PortOrientation) (tgtOrient: PortOrientation)= 
@@ -218,21 +218,21 @@ let vertexlist (cable: Wire) (wModel: Model) (srcOrient: PortOrientation) (tgtOr
     |Right,Bottom -> match (startpt |> leftof endpt) , (startpt |> below endpt) with
                      |true,true -> [startpt ; startpt |> moveHorizontallyTo endpt.X ; endpt]
                      |true,false 
-                     |false,true -> [startpt ; {X=startpt.X+15.0+a.X;Y=startpt.Y} ; {X=startpt.X+15.0+a.X;Y=endpt.Y+15.0+b.Y} ; {X=endpt.X;Y=endpt.Y+15.0+b.Y} ; endpt]
-                     |false,false -> [startpt ; {X=startpt.X+100.0+a.X;Y=startpt.Y} ; {X=startpt.X+100.0+a.X;Y=endpt.Y+15.0+b.Y} ; {X=endpt.X;Y=endpt.Y+15.0+b.Y} ; endpt]
+                     |false,true -> [startpt ; startpt |> moveright(15.0+a.X) ; {X=startpt.X+15.0+a.X;Y=endpt.Y+15.0+b.Y} ; endpt |> movedown(15.0+b.Y) ; endpt]
+                     |false,false -> [startpt ; startpt |> moveright(100.0+a.X) ; {X=startpt.X+100.0+a.X;Y=endpt.Y+15.0+b.Y} ; endpt |> movedown(15.0+b.Y) ; endpt]
     |Right,Top -> match (startpt |> leftof endpt) , (startpt |> above endpt) with
-                  |true,true -> [startpt ; {X=endpt.X;Y=startpt.Y} ; endpt]
+                  |true,true -> [startpt ; startpt |> moveHorizontallyTo endpt.X ; endpt]
                   |true,false 
                   |false,true -> [startpt ; startpt |> moveright(15.0+a.X) ; {X=startpt.X+15.0+a.X;Y=endpt.Y-15.0+b.Y} ; endpt |> movedown(-15.0+b.Y) ; endpt]
                   |false,false -> [startpt ; startpt |> moveright(100.0+a.X) ; {X=startpt.X+100.0+a.X;Y=endpt.Y-15.0+b.Y} ; endpt |> movedown(-15.0+b.Y) ; endpt]
     |Right,Left -> match (startpt |> leftof endpt) with 
                    |true -> [startpt ; startpt |> moveHorizontallyTo (midX+a.X) ; endpt |> moveHorizontallyTo (midX+a.X) ; endpt]
-                   |false -> [startpt ; {X=startpt.X+15.0+a.X;Y=startpt.Y} ; {X=startpt.X+15.0+a.X;Y=midY+b.Y} ; {X=endpt.X-15.0+c.X;Y=midY+b.Y} ; {X=endpt.X-15.0+c.X;Y=endpt.Y} ; endpt]
+                   |false -> [startpt ; startpt |> moveright(15.0+a.X) ; {X=startpt.X+15.0+a.X;Y=midY+b.Y} ; {X=endpt.X-15.0+c.X;Y=midY+b.Y} ; endpt |> moveright(-15.0+c.X) ; endpt]
     |Right,Right -> [startpt ; {X=startpt.X+15.0;Y=startpt.Y} ; {X=startpt.X+15.0;Y=endpt.Y} ; endpt]
     |Left,Bottom -> match (startpt |> rightof endpt) , (startpt |> below endpt) with
                     |true,true -> [startpt ; startpt |> moveHorizontallyTo midX ; endpt]
                     |true,false 
-                    |false,true -> [startpt ; {X=startpt.X-15.0+a.X;Y=startpt.Y} ; {X=startpt.X-15.0+a.X;Y=endpt.Y+15.0+b.Y} ; {X=endpt.X;Y=endpt.Y+15.0+b.Y} ; endpt]
+                    |false,true -> [startpt ; startpt |> moveright(-15.0+a.X) ; {X=startpt.X-15.0+a.X;Y=endpt.Y+15.0+b.Y} ; endpt |> movedown(15.0+b.Y) ; endpt]
                     |false,false -> [startpt ; {X=startpt.X-100.0+a.X;Y=startpt.Y} ; {X=startpt.X-100.0+a.X;Y=endpt.Y+15.0+b.Y} ; {X=endpt.X;Y=endpt.Y+15.0+b.Y} ; endpt]
     |Left,Top -> match (startpt |> rightof endpt) , (startpt |> above endpt) with
                  |true,true -> [startpt ; startpt |> moveHorizontallyTo endpt.X ; endpt]
@@ -240,18 +240,18 @@ let vertexlist (cable: Wire) (wModel: Model) (srcOrient: PortOrientation) (tgtOr
                  |false,true -> [startpt ; startpt |> moveright(-15.0+a.X) ; {X=startpt.X-15.0+a.X;Y=endpt.Y-15.0+b.Y} ; endpt |> movedown(-15.0+b.Y) ; endpt]
                  |false,false -> [startpt ; startpt |> moveright(-100.0+a.X) ; {X=startpt.X-100.0+a.X;Y=endpt.Y-15.0+b.Y} ; endpt |> movedown(-15.0+b.Y) ; endpt]
     |Left,Right -> match (startpt |> rightof endpt) with 
-                   |true -> [startpt ; {X=midX+a.X;Y=startpt.Y} ; {X=midX+a.X;Y=endpt.Y} ; endpt]
-                   |false -> [startpt ; {X=startpt.X-15.0+a.X;Y=startpt.Y} ; {X=startpt.X-15.0+a.X;Y=midY+b.Y} ; {X=endpt.X+15.0+c.X;Y=midY+b.Y} ; {X=endpt.X+15.0+c.X;Y=endpt.Y} ; endpt]
+                   |true -> [startpt ; startpt |> moveHorizontallyTo (midX+a.X) ; {X=midX+a.X;Y=endpt.Y} ; endpt]
+                   |false -> [startpt ; startpt |> moveright (-15.0+a.X) ; {X=startpt.X-15.0+a.X;Y=midY+b.Y} ; {X=endpt.X+15.0+c.X;Y=midY+b.Y} ; {X=endpt.X+15.0+c.X;Y=endpt.Y} ; endpt]
     |Top,Bottom -> match (startpt |> below endpt) with
-                   |true -> [startpt ; {X=startpt.X;Y=midY+a.Y} ; {X=endpt.X;Y=midY+a.Y} ; endpt]
-                   |false -> [startpt ; {X=startpt.X;Y=startpt.Y-15.0+a.Y} ; {X=midX+b.X;Y=startpt.Y-15.0+a.Y} ; {X=midX+b.X;Y=endpt.Y+15.0+c.Y} ; {X=endpt.X;Y=endpt.Y+15.0+c.Y} ; endpt]
+                   |true -> [startpt ; startpt |> moveVerticallyTo (midY+a.Y) ; endpt |> moveVerticallyTo (midY+a.Y) ; endpt]
+                   |false -> [startpt ; startpt |> movedown(-15.0+a.Y) ; {X=midX+b.X;Y=startpt.Y-15.0+a.Y} ; {X=midX+b.X;Y=endpt.Y+15.0+c.Y} ; endpt |> movedown(15.0+c.Y) ; endpt]
     |Top,Left -> match (startpt |> leftof endpt) , (startpt |> below endpt) with
-                 |true,true -> [startpt ; {X=startpt.X;Y=endpt.Y} ; endpt]
+                 |true,true -> [startpt ; startpt |> moveVerticallyTo endpt.Y ; endpt]
                  |true,false
-                 |false,true -> [startpt ; {X=startpt.X;Y=startpt.Y-15.0+a.Y} ; {X=endpt.X-15.0+b.X;Y=startpt.Y-15.0+a.Y} ; {X=endpt.X-15.0+b.X;Y=endpt.Y} ; endpt]
-                 |false,false -> [startpt ; {X=startpt.X;Y=startpt.Y-100.0+a.Y} ; {X=endpt.X-15.0+b.X;Y=startpt.Y-100.0+a.Y} ; {X=endpt.X-15.0+b.X;Y=endpt.Y} ; endpt]
+                 |false,true -> [startpt ; startpt |> movedown(-15.0+a.Y) ; {X=endpt.X-15.0+b.X;Y=startpt.Y-15.0+a.Y} ; endpt |> moveright(-15.0+b.X) ; endpt]
+                 |false,false -> [startpt ; startpt |> movedown(-100.0+a.Y) ; {X=endpt.X-15.0+b.X;Y=startpt.Y-100.0+a.Y} ; endpt |> moveright(-15.0+b.X) ; endpt]
     |Top,Right -> match (startpt |> rightof endpt) , (startpt |> below endpt) with
-                  |true,true -> [startpt ; {X=startpt.X;Y=endpt.Y} ; endpt]
+                  |true,true -> [startpt ; startpt |> moveVerticallyTo endpt.Y ; endpt]
                   |true,false
                   |false,true -> [startpt ; startpt |> movedown (-15.0+a.Y) ; {X=endpt.X+15.0+b.X;Y=startpt.Y-15.0+a.Y} ; endpt |> moveright (15.0+b.X) ; endpt]
                   |false,false -> [startpt ; startpt |> movedown (-100.0+a.Y) ; {X=endpt.X+15.0+b.X;Y=startpt.Y-100.0+a.Y} ; endpt |> moveright (15.0+b.X) ; endpt]
@@ -359,8 +359,8 @@ let view (model:Model) (dispatch: Msg -> unit)=
                 SrcP = w.SourcePort.Pos 
                 TgtP = w.TargetPort.Pos
                 ColorP = model.Color.Text()
-                StrokeWidthP = if w.hasError then "2px" 
-                               else if w.BusWidth > 1 then "2px"
+                StrokeWidthP = if w.hasError then "3px" 
+                               else if w.BusWidth > 1 then "3px"
                                else "1px"
                 SrcOrient = Symbol.getOrientationOfPort model.Symbol w.SourcePort
                 TgtOrient = Symbol.getOrientationOfPort model.Symbol w.TargetPort
