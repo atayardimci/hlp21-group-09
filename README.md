@@ -53,6 +53,6 @@ Our interface documentation can be found under ./docs directory. A document is i
 * Implement the integration with Issie.
 * Improve Wire Routing and perhaps allow users to create and delete individual segments.
 * Allow select and change the orientation of ports one by one.
-* Merge the 3 models, i.e. Sheet, Buswire and Symbol models (to eliminate redundancy).
+* Merge the 3 models, i.e. Sheet, Buswire and Symbol models (to eliminate redundancy). Improve interfacing between modules to remove the need for the same data being present in more than one module.
 
 
