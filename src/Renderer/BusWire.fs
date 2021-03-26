@@ -12,7 +12,7 @@ open Helpers
 //------------------------------BusWire Types-----------------------------//
 //------------------------------------------------------------------------//
 
-type segmentForDragging =
+type SegmentForDragging =
     |Second
     |Third
     |Forth
@@ -26,7 +26,7 @@ type Wire = {
     HasError : bool 
     RelativePos : XYPos*XYPos*XYPos
     PrevPositions : XYPos*XYPos*XYPos
-    BeingDragged : segmentForDragging
+    BeingDragged : SegmentForDragging
     BusWidth : int Option
 }
 
@@ -62,8 +62,8 @@ let posOf x y = {X=x;Y=y}
 
 /// look up wire in WireModel
 let findWire (wModel: Model) (wId: CommonTypes.ConnectionId): Wire =
-    let correctWire cable =
-        cable.Id = wId
+    let correctWire wire =
+        wire.Id = wId
     match wModel.WX |> List.tryFind (correctWire) with
     | Some wr -> wr
     | None    -> failwithf "Ghost"
@@ -130,14 +130,14 @@ let pairListElements sequence  =
     |hd::bodyone , tl::bodytwo -> List.rev bodytwo , bodyone
     |_ -> sequence,sequence
 
-let vertexList (cable: Wire) (srcOrient: PortOrientation) (tgtOrient: PortOrientation) (initial : bool)= 
+let vertexList (wire: Wire) (srcOrient: PortOrientation) (tgtOrient: PortOrientation) (initial : bool)= 
     let a,b,c = 
         match initial with
         | true -> nullPos,nullPos,nullPos
-        | false -> cable.RelativePos
+        | false -> wire.RelativePos
           
-    let startPt = cable.SourcePort.Pos 
-    let endPt = cable.TargetPort.Pos
+    let startPt = wire.SourcePort.Pos 
+    let endPt = wire.TargetPort.Pos
     let midX = (startPt.X+endPt.X)/2.0
     let midY = (startPt.Y+endPt.Y)/2.0
     
@@ -214,14 +214,14 @@ let vertexList (cable: Wire) (srcOrient: PortOrientation) (tgtOrient: PortOrient
                      |false,false -> [startPt ; startPt |> moveDown (100.0+a.Y) ; {X=endPt.X+15.0+b.X;Y=startPt.Y+100.0+a.Y} ; endPt |> moveRight (100.0+b.X) ; endPt]
     |_ ->  [startPt ; {X=midX;Y=startPt.Y} ; {X=midX;Y=endPt.Y} ; endPt]
 
-let bounds (cable: Wire) (wModel: Model)=
+let bounds (wire: Wire) (wModel: Model)=
     let individualBound (start:XYPos) (final: XYPos) =
         if (final.Y > start.Y || final.X > start.X) then
             {TopLeft = {X=start.X-5.0;Y=start.Y-5.0} ;
              BottomRight = {X=final.X+5.0;Y=final.Y+5.0}}
          else {TopLeft = {X=final.X-5.0;Y=final.Y-5.0} ;
              BottomRight = {X=start.X+5.0;Y=start.Y+5.0}}
-    let vLst = vertexList cable (Symbol.getOrientationOfPort wModel.Symbol cable.SourcePort) (Symbol.getOrientationOfPort wModel.Symbol cable.TargetPort) false
+    let vLst = vertexList wire (Symbol.getOrientationOfPort wModel.Symbol wire.SourcePort) (Symbol.getOrientationOfPort wModel.Symbol wire.TargetPort) false
     let startList , endList = pairListElements vLst 
     List.map2 individualBound startList endList
 
@@ -312,15 +312,6 @@ let init () =
 
 
 
-
-
-
-
-
-
-
-
-
 let createWire (startPort: Symbol.Port) (endPort: Symbol.Port)  =
     {
         Id = CommonTypes.ConnectionId (uuid())
@@ -406,11 +397,11 @@ let addWire (startPortTmp : Symbol.Port) (endPortTmp : Symbol.Port) (createDU : 
     else newWire, newSym
 
 
-let startWireDragging (cable: Wire) (pos: XYPos) (wModel: Model)=
+let startWireDragging (wire: Wire) (pos: XYPos) (wModel: Model)=
     let inShape (b:BoundingBox) =
         pos.X > b.TopLeft.X && pos.X < b.BottomRight.X && pos.Y > b.TopLeft.Y && pos.Y < b.BottomRight.Y
     let draggedSegment =
-        match List.map inShape (bounds cable wModel) with
+        match List.map inShape (bounds wire wModel) with
         | [false ; true ; false] -> Second
         | [false ; true ; false ; false] -> Second
         | [false ; false ; true ; false] -> Third
@@ -418,25 +409,25 @@ let startWireDragging (cable: Wire) (pos: XYPos) (wModel: Model)=
         | [false ; false ; true ; false ; false] -> Third
         | [false ; false ; false ; true ; false] -> Forth
         | _ -> NoSeg
-    {cable with BeingDragged = draggedSegment}
+    {wire with BeingDragged = draggedSegment}
 
-let dragAWire (cable: Wire) (pos: XYPos) (wModel: Model) (srcOrient: PortOrientation) (tgtOrient: PortOrientation) =
+let dragAWire (wire: Wire) (pos: XYPos) (wModel: Model) (srcOrient: PortOrientation) (tgtOrient: PortOrientation) =
     let vLs = 
-        match vertexList cable srcOrient tgtOrient true with
+        match vertexList wire srcOrient tgtOrient true with
         | [g ; h; i ; j ; k ; u] -> h, i, j
         | [s ; t ; u ; v ; wire] -> t, u, v
         | [l ; m ; n ; v] -> m, n, v
         | _ -> origin, origin, origin
     let o, p, q = vLs
-    let a, b, c = cable.RelativePos    
-    let d, e, f = cable.PrevPositions 
+    let a, b, c = wire.RelativePos    
+    let d, e, f = wire.PrevPositions 
  
-    match cable.BeingDragged with
+    match wire.BeingDragged with
     | Second ->  
         let offset = o
         let correctedPos = posDiff pos offset 
         let diff = posDiff correctedPos d           
-        { cable  with
+        { wire  with
             RelativePos = (posAdd a diff), b, c
             PrevPositions = correctedPos, e, f
         }
@@ -444,7 +435,7 @@ let dragAWire (cable: Wire) (pos: XYPos) (wModel: Model) (srcOrient: PortOrienta
         let offset = p
         let correctedPos = posDiff pos offset
         let diff = posDiff correctedPos e 
-        { cable with 
+        { wire with 
             RelativePos = a, (posAdd diff b), c
             PrevPositions = d, correctedPos, f
         }
@@ -452,14 +443,14 @@ let dragAWire (cable: Wire) (pos: XYPos) (wModel: Model) (srcOrient: PortOrienta
         let offset = q
         let correctedPos = posDiff pos offset
         let diff = posDiff correctedPos f
-        { cable with 
+        { wire with 
             RelativePos = a, b, (posAdd diff) c
             PrevPositions = d , e , correctedPos
         }   
-    | _ -> cable      
+    | _ -> wire      
 
-let endWireDragging (cable: Wire) =
-    {cable with BeingDragged = NoSeg}
+let endWireDragging (wire: Wire) =
+    {wire with BeingDragged = NoSeg}
 
 let update (msg : Msg) (wModel : Model): Model*Cmd<Msg> =
     match msg with
@@ -593,11 +584,11 @@ let wireToSelectOpt (wModel: Model) (pos: XYPos) : CommonTypes.ConnectionId opti
     let inShape (b:BoundingBox) =
         pos.X >= b.TopLeft.X && pos.X <= b.BottomRight.X && pos.Y >= b.TopLeft.Y && pos.Y <= b.BottomRight.Y 
     let inWireBounds (conId: CommonTypes.ConnectionId) =
-        let cable = findWire wModel conId 
-        match List.tryFind (inShape) (bounds cable wModel) with
+        let wire = findWire wModel conId 
+        match List.tryFind (inShape) (bounds wire wModel) with
         |Some b -> true
         |None -> false
-    let name cable = cable.Id
+    let name wire = wire.Id
     List.tryFind (inWireBounds) (List.map name wModel.WX)
 
 

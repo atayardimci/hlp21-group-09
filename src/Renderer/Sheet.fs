@@ -101,7 +101,7 @@ let nullRender model  =
                 HoveringPortsToBeRendered = [];
                 DraggingPortsToBeRendered = [];
         }
-let alignRange = 2.5
+let alignRange = 3.0
 
 let within num1 num2 = 
     if (num1 < (num2 + alignRange) ) && (num1 > (num2 - alignRange) ) then true else false
@@ -112,7 +112,8 @@ let withinPosX pos1 pos2 =
 let withinPosY pos1 pos2 =
     if (pos1.Y < (pos2.Y + alignRange) ) && (pos1.Y > (pos2.Y - alignRange)) then true else false
 
-let symIsWithin (bBox : BoundingBox) (symList : Symbol.Symbol list) = 
+/// Returns true if Symbol is within snapped alignment range.
+let isSymWithin (bBox : BoundingBox) (symList : Symbol.Symbol list) = 
     let boxTL =  bBox.TopLeft 
     let boxBR = bBox.BottomRight
 
@@ -131,18 +132,18 @@ let symIsWithin (bBox : BoundingBox) (symList : Symbol.Symbol list) =
         (within boxBR.Y (sTL.Y + 15.0)) ||
         (within boxBR.Y sBR.Y) 
         ) symList
-
+// Returns coordinates of the BoundingBox as a tuple.
 let getCornersFromBBox (bBox : BoundingBox) = 
     match bBox with 
     |{TopLeft = tPos; BottomRight = bPos}  -> tPos,bPos  
-
+/// Returns a Line from two XY coordinates 
 let createLineCoordinates ( (x1,y1): float*float )  ( (x2,y2) : float*float ) : Line= 
     {P1 = {X = x1; Y = y1;}; P2 = {X = x2; Y= y2}}
-
+/// Returns the displacement of current symbol to nearest alignable Symbol tupled with a coordinate of the alignment lines.
 let isSymAligned (overallBBox : BoundingBox) (symList : Symbol.Symbol list) : (XYPos * Line) list = //BoudingBox has it's Y coordinates - 15 already
     let tOver, bOver = getCornersFromBBox overallBBox  //returns top and btm pos of overall box
     let notSelectedSym = List.filter (fun (sym : Symbol.Symbol) -> sym.IsSelected = false) symList
-    if (symIsWithin overallBBox notSelectedSym ) then
+    if (isSymWithin overallBBox notSelectedSym ) then
         let (createLines : (XYPos * Line) list) = 
             ([] ,notSelectedSym)
             ||>List.fold (
@@ -216,19 +217,19 @@ let isSymAligned (overallBBox : BoundingBox) (symList : Symbol.Symbol list) : (X
           []
 let updateModelWithSym (model : Model) (symModel : Symbol.Model) = 
     {model with Wire = {model.Wire with Symbol = symModel}; }
-
+///  Stores the history of the changes made in the schematic Model as a Model list. Flushes half of it when list exceeds 30 elements.
 let storeUndoState (model : Model) : Model list = 
     if (model.UndoStates.Length >= 30) then 
         model :: List.take 15 model.UndoStates
     else 
         model :: model.UndoStates 
-
+///  Stores the history of undos made in the schematic Model as a Model list. Flushes half of it when list exceeds 30 elements.
 let storeRedoState (model : Model) : Model list = 
     if (model.UndoStates.Length >= 30) then 
         model :: List.take 15 model.UndoStates
     else 
         model :: model.UndoStates 
-///shifts one symbol by a X and Y value.
+/// Returns a Symbol that is shifted by a XY pos.
 let shiftSymbol (sym : Symbol.Symbol) (diffPos : XYPos ) = 
     { sym with
         Pos = posAdd sym.Pos diffPos
@@ -246,7 +247,7 @@ let shiftSymbol (sym : Symbol.Symbol) (diffPos : XYPos ) =
             BottomRight = (posAdd sym.BBox.BottomRight diffPos)
     }
         }
-
+/// Returns a Symbol list that is shifted by a XY Pos.
 let shiftSelectedSymbols (symList : Symbol.Symbol list ) (diffPos : XYPos ) = 
     symList 
     |>List.map (fun sym -> 
@@ -254,7 +255,7 @@ let shiftSelectedSymbols (symList : Symbol.Symbol list ) (diffPos : XYPos ) =
                 sym
             else
                 shiftSymbol sym diffPos)
-/// sorts Symbols according to distance from pos.
+/// Sort Symbols according to distance from pos.
 let sortDistToSymbol (pos : XYPos) (symList : Symbol.Symbol list) : (float * CommonTypes.ComponentId) list=
     let getDistToCentreofSymbol (pos : XYPos) (sym : Symbol.Symbol) : float * CommonTypes.ComponentId = 
         let dist = calcDistance pos (calcCentreBBox sym.BBox)
@@ -296,7 +297,7 @@ let endDraggingSymbol (model : Symbol.Symbol list) sId =
                 
             }
     )
-
+/// Returns true if boundingBox of port is clicked
 let isPortClicked (pos : XYPos) (port: Symbol.Port) : bool = 
     match pos with
     | p when (p.X >= port.BBox.TopLeft.X) && (p.X <= port.BBox.BottomRight.X) &&
@@ -381,7 +382,7 @@ let getPortsWithinMinRange (mousePos : XYPos ) (model : Model) (minDist : float)
 
 /// Handles dragging of Port
 let draggingPort (model : Model) (mousePos : XYPos) =
-    
+ 
     let portList = Symbol.getAllPorts (model.Wire.Symbol)
     let draggedPort = tryFindPortByPortId model.IdOfPortBeingDragged portList
     let port = 
@@ -403,7 +404,45 @@ let draggingPort (model : Model) (mousePos : XYPos) =
     [firstMsg; secondMsg; thirdMsg]
     |> List.map Cmd.ofMsg
 
-/// Function that renders BoundingBoxes
+/// Default initialization of Sheet
+let init() =
+    let wModel, wMsg = BusWire.init()
+    {
+        Wire = wModel
+        Canvas = {height = CommonTypes.draw2dCanvasHeight ; width = CommonTypes.draw2dCanvasWidth; zoom = 1.00}
+        SymIdList =  []
+        HoveringPortsToBeRendered = []
+        DraggingPortsToBeRendered = []
+        IsPortDragging = false
+        IdOfPortBeingDragged = "null"
+        IsWireSelected = false
+        IsDrawingRegion = false
+        RegionToBeRendered = nullBBox
+        AlignmentLinesToBeRendered = []
+        StartDrawingPosition = None
+        SelectedWire = None
+        OnePortToBeRendered = nullPos,None
+        OverallBBoxToBeRendered = nullBBox
+        UndoStates = []
+        RedoStates = []
+        CopyState = None, None
+        FirstSheet = wModel
+        SecondSheet = wModel
+        CurrentSheet = First
+    }, Cmd.none
+
+/// Returns the first Sheet Model or second Sheet Model depending on keyPress.
+let loadCanvasState (model : Model) (wModel : BusWire.Model) (sheetDU: SheetDU) =
+    let newCanvas,xMsg = init()
+    match sheetDU with 
+    |First  when model.CurrentSheet = Second -> 
+                {newCanvas with Wire = wModel; SecondSheet = model.Wire ; CurrentSheet = First ; CopyState = model.CopyState}
+    |Second when model.CurrentSheet = First ->  
+                {newCanvas with Wire = wModel; FirstSheet = model.Wire  ; CurrentSheet = Second ; CopyState = model.CopyState}
+    | _ -> printfn $"You're already here ! " 
+           model
+
+/// Function that renders BoundingBoxes.
 let private renderBBox (bBox : BoundingBox) = 
     let fX, fY = bBox.TopLeft.X, bBox.TopLeft.Y
     let fX_2, fY_2 = bBox.BottomRight.X, bBox.BottomRight.Y
@@ -421,7 +460,7 @@ let private renderBBox (bBox : BoundingBox) =
             ]   [ ]
         ])
 
-///Function that renders AlignmentLines
+/// Function that renders AlignmentLines.
 let private renderAlignmentLines (lines : Line list) = 
     g   [](
         List.map (fun l ->  
@@ -438,7 +477,7 @@ let private renderAlignmentLines (lines : Line list) =
         ) lines
     )
 
-///function that renders Ports close to your cursor when moving 
+/// Function that renders Ports close to your cursor when moving.
 let private renderPortsHovering (distance: float , portList: Symbol.Port list) = 
     let radius = 6.0
     let opacity = 1.0/distance * 55.0
@@ -458,7 +497,7 @@ let private renderPortsHovering (distance: float , portList: Symbol.Port list) =
                 ]
                 [ ]
         ))
-///function that renders Ports close to your cursor while dragging from a port to another
+/// Function that renders Ports close to your cursor while dragging from a port to another.
 let private renderPortsDragging (distance: float, portList: Symbol.Port list ) =
     let radius = 8.0
     let opacity = 1.0/ distance * 55.0
@@ -479,7 +518,7 @@ let private renderPortsDragging (distance: float, portList: Symbol.Port list ) =
             )
         )
         
-///Renders an outline of the EndPort when EndPort is connectable.
+/// Renders an outline of the EndPort when EndPort is connectable.
 let private renderOnePort (mouseOnPort : XYPos * Symbol.Port option)(reElem : ReactElement) = 
         let mouseOnPortCircle = 
             match mouseOnPort with
@@ -495,7 +534,7 @@ let private renderOnePort (mouseOnPort : XYPos * Symbol.Port option)(reElem : Re
 
         g [] [mouseOnPortCircle; reElem]
                
-///Renders a highlight region when dragging
+/// Renders a highlight region when dragging.
 let private renderHighlightRegion (bBox : BoundingBox) =
             let fX, fY = bBox.TopLeft.X, bBox.TopLeft.Y
             let fX_2, fY_2 = bBox.BottomRight.X, bBox.BottomRight.Y
@@ -537,7 +576,7 @@ let private renderBackground =
                     SVGAttr.Fill "url(#smallGrid)"
                 ] []
             ]
-
+/// Renders the ports of the selected wires 
 let renderPortOfWireSelected (model: Model) (w:BusWire.Wire)  =
     let srcPort, tgtPort = BusWire.getPortsOfWire model.Wire w
     let radius = 6.0 
@@ -564,7 +603,7 @@ let renderPortOfWireSelected (model: Model) (w:BusWire.Wire)  =
         ]
 
 
-   
+/// Used to get the current scroll position with a React hook.
 let mutable getScrollPos : (unit ->(float*float) option) = (fun () -> None) 
 
 let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispatch<Msg>) =
@@ -615,7 +654,7 @@ let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispat
                     (mouseOp MouseMsg Up ev (scrollTop,scrollLeft)))
           OnMouseMove (fun ev -> 
                      if ev.altKey <> true then mouseOp MouseMsg (if mDown ev then Drag else Move) ev (scrollTop,scrollLeft))
-          OnWheel (fun ev -> if ev.ctrlKey = true then wheelOp CtrlScroll ev else ())
+          OnWheel (fun ev -> if ev.altKey = true then wheelOp AltScroll ev else ())
           
        ] 
        [ 
@@ -642,44 +681,6 @@ let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispat
                 ]   
             ]    
        ] 
-
-let init() =
-    let wModel, wMsg = BusWire.init()
-    {
-        Wire = wModel
-        Canvas = {height = CommonTypes.draw2dCanvasHeight ; width = CommonTypes.draw2dCanvasWidth; zoom = 1.00}
-        SymIdList =  []
-        HoveringPortsToBeRendered = []
-        DraggingPortsToBeRendered = []
-        IsPortDragging = false
-        IdOfPortBeingDragged = "null"
-        IsWireSelected = false
-        IsDrawingRegion = false
-        RegionToBeRendered = nullBBox
-        AlignmentLinesToBeRendered = []
-        StartDrawingPosition = None
-        SelectedWire = None
-        OnePortToBeRendered = nullPos,None
-        OverallBBoxToBeRendered = nullBBox
-        UndoStates = []
-        RedoStates = []
-        CopyState = None, None
-        FirstSheet = wModel
-        SecondSheet = wModel
-        CurrentSheet = First
-    }, Cmd.none
-
-let loadCanvasState (model : Model) (wModel : BusWire.Model) (sheetDU: SheetDU) =
-    let newCanvas,xMsg = init()
-    match sheetDU with 
-    |First  when model.CurrentSheet = Second -> 
-                {newCanvas with Wire = wModel; SecondSheet = model.Wire ; CurrentSheet = First ; CopyState = model.CopyState}
-    |Second when model.CurrentSheet = First ->  
-                {newCanvas with Wire = wModel; FirstSheet = model.Wire  ; CurrentSheet = Second ; CopyState = model.CopyState}
-    | _ -> printfn $"You're already here ! " 
-           model
-    
-
 
 
 let view (model:Model) (dispatch : Msg -> unit) =
