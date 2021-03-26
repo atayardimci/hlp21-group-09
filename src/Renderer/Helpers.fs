@@ -4,6 +4,7 @@ open Fable.Core
 open Fable.Core.JsInterop
 open Electron
 open Fable.React
+open Fable.React.Props
 
 //-------------------------------------------------------------------------//
 //------------------------------Types--------------------------------------//
@@ -129,6 +130,33 @@ let calcCentre (P1 : XYPos,P2 : XYPos) =
     let center = 
         {X = (P1.X +  P2.X) /2.0 ; Y = (P1.Y + P2.Y) / 2.0}
     center
+
+let standardText x y sz txt = 
+    text [ // a demo text svg element
+        X x; 
+        Y y; 
+        Style [
+            TextAnchor "left" // left/right/middle: horizontal algnment vs (X,Y)
+            DominantBaseline "hanging" // auto/middle/hanging: vertical alignment vs (X,Y)
+            FontSize (sprintf "%ipx"sz)
+            FontWeight "Normal"
+            Fill "Black" // demo font color
+        ]
+    ] [str <| txt]
+let drawRect x y w h clr= 
+    rect
+        [ 
+            //OnMouseUp (mouseUpHelper pr hmm)
+            //OnMouseDown (mouseDownHelper pr hmm)
+            X x
+            Y y
+            SVGAttr.Width w
+            SVGAttr.Height h
+            SVGAttr.Fill clr
+            SVGAttr.Stroke "black"
+            SVGAttr.StrokeWidth 1
+        ]
+        [ ]
 
 //--------------------------------------------------------------------------//
 //----------------------Port Position Calculations--------------------------//

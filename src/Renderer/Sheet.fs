@@ -4,7 +4,6 @@ open Fable.React.Props
 open Browser
 open Elmish
 open Elmish.React
-
 open Helpers
 
 type Model = {
@@ -244,8 +243,8 @@ let shiftSymbol (sym : Symbol.Symbol) (diffPos : XYPos ) =
         BBox = {
             TopLeft = (posAdd sym.BBox.TopLeft diffPos) 
             BottomRight = (posAdd sym.BBox.BottomRight diffPos)
-    }
         }
+    }
 
 let shiftSelectedSymbols (symList : Symbol.Symbol list ) (diffPos : XYPos ) = 
     symList 
@@ -566,6 +565,76 @@ let renderPortOfWireSelected (model: Model) (w:BusWire.Wire)  =
             ]   []
         ]
 
+let private renderCatalog = 
+    g   [ Style [
+                     UserSelect UserSelectOptions.None
+                     PointerEvents "none"
+                ]
+        ]
+        [   
+            drawRect 0. 0. 200. "100%" "white"
+            standardText 10 20 20 "Catalogue"
+            drawRect 0. 50. 200. 30. "white"
+            standardText 15 60 15 "Input"
+            drawRect 0. 80. 200. 30. "white"
+            standardText 15 90 15 "Output"
+            drawRect 0. 110. 200. 30. "white"
+            standardText 15 120 15 "Constant"
+            drawRect 0. 140. 200. 30. "white"
+            standardText 15 150 15 "Label"
+            drawRect 0. 170. 200. 30. "white"
+            standardText 15 180 15 "Bus Select"
+            drawRect 0. 200. 200. 30. "white"
+            standardText 15 210 15 "Bus Compare"
+            drawRect 0. 230. 200. 30. "white"
+            standardText 15 240 15 "Merge Wires"
+            drawRect 0. 260. 200. 30. "white"
+            standardText 15 270 15 "Split Wires"
+            drawRect 0. 290. 50. 30. "white"
+            standardText 15 300 15 "Not"
+            drawRect 50. 290. 50. 30. "white"
+            standardText 65 300 15 "And"
+            drawRect 100. 290. 50. 30. "white"
+            standardText 115 300 15 "Or"
+            drawRect 150. 290. 50. 30. "white"
+            standardText 165 300 15 "Xor"
+            drawRect 0. 320. 67. 30. "white"
+            standardText 15 330 15 "Nand"
+            drawRect 67. 320. 67. 30. "white"
+            standardText 82 330 15 "Nor"
+            drawRect 134. 320. 66. 30. "white"
+            standardText 146 330 15 "Xnor"
+            drawRect 0. 800. 100. 30. "skyblue"
+            drawRect 0. 350. 200. 30. "white"
+            standardText 15 360 15 "Mux2"
+            drawRect 0. 380. 200. 30. "white"
+            standardText 15 390 15 "Demux2"
+            drawRect 0. 410. 200. 30. "white"
+            standardText 15 420 15 "Decode4"
+            drawRect 0. 440. 200. 30. "white"
+            standardText 15 450 15 "N bits adder"
+            drawRect 0. 470. 200. 30. "white"
+            standardText 15 480 15 "N bits Xor"
+            drawRect 0. 500. 200. 30. "white"
+            standardText 15 510 15 "D-flip-flop"
+            drawRect 0. 530. 200. 30. "white"
+            standardText 15 540 15 "D-flip-flop with enable"
+            drawRect 0. 560. 200. 30. "white"
+            standardText 15 570 15 "Register"
+            drawRect 0. 590. 200. 30. "white"
+            standardText 15 600 15 "Register with enable"
+            drawRect 0. 620. 200. 30. "white"
+            standardText 15 630 15 "ROM (Asynchronous)"
+            drawRect 0. 650. 200. 30. "white"
+            standardText 15 660 15 "ROM (Synchronous)"
+            drawRect 0. 680. 200. 30. "white"
+            standardText 15 690 15 "RAM"
+            standardText 15 810 15 "Sheet1"
+            drawRect 100. 800. 100. 30. "skyblue"
+            standardText 115 810 15 "Sheet2"
+        ]          
+
+    
 
 let mutable getScrollPos : (unit ->(float*float) option) = (fun () -> None) 
 
@@ -634,6 +703,7 @@ let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispat
                 [ Style [Transform  (sprintf "scale(%f)" model.Canvas.zoom)]] 
                 [   
                     renderBackground
+                    renderCatalog
                     renderAlignmentLines model.AlignmentLinesToBeRendered
                     svgReact   
                     renderDraggingPortsByDistance

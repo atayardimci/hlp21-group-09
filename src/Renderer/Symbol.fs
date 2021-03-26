@@ -286,7 +286,6 @@ let getHeightWidthOf (sType:CommonTypes.ComponentType) =
     | CommonTypes.ComponentType.Custom spec -> 
         let n = float (max spec.InputLabels.Length spec.OutputLabels.Length)
         n * 35., n * 35.
-    | CommonTypes.ComponentType.Catalogue -> 0., 0.
 
 
 /// This function won't work! Implement later
@@ -349,7 +348,6 @@ let getPortPositions sType pos =
     | CommonTypes.ComponentType.ROM _ -> getRegularPortPositions (Left, Right) 1 1 h w pos
     | CommonTypes.ComponentType.RAM _ -> getRegularPortPositions (Left, Right) 3 1 h w pos
     | CommonTypes.ComponentType.Custom spec -> getRegularPortPositions (Left, Right) spec.InputLabels.Length spec.OutputLabels.Length h w pos
-    | CommonTypes.ComponentType.Catalogue -> ([], [])
     // | _ -> failwithf "Shouldn't happen"
 
 
@@ -392,7 +390,6 @@ let getBusWidthOfPort (sType:CommonTypes.ComponentType) (portType:CommonTypes.Po
         match portType with 
         | CommonTypes.PortType.Input -> Some (snd spec.InputLabels.[portNumber])
         | _                          -> Some (snd spec.OutputLabels.[portNumber])
-    | CommonTypes.ComponentType.Catalogue -> None
     // | _ -> failwithf "Shouldn't happen"
 
 
@@ -555,7 +552,6 @@ let init () =
         createNewSymbol (CommonTypes.ComponentType.ROM fakeMemo)            "ROM1"   {X = float (5*64+30); Y=float (10*64+30)}
         createNewSymbol (CommonTypes.ComponentType.RAM fakeMemo)            "RAM1"   {X = float (7*64+30); Y=float (10*64+30)}
         createNewSymbol (CommonTypes.ComponentType.Custom fakeCustomParams) "CUST1"  {X = float (10*64+30); Y=float (10*64+30)} 
-        createNewSymbol (CommonTypes.ComponentType.Catalogue)               "Catalogue"  {X = 0.; Y= 0.} 
     ]
     , Cmd.none
 
