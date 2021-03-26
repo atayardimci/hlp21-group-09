@@ -18,7 +18,7 @@ type Port =
         Pos : XYPos
         BBox : BoundingBox
         IsDragging : bool
-        NumberOfConnections : int
+        NumOfConnections : int
         BusWidth : int Option
         NumOfErrors : int
     }
@@ -40,7 +40,7 @@ type Symbol =
         IsDragging : bool
         IsSelected : bool
         HasError : bool
-        NumberOfConnections : int
+        NumOfConnections : int
         
         H : float
         W : float
@@ -60,18 +60,8 @@ type Msg =
     | UpdateOutputOrientation of outputOrientation: PortOrientation 
     | AddErrorToPorts of (Port * Port)
     | RemoveConnections of (Port * Port * bool) list
-    | EnforceBusWidth of int * Port
+ 
     | SelectSymbolsWithinRegion of box: BoundingBox
-
-    // | UpdateSymbolModelWithComponent of CommonTypes.Component 
-
-
-
-
-
-
-
-
 //--------------------------some interface functions------------------------//
 
 /// Returns true if pos is within the bounds of the bounding box of the given symbol; else returns false.
@@ -97,7 +87,7 @@ let boxesCollide (boxOne: BoundingBox) (boxTwo: BoundingBox) =
     let oneTL, oneBR, twoTL, twoBR = boxOne.TopLeft, boxOne.BottomRight, boxTwo.TopLeft, boxTwo.BottomRight
     not (oneBR.X < twoTL.X || oneBR.Y < twoTL.Y || oneTL.X > twoBR.X || oneTL.Y > twoBR.Y)
 
-let updateSymWithPort (sym: Symbol) (newPort: Port) : Symbol =
+let updateSymWithPort (newPort: Port) (sym: Symbol) : Symbol =
     let newInputPorts, newOutputPorts = 
         sym.InputPorts  |> List.map (fun port -> if port.Id = newPort.Id then newPort else port),
         sym.OutputPorts |> List.map (fun port -> if port.Id = newPort.Id then newPort else port)
@@ -132,18 +122,105 @@ let getOverallBBox (symList: Symbol list) : BoundingBox =
     else 
         nullBBox
 
-    
+
+let getPortWithId sym portId = 
+    match (sym.InputPorts @ sym.OutputPorts) |> List.tryFind (fun port -> port.Id = portId) with
+    | Some port -> port
+    | None -> failwithf "Port with given Id in the given symbol was not found"
+
+
     
 /// Increments or decrements the number of connections of the given port and symbol according to the given ChangeDU and returns the updated symbol
-let changeNumOfConnections (portToChange: Port) (symToChange: Symbol) (change: ChangeDU) : Symbol = 
+let changeNumOfConnections (change: ChangeDU) (portToChangeID: string) (symToChange: Symbol) : Symbol = 
     let operand = if change = Increment then 1 else -1
-    let newPort = {portToChange with NumberOfConnections = portToChange.NumberOfConnections + operand}
-    {updateSymWithPort symToChange newPort with NumberOfConnections = symToChange.NumberOfConnections + operand}
+    let portToChange = getPortWithId symToChange portToChangeID
+    let newPort = {portToChange with NumOfConnections = portToChange.NumOfConnections + operand}
+    {updateSymWithPort newPort symToChange with NumOfConnections = symToChange.NumOfConnections + operand}
 
 /// Returns true if any of the ports of a symbol has an error, else false
 let checkSymbolForError (sym:Symbol) : bool = 
     (false, sym.InputPorts @ sym.OutputPorts)
     ||> List.fold (fun hasError port -> if port.NumOfErrors <> 0 then true else hasError)
+
+/// Auto Completed Widths of 5 special components
+let autoCompleteWidths (sym: Symbol) =  
+    let inputs, outputs = sym.InputPorts, sym.OutputPorts
+
+    match sym.Type with
+    | CommonTypes.SplitWire w ->
+        match inputs.[0].BusWidth, outputs.[1].BusWidth with
+        | Some inW, None -> 
+            let outW = if inW > w then (inW - w) else failwithf $"Input width of SplitWire should be larger than {w}"
+            updateSymWithPort {outputs.[1] with BusWidth = Some outW} sym
+        | None, Some outW -> 
+            updateSymWithPort {inputs.[0] with BusWidth = Some (outW + w)} sym
+        | _, _ when inputs.[0].NumOfConnections = 0 && outputs.[1].NumOfConnections = 0 ->
+            sym
+            |> updateSymWithPort {inputs.[0] with BusWidth = None} 
+            |> updateSymWithPort {outputs.[1] with BusWidth = None} 
+        | _ -> sym
+
+    | CommonTypes.MergeWires ->
+        match inputs.[0].BusWidth, inputs.[1].BusWidth, outputs.[0].BusWidth with
+        | Some inW0, Some inW1, None ->
+            updateSymWithPort {outputs.[0] with BusWidth = Some (inW0 + inW1)} sym
+        | Some inW, None, Some outW ->
+            let otherInW = if outW > inW then (outW - inW) else failwithf $"Input widths of MergeWires should be less than {outW}"
+            updateSymWithPort {inputs.[1] with BusWidth = Some otherInW} sym
+        | None, Some inW, Some outW ->
+            let otherInW = if outW > inW then (outW - inW) else failwithf $"Input widths of MergeWires should be less than {outW}"
+            updateSymWithPort {inputs.[0] with BusWidth = Some otherInW} sym
+        | _ when sym.NumOfConnections < 2 ->
+            sym
+            |> updateSymWithPort {inputs.[0] with BusWidth = if inputs.[0].NumOfConnections = 1 && inputs.[0].NumOfErrors = 0 then inputs.[0].BusWidth else None} 
+            |> updateSymWithPort {inputs.[1] with BusWidth = if inputs.[1].NumOfConnections = 1 && inputs.[1].NumOfErrors = 0 then inputs.[1].BusWidth else None} 
+            |> updateSymWithPort {outputs.[0] with BusWidth = if outputs.[0].NumOfConnections = 1 && outputs.[0].NumOfErrors = 0 then outputs.[0].BusWidth else None} 
+        | _ -> sym
+
+    | CommonTypes.IOLabel ->
+        match inputs.[0].BusWidth, outputs.[0].BusWidth with
+        | Some inW, None -> 
+            updateSymWithPort {outputs.[0] with BusWidth = Some inW} sym
+        | None, Some outW -> 
+            updateSymWithPort {inputs.[0] with BusWidth = Some outW} sym
+        | _ when sym.NumOfConnections = 0 ->
+            sym
+            |> updateSymWithPort {inputs.[0]  with BusWidth = None} 
+            |> updateSymWithPort {outputs.[0] with BusWidth = None} 
+        | _ -> sym
+
+    | CommonTypes.Mux2 ->
+        match inputs.[0].BusWidth, inputs.[1].BusWidth, outputs.[0].BusWidth with 
+        | Some w, None, None | None, Some w, None | None, None, Some w ->
+            sym
+            |> updateSymWithPort {inputs.[0]  with BusWidth = Some w} 
+            |> updateSymWithPort {inputs.[1]  with BusWidth = Some w} 
+            |> updateSymWithPort {outputs.[0] with BusWidth = Some w} 
+        | _ when sym.NumOfConnections - inputs.[2].NumOfConnections = 0 ->
+            sym
+            |> updateSymWithPort {inputs.[0]  with BusWidth = None} 
+            |> updateSymWithPort {inputs.[1]  with BusWidth = None} 
+            |> updateSymWithPort {outputs.[0] with BusWidth = None} 
+        | _ -> sym
+
+    | CommonTypes.Demux2 ->
+        match inputs.[0].BusWidth, outputs.[0].BusWidth, outputs.[1].BusWidth with 
+        | Some w, None, None | None, Some w, None | None, None, Some w ->
+            sym
+            |> updateSymWithPort {inputs.[0]  with BusWidth = Some w} 
+            |> updateSymWithPort {outputs.[0] with BusWidth = Some w} 
+            |> updateSymWithPort {outputs.[1] with BusWidth = Some w} 
+        | _ when sym.NumOfConnections - inputs.[1].NumOfConnections = 0 ->
+            sym
+            |> updateSymWithPort {inputs.[0]  with BusWidth = None} 
+            |> updateSymWithPort {outputs.[0] with BusWidth = None} 
+            |> updateSymWithPort {outputs.[1] with BusWidth = None} 
+        | _ -> sym
+
+    | _ -> sym
+
+
+
 
 /// Removes a connection which can have an error or not and returns the model with the updated symbols
 let removeConnection (model:Model) (portOne:Port, portTwo:Port, connectionHasError:bool) : Model = 
@@ -153,18 +230,19 @@ let removeConnection (model:Model) (portOne:Port, portTwo:Port, connectionHasErr
         |> List.map (fun sym ->  
             if sym.Id = port.HostId then
                 if connectionHasError then
-                    let newSym = changeNumOfConnections {port with NumOfErrors = port.NumOfErrors - 1} sym Decrement
+                    let newSym = 
+                        updateSymWithPort {port with NumOfErrors = port.NumOfErrors - 1} sym
+                        |> changeNumOfConnections Decrement port.Id
                     let newSymHasError = checkSymbolForError newSym
                     {newSym with HasError = newSymHasError}
                 else
-                    changeNumOfConnections port sym Decrement
+                    sym
+                    |> changeNumOfConnections Decrement port.Id 
+                |> autoCompleteWidths
             else
                 sym
         )
     )
-
-
-
 
 
 /// Selects all symbols which have their bounding box collide with the given box and returns the updated model
@@ -173,138 +251,6 @@ let selectSymbolsInRegion (symModel: Model) (box: BoundingBox) : Model =
     symModel
     |> List.map (fun sym -> if doesCollide sym.BBox then {sym with IsSelected = true} else sym)
 
-
-
-// let enforceBusWidth (busWidth : int ) (port : Port) (sym : Symbol ) (bwDU : BusWidthDU) =
-//     match bwDU with 
-//     |EnforceEndPort -> let newInputPortList = 
-//                             (sym.InputPorts,[port])||> List.fold (fun inputPortList port -> 
-//                                                                 List.map(fun (inputPort:Port) -> 
-//                                                                     if (inputPort.Id = port.Id) then
-//                                                                      {inputPort with BusWidth = Some busWidth}
-//                                                                     else 
-//                                                                      inputPort
-//                                                                     )inputPortList
-//                                                               )
-//                        {sym with InputPorts =newInputPortList }
-//     |EnforceStartPort -> let newOutputPortList =
-//                             (sym.OutputPorts,[port])||> List.fold (fun outputPortList port -> 
-//                                                                 List.map(fun (outputPort:Port) -> 
-//                                                                     if (outputPort.Id = port.Id) then      
-//                                                                         {outputPort with BusWidth = Some busWidth}
-//                                                                     else 
-//                                                                     outputPort
-//                                                                     ) outputPortList
-//                                                               )
-//                          {sym with OutputPorts = newOutputPortList }
-
-
-///Auto Completed Widths of 5 special components
-let autoCompleteWidths (sym : Symbol)  = 
-        let newSym = 
-            match (sym.Type) with 
-            |CommonTypes.SplitWire num ->  
-                                    let completedSymbol =  
-                                        match (sym.InputPorts,sym.OutputPorts) with              //For Ata : These part needs some changing as discussed before 
-                                                                                                 //          especially when connecting SpitWire from the top right.
-                                        | [in1],[out1;out2] when sym.NumberOfConnections = 0 ->  //For Ata : when zero connections refresh the symbol to original state.
-                                                                {sym with InputPorts = [{in1 with BusWidth = None}] ; 
-                                                                          OutputPorts = [{out1 with BusWidth = None}; {out2 with BusWidth = None}]}
-                                        | [in1],[out1;out2] -> let tmp = 
-                                                                match (in1.BusWidth,out1.BusWidth,out2.BusWidth) with
-                                                                | None, Some given, Some x ->   let newInPort = {in1 with BusWidth = Some (given + x) } 
-                                                                                                {sym with InputPorts = [newInPort]}
-                                                                | Some x , Some given, None ->  let newOutPort = {out2 with BusWidth = Some (x - given) }
-                                                                                                {sym with OutputPorts = [out1;newOutPort]}
-                                                                | _ -> sym
-                                                               tmp
-                                        | _ -> failwithf "Error : Something wrong with SplitWire"
-                                    completedSymbol         
-            |CommonTypes.MergeWires  ->  
-                                    let completedSymbol = 
-                                        match (sym.InputPorts,sym.OutputPorts) with 
-                                        | [in1;in2],[out1] when sym.NumberOfConnections = 0 ->  //For Ata : when zero connections refresh the symbol to original state.
-                                                                {sym with InputPorts = [{in1 with BusWidth = None}; {in2 with BusWidth = None}] ; 
-                                                                          OutputPorts = [{out1 with BusWidth = None}]}
-                                        | [in1;in2],[out1] -> let tmp =
-                                                                match (in1.BusWidth,in2.BusWidth,out1.BusWidth) with
-                                                                | None, Some given, Some x ->   let newInPort = {in1 with BusWidth = Some (x- given)} 
-                                                                                                {sym with InputPorts = [newInPort; in2]}
-                                                                | Some given , None, Some x ->  let newIn2Port = {in2 with BusWidth = Some (x - given)}
-                                                                                                {sym with InputPorts = [in1; newIn2Port]}
-                                                                | Some x , Some given, None ->  let newOutPort = {out1 with BusWidth = Some (x + given) }
-                                                                                                {sym with OutputPorts = [newOutPort]}
-                                                                | _ -> sym
-                                                              tmp
-                                        | _ -> failwithf "Error : Something wrong with MergeWires"
-                                    completedSymbol
-
-            |CommonTypes.IOLabel  ->
-                                   let completedSymbol =
-                                     match (sym.InputPorts,sym.OutputPorts) with 
-                                     | [in1],[out1] when sym.NumberOfConnections = 0 -> //For Ata : when zero connections refresh the symbol to original state.
-                                                        {sym with InputPorts = [{in1 with BusWidth = None}] ; 
-                                                                  OutputPorts = [{out1 with BusWidth = None}]}
-                                     | [in1],[out1] -> let tmp = 
-                                                         match (in1.BusWidth,out1.BusWidth) with
-                                                         | None, Some x -> let newInPort = {in1 with BusWidth = Some (x)} 
-                                                                           {sym with InputPorts = [newInPort]} 
-                                                         | Some x, None -> let newOutPort = {out1 with BusWidth = Some (x)}
-                                                                           {sym with OutputPorts = [newOutPort]}
-                                                         | _ -> sym
-                                                       tmp
-                                     | _ -> failwithf "Error : Something wrong with MergeWires"
-                                   completedSymbol
-            |CommonTypes.Mux2     ->
-                                  let completedSymbol =
-                                    match (sym.InputPorts,sym.OutputPorts) with 
-                                    | [in1;in2;sel],[out1] when sym.NumberOfConnections = 0 -> //For Ata : when zero connections refresh the symbol to original state.
-                                                                {sym with InputPorts = [{in1 with BusWidth = None};{in2 with BusWidth = None}; sel] ; 
-                                                                          OutputPorts = [{out1 with BusWidth = None}]}
-                                    | [in1;in2;sel],[out1] -> let tmp = 
-                                                               match (in1.BusWidth,in2.BusWidth,out1.BusWidth) with
-                                                               | None, None, Some x -> let newIn1Port = {in1 with BusWidth = Some (x)} 
-                                                                                       let newIn2Port = {in2 with BusWidth = Some (x)}
-                                                                                       {sym with InputPorts = [newIn1Port;newIn2Port;sel]} 
-
-                                                               | None, Some x, None -> let newIn1Port = {in1 with BusWidth = Some (x)} 
-                                                                                       let newOutPort = {out1 with BusWidth = Some (x)}
-                                                                                       {sym with InputPorts = [newIn1Port; in2;sel]; OutputPorts = [newOutPort]}  
-                                                               | Some x,None, None ->  let newIn2Port = {in2 with BusWidth = Some (x)} 
-                                                                                       let newOutPort = {out1 with BusWidth = Some (x)}
-                                                                                       {sym with InputPorts = [in1 ; newIn2Port; sel]; OutputPorts = [newOutPort]}  
-                                                               | _ -> sym
-                                                              tmp      
-                                    | _ -> failwithf "Error : Something wrong with Mux2"
-                                  completedSymbol
-            |CommonTypes.Demux2      ->
-                                     let completedSymbol =
-                                       match (sym.InputPorts,sym.OutputPorts) with 
-                                       | [in1;sel],[out1;out2] when sym.NumberOfConnections = 0 -> //For Ata : when zero connections refresh the symbol to original state.
-                                                                {sym with InputPorts = [{in1 with BusWidth = None};{sel with BusWidth = None}] ; 
-                                                                          OutputPorts = [{out1 with BusWidth = None};{out2 with BusWidth = None}]}
-                                       | [in1;sel],[out1;out2] -> let tmp = 
-                                                                   match (in1.BusWidth,out1.BusWidth,out2.BusWidth) with
-                                                                   | Some x,None, None -> let newOut1Port = {out1 with BusWidth = Some (x)} 
-                                                                                          let newOut2Port = {out2 with BusWidth = Some (x)}
-                                                                                          {sym with  OutputPorts = [newOut1Port;newOut2Port]}  
-                                                                   | None, None, Some x -> let newIn1Port = {in1 with BusWidth = Some (x)} 
-                                                                                           let newOut1Port = {out1 with BusWidth = Some (x)}
-                                                                                           {sym with InputPorts = [newIn1Port;sel] ; OutputPorts = [newOut1Port; out2]} 
-                                                                   | None, Some x, None -> let newIn1Port = {in1 with BusWidth = Some (x)} 
-                                                                                           let newOut2Port = {out2 with BusWidth = Some (x)}
-                                                                                           {sym with InputPorts = [newIn1Port; sel]; OutputPorts = [out1; newOut2Port]}  
-                                                                   
-                                                                   | _ -> sym
-                                                                  tmp      
-                                       | _ -> failwithf "Error : Something wrong with DeMux2"
-                                     completedSymbol
-
-            | _ -> sym
-
-                           
-        newSym
-                        
 
 //---------------------------------helper types and functions----------------//
 
@@ -452,7 +398,7 @@ let createPorts (sType:CommonTypes.ComponentType) hostId inputPortsPosList outpu
                 Pos = pos
                 BBox = calcBBoxWithRadius 6.0 pos
                 IsDragging = false
-                NumberOfConnections = 0
+                NumOfConnections = 0
                 BusWidth = getBusWidthOfPort sType CommonTypes.PortType.Input idx
                 NumOfErrors = 0
             }
@@ -468,7 +414,7 @@ let createPorts (sType:CommonTypes.ComponentType) hostId inputPortsPosList outpu
                 Pos = pos
                 BBox = calcBBoxWithRadius 6.0 pos
                 IsDragging = false
-                NumberOfConnections = 0
+                NumOfConnections = 0
                 BusWidth = getBusWidthOfPort sType CommonTypes.PortType.Output idx
                 NumOfErrors = 0
             }
@@ -531,17 +477,18 @@ let createNewSymbol (sType:CommonTypes.ComponentType) (name:string) (pos:XYPos) 
         IsDragging = false
         IsSelected = false
         HasError = false
-        NumberOfConnections = 0
+        NumOfConnections = 0
         
         H = h
         W = w
         BBox = calculateBoundingBox h w pos
     }
 
-let duplicateSymbol (symList : Symbol list) : XYPos*Symbol list = 
+let duplicateSymbol (symList : Symbol list) : Symbol list*XYPos = 
     let overallBBox = getOverallBBox (symList)
     let maxY,minY = overallBBox.BottomRight.Y,overallBBox.TopLeft.Y
-    let posDisplacement = {X = 0.0; Y = maxY - minY + 50.0}
+    let maxX,minX = overallBBox.BottomRight.X,overallBBox.TopLeft.X
+    let posDisplacement = {X = (maxX-minX)/4.0; Y = (maxY - minY)/4.0 + 25.0}
     
     let dupList = 
         symList
@@ -551,7 +498,7 @@ let duplicateSymbol (symList : Symbol list) : XYPos*Symbol list =
             // {newSym with HasError = sym.HasError}
         |> List.map (fun sym -> {sym with IsSelected = true})
         
-    posDisplacement, dupList
+    dupList, posDisplacement
                            
 let insertSymbol symType name  =
     createNewSymbol (symType) name {X = float (10*64+30); Y=float (1*64+30)} 
@@ -660,7 +607,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<'a> =
             symModel
             |> List.map (fun sym -> 
                 if sym.Id = port.HostId then 
-                    let newSym = changeNumOfConnections {port with NumOfErrors = port.NumOfErrors + 1} sym Increment
+                    let newSym = updateSymWithPort {port with NumOfErrors = port.NumOfErrors + 1} sym
                     {newSym with HasError = true}
                 else sym 
             )  
@@ -673,18 +620,6 @@ let update (msg : Msg) (model : Model): Model*Cmd<'a> =
             removeConnection symModel connection
         )
         , Cmd.none
-    
-    | EnforceBusWidth (busWidth, undefinedPort) ->  
-        model
-        |> List.map (fun sym -> 
-            if sym.Id = undefinedPort.HostId then
-                let newPort = {undefinedPort with BusWidth = Some busWidth}
-                updateSymWithPort sym newPort
-                |> autoCompleteWidths
-            else sym
-        )
-        , Cmd.none
-
     | MouseMsg _ -> model, Cmd.none // allow unused mouse messags
 
 
@@ -771,9 +706,10 @@ let getPortsOf (symModel: Model) (sId: CommonTypes.ComponentId) : Port list =
 let getOrientationOfPort (symModel: Model) (port:Port) : PortOrientation = 
     match getSymbolWithId symModel port.HostId with
     | Some sym -> if (sym.Type=CommonTypes.Mux2 && port.PortNumber=Some 2) then Bottom
-                  else if (sym.Type=CommonTypes.Demux2 && port.PortNumber=Some 1) then Bottom
+                  else if (sym.Type=CommonTypes.Demux2 && port.PortNumber=Some 2) then Bottom
                   else if port.PortType = CommonTypes.PortType.Input then sym.InputOrientation else sym.OutputOrientation
     | _ -> failwithf "The hosting symbol of the given port is not found"
+
 
 
 /// Update the symbol with matching componentId to comp, or add a new symbol based on comp.
@@ -822,7 +758,7 @@ let createSymbolFromComponent (comp:CommonTypes.Component) (pos:XYPos) : Symbol 
         IsDragging = false // initial value can always be this
         IsSelected = false
         HasError = false
-        NumberOfConnections = 0
+        NumOfConnections = 0
 
         H = h
         W = w
@@ -895,647 +831,10 @@ let createSymbolFromComponent (comp:CommonTypes.Component) (pos:XYPos) : Symbol 
 
 
 
-//----------------------------View Function for Symbols----------------------------//
 
-type RenderSymbolProps =
-    {
-        Symbol : Symbol 
-        Dispatch : Dispatch<Msg>
-        key: string 
-    }
 
 
-//---------------------Helper functions for creating ReactElements----------------------//
 
-let symbolShapeStyle (props : RenderSymbolProps) =
-    let color =
-        match props.Symbol.IsSelected, props.Symbol.IsDragging, props.Symbol.HasError with
-        | true, _, _ 
-        | _, true, _ -> dragColor
-        | _, _, true -> errorColor
-        | _ -> constColor
-    Style [
-        StrokeWidth 1
-        Stroke "black"
-        Fill color
-    ]
-
-let createInSymbolText (fontSize:float) (hAlignment:string) (rotation:int) (pos:XYPos) (textStr:string) = 
-    text [ 
-        X pos.X 
-        Y pos.Y
-        Style [
-            TextAnchor hAlignment 
-            DominantBaseline "middle" 
-            FontSize fontSize
-            FontFamily "monospace"
-            Fill "Black"
-            PointerEvents "none"
-            UserSelect UserSelectOptions.None
-            TransformOrigin (sprintf $"{pos.X}px {pos.Y}px")
-            Transform (sprintf $"rotate({rotation}deg)")
-        ]
-    ][str textStr]
-
-
-// will be changed
-let getBusWidthInfo (sym:Symbol) =
-    let w = 
-        match sym.Type with
-        | CommonTypes.ComponentType.Input w 
-        | CommonTypes.ComponentType.Output w 
-        | CommonTypes.ComponentType.Constant (w, _)
-        | CommonTypes.ComponentType.NbitsAdder w 
-        | CommonTypes.ComponentType.NbitsXor w 
-        | CommonTypes.ComponentType.Register w 
-        | CommonTypes.ComponentType.RegisterE w -> w
-        | _ -> 0
-    if w > 1 then
-        sprintf $"({w-1}:{0})" 
-    else
-        ""
-
-let createComponentTitle (props:RenderSymbolProps) = 
-    let busWidthInfo = getBusWidthInfo props.Symbol
-    text [ 
-        X (props.Symbol.Pos.X + props.Symbol.W / 2.); 
-        Y (props.Symbol.Pos.Y - VerticalAdjustment)
-        Style [
-            TextAnchor "middle" 
-            DominantBaseline "text-top" 
-            FontSize "12px"
-            Fill "Black"
-            PointerEvents "none"
-            UserSelect UserSelectOptions.None
-        ]
-    ] [str (props.Symbol.Label + busWidthInfo)]
-    
-
-
-let createLogicGateShape props =
-    let fX, fY = props.Symbol.Pos.X, props.Symbol.Pos.Y
-    polygon [ 
-        Points $"{fX},{fY} {fX+40.},{fY} {fX+40.},{fY+35.} {fX},{fY+35.}"
-        symbolShapeStyle props
-    ] [ ]
-
-let getLogicGateNameStyle props = 
-    text [ 
-        X (props.Symbol.Pos.X + 20.) 
-        Y (props.Symbol.Pos.Y + 18.)
-        Style [
-            TextAnchor "middle" // horizontal algnment vs (X,Y)
-            DominantBaseline "text-top" // vertical alignment vs (X,Y)
-            FontSize "14px"
-            Fill "Black"
-            PointerEvents "none"
-            UserSelect UserSelectOptions.None
-        ]
-    ]
-
-let createInvertElement props =
-    let fX, fY = props.Symbol.Pos.X, props.Symbol.Pos.Y
-    let w, h = props.Symbol.W, props.Symbol.H
-    polygon [ 
-        Points $"{fX+w-9.},{fY+h/2.} {fX+w-9.},{fY+11.} {fX+w},{fY+h/2.} "
-        symbolShapeStyle props
-        SVGAttr.StrokeWidth 0.7
-    ] [ ]
-        
-
-
-let busWireStyle opacity = 
-    Style [
-        Stroke busColor
-        StrokeWidth 3
-        StrokeOpacity opacity
-    ]
-let wireStyle opacity = 
-    Style [
-        Stroke "Black"
-        StrokeWidth 1.1
-        StrokeOpacity opacity
-    ]
-
-
-let createLogicGate (strOnGate:string) (isInverted:bool) (props:RenderSymbolProps) =
-    g []([
-        createLogicGateShape props
-        createComponentTitle props
-        getLogicGateNameStyle props [str strOnGate]
-
-        if isInverted then createInvertElement props
-    ] )
-
-let createClock fontSize fX fY heigth =
-    g[] [
-        polygon [ 
-            Points $"{fX},{fY+heigth-12.} {fX+6.},{fY+heigth-7.} {fX},{fY+heigth-2.}"
-            SVGAttr.Stroke "black"
-            SVGAttr.StrokeWidth 1.
-            SVGAttr.Fill "none"
-        ] [ ]
-        createInSymbolText fontSize "start" 0 {X=fX + 8.; Y=fY + heigth - 7.} "clk"
-    ]
-
-let createRectangularSymbol (symName:string) (inputPortNames:string list) (outputPortNames:string list) (includeClk:bool) props = 
-    let fX, fY = props.Symbol.Pos.X, props.Symbol.Pos.Y
-    let w, h = props.Symbol.W, props.Symbol.H
-
-    let rotationOfTopAndBottomPorts = 
-        match props.Symbol.Type with
-        | CommonTypes.ComponentType.RAM _ -> -15
-        | _ -> 0
-    
-    let portLabels =
-        ((props.Symbol.InputPorts @ props.Symbol.OutputPorts), (inputPortNames @ outputPortNames))
-        ||> List.map2 (fun port portName -> 
-            match port.PortType, props.Symbol.InputOrientation, props.Symbol.OutputOrientation with
-            | CommonTypes.PortType.Input , Top   , _ 
-            | CommonTypes.PortType.Output, _     , Top    -> createInSymbolText 10. "middle" rotationOfTopAndBottomPorts {port.Pos with Y = port.Pos.Y + 10.} portName
-            | CommonTypes.PortType.Input , Left  , _      -> createInSymbolText 10. "start" 0 {port.Pos with X = port.Pos.X + 8.} portName
-            | CommonTypes.PortType.Input , Bottom, _ 
-            | CommonTypes.PortType.Output, _     , Bottom -> createInSymbolText 10. "middle" rotationOfTopAndBottomPorts {port.Pos with Y = port.Pos.Y - 10.} portName
-            | CommonTypes.PortType.Output, _     , Right  -> createInSymbolText 10. "end" 0 {port.Pos with X = port.Pos.X - 8.} portName
-            | _ -> failwithf "Port position is not at the edge of the symbol!"
-
-    
-        )
-    g   [ ] 
-        ([
-            polygon [ 
-                Points $"{fX},{fY} {fX+w},{fY} {fX+w},{fY+h} {fX},{fY+h}"
-                symbolShapeStyle props
-            ] [ ]
-            createComponentTitle props
-            
-            match props.Symbol.InputOrientation, props.Symbol.OutputOrientation with
-            | Top, Right | Left, Top -> createInSymbolText 10. "middle" 0 {X=fX + w/2. ; Y=fY + h - 9.} symName
-            | Top, Bottom | Bottom, Top -> createInSymbolText 10. "middle" 0 {X=fX + w/2. ; Y=fY + h/2.} symName
-            | _ -> createInSymbolText 10. "middle" 0 {X=fX + w/2. ; Y=fY + 9.} symName
-            
-            let clkH = if props.Symbol.InputOrientation = Bottom then h/2. else h
-            if includeClk then createClock 10. fX fY clkH
-        ] @ portLabels
-        )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// --------------------------render functions-------------------------------
-
-let private renderInput =
-    FunctionComponent.Of(
-        fun (props : RenderSymbolProps) ->
-            let fX, fY = props.Symbol.Pos.X, props.Symbol.Pos.Y
-            g   [ ] 
-                [
-                    polygon [ 
-                        Points $"{fX},{fY} {fX+20.},{fY} {fX+30.},{fY+10.} {fX+20.},{fY+20.} {fX},{fY+20.}"
-                        symbolShapeStyle props
-                    ] [ ]
-                    createComponentTitle props 
-                ]
-    , "Input"
-    , equalsButFunctions
-    )
-
-let private renderOutput =
-    FunctionComponent.Of(
-        fun (props : RenderSymbolProps) ->
-            let fX, fY = props.Symbol.Pos.X, props.Symbol.Pos.Y
-            g   [ ] 
-                [
-                    polygon [ 
-                        Points $"{fX},{fY+10.} {fX+10.},{fY} {fX+30.},{fY} {fX+30.},{fY+20.} {fX+10.},{fY+20.}"
-                        symbolShapeStyle props
-                    ] [ ]
-                    createComponentTitle props
-                ]
-    , "Output"
-    , equalsButFunctions
-    )
-
-let private renderIOLabel =
-    FunctionComponent.Of(
-        fun (props : RenderSymbolProps) ->
-            let fX, fY = props.Symbol.Pos.X, props.Symbol.Pos.Y
-            g   [ ] 
-                [
-                    polygon [ 
-                        Points $"{fX},{fY+10.} {fX+10.},{fY} {fX+20.},{fY} {fX+30.},{fY+10.} {fX+20.},{fY+20.} {fX+10.},{fY+20.}"
-                        symbolShapeStyle props
-                    ] [ ]
-                    createComponentTitle props
-                ]
-    , "IOLabel"
-    , equalsButFunctions
-    )
-
-let private renderConstant =
-    FunctionComponent.Of(
-        fun (props : RenderSymbolProps) ->
-            let fX, fY = props.Symbol.Pos.X, props.Symbol.Pos.Y
-            let valueInfo = 
-                match props.Symbol.Type with
-                | CommonTypes.ComponentType.Constant (w, v) ->
-                    if w > 1 then sprintf "0x%0x"v else $"{v}"
-                | _ -> failwithf "Shouldn't happen"
-            
-            g   [] 
-                [
-                    polygon [ 
-                        Points $"{fX},{fY} {fX+10.},{fY+10.} {fX+39.6},{fY+10.} {fX+10.},{fY+10.} {fX},{fY+20.}"
-                        symbolShapeStyle props
-                    ] [ ]
-                    text [ 
-                        X (fX + 10.); 
-                        Y (fY + 19.)
-                        Style [
-                            TextAnchor "left" 
-                            DominantBaseline "text-top" 
-                            FontSize "7.5px" // font size should adjust if the string is too long. To be implemented
-                            Fill "Black"
-                            PointerEvents "none"
-                            UserSelect UserSelectOptions.None
-                        ]
-                    ] [str valueInfo]
-                    createComponentTitle props
-                ]
-    , "Constant"
-    , equalsButFunctions
-    )
-
-let private renderBusSelection =
-    FunctionComponent.Of(
-        fun (props : RenderSymbolProps) ->
-            let fX, fY = props.Symbol.Pos.X, props.Symbol.Pos.Y
-            let busInfo = 
-                match props.Symbol.Type with
-                | CommonTypes.ComponentType.BusSelection (w, n) ->
-                    if w > 1 then $"[{n+w-1}:{n}]" else $"{n}"
-                | _ -> failwithf "Shouldn't happen"
-            g   [ ] 
-                [
-                    polygon [ 
-                        Points $"{fX},{fY+24.} {fX},{fY} {fX+25.},{fY} {fX+35.},{fY+6.} {fX+45.},{fY+6.} {fX+45.},{fY+18.} {fX+35.},{fY+18.} {fX+25.},{fY+24.}"
-                        symbolShapeStyle props
-                    ] [ ]
-                    createComponentTitle props
-                    createInSymbolText 10. "middle" 0 {X=fX + 17.5; Y=fY + 12.} busInfo
-                ]
-    , "BusSelection"
-    , equalsButFunctions
-    )
-
-let private renderBusCompare =
-    FunctionComponent.Of(
-        fun (props : RenderSymbolProps) ->
-            let fX, fY = props.Symbol.Pos.X, props.Symbol.Pos.Y
-            let valInfo = 
-                match props.Symbol.Type with
-                | CommonTypes.ComponentType.BusCompare (w, n) -> $"={n}"
-                | _ -> failwithf "Failed in getting the decimal value to compare in renderBusCompare!"
-            g   [ ] 
-                [
-                    polygon [ 
-                        Points $"{fX},{fY+24.} {fX},{fY} {fX+25.},{fY} {fX+35.},{fY+6.} {fX+45.},{fY+6.} {fX+45.},{fY+18.} {fX+35.},{fY+18.} {fX+25.},{fY+24.}"
-                        symbolShapeStyle props
-                    ] [ ]
-                    createComponentTitle props
-                    createInSymbolText 10. "middle" 0 {X=fX + 17.5; Y=fY + 12.} valInfo
-                ]
-    , "BusCompare"
-    , equalsButFunctions
-    )
-
-let private renderMux2 =
-    FunctionComponent.Of(
-        fun (props : RenderSymbolProps) ->
-            let fX, fY = props.Symbol.Pos.X, props.Symbol.Pos.Y
-            g   [ ] 
-                [
-                    polygon [ 
-                        Points $"{fX},{fY} {fX+30.},{fY+13.} {fX+30.},{fY+37.} {fX},{fY+50.}"
-                        symbolShapeStyle props
-                    ] [ ]
-                    createComponentTitle props
-                    createInSymbolText 10.5 "left" 0 {props.Symbol.InputPorts.[0].Pos with X = props.Symbol.InputPorts.[0].Pos.X + 4.} "0"
-                    createInSymbolText 10.5 "left" 0 {props.Symbol.InputPorts.[1].Pos with X = props.Symbol.InputPorts.[1].Pos.X + 4.} "1"
-                ]
-    , "Mux2"
-    , equalsButFunctions
-    )
-let private renderDemux2 =
-    FunctionComponent.Of(
-        fun (props : RenderSymbolProps) ->
-            let fX, fY = props.Symbol.Pos.X, props.Symbol.Pos.Y
-            g   [ ] 
-                [
-                    polygon [ 
-                        Points $"{fX},{fY+13.} {fX+30.},{fY} {fX+30.},{fY+50.} {fX},{fY+37.}"
-                        symbolShapeStyle props
-                    ] [ ]
-                    createComponentTitle props
-                    createInSymbolText 10.5 "end" 0 {props.Symbol.OutputPorts.[0].Pos with X = props.Symbol.OutputPorts.[0].Pos.X - 4.} "0"
-                    createInSymbolText 10.5 "end" 0 {props.Symbol.OutputPorts.[1].Pos with X = props.Symbol.OutputPorts.[1].Pos.X - 4.} "1"
-                ] 
-    , "Demux2"
-    , equalsButFunctions
-    )
-
-let private renderMergeWires =
-    FunctionComponent.Of(
-        fun (props : RenderSymbolProps) ->
-            let fX, fY = props.Symbol.Pos.X, props.Symbol.Pos.Y
-            let h, w = props.Symbol.H, props.Symbol.W
-            
-            let topWidth, bottomWidth = 1, 1 // will be infered from ports
-
-            let opacity = if props.Symbol.IsDragging then 0.4 else 1.
-            let topStyle = if topWidth > 1 then busWireStyle opacity else wireStyle opacity
-            let bottomStyle = if bottomWidth > 1 then busWireStyle opacity else wireStyle opacity
-
-            g   [ ] 
-                [
-                    line [ X1 fX; Y1 fY; X2 (fX+w/2.); Y2 fY; topStyle] []
-                    line [ X1 (fX+w/2.); Y1 fY; X2 (fX+w/2.); Y2 (fY+h/2.); topStyle] []
-
-                    line [ X1 (fX+w/2.); Y1 (fY+h/2.); X2 (fX+w/2.); Y2 (fY+h); bottomStyle] []
-                    line [ X1 (fX+w/2.); Y1 (fY+h); X2 (fX); Y2 (fY+h); bottomStyle] []
-
-                    line [ X1 (fX+w/2.); Y1 (fY+h/2.); X2 (fX+w); Y2 (fY+h/2.); busWireStyle opacity] []
-
-                    createComponentTitle props
-                ]
-    , "MergeWires"
-    , equalsButFunctions
-    )
-
-let private renderSplitWire =
-    FunctionComponent.Of(
-        fun (props : RenderSymbolProps) ->
-            let fX, fY = props.Symbol.Pos.X, props.Symbol.Pos.Y
-            let h, w = props.Symbol.H, props.Symbol.W
-            
-            let topWidth, bottomWidth = // will be infered from ports
-                match props.Symbol.Type with 
-                | CommonTypes.ComponentType.SplitWire w -> w, 1
-                | _ -> failwithf "Shouldn't happen"
-
-            let opacity = if props.Symbol.IsDragging then 0.4 else 1.
-            let topStyle = if topWidth > 1 then busWireStyle opacity else wireStyle opacity
-            let bottomStyle = if bottomWidth > 1 then busWireStyle opacity else wireStyle opacity
-
-            g   [ ] 
-                [
-                    line [ X1 (fX); Y1 (fY+h/2.); X2 (fX+w/2.); Y2 (fY+h/2.); busWireStyle opacity] []
-
-                    line [ X1 (fX+w/2.); Y1 fY; X2 (fX+w/2.); Y2 (fY+h/2.); topStyle] []
-                    line [ X1 (fX+w/2.); Y1 fY; X2 (fX+w); Y2 fY; topStyle] []
-
-                    line [ X1 (fX+w/2.); Y1 (fY+h/2.); X2 (fX+w/2.); Y2 (fY+h); bottomStyle] []
-                    line [ X1 (fX+w/2.); Y1 (fY+h); X2 (fX+w); Y2 (fY+h); bottomStyle] []
-
-                    createComponentTitle props
-                ]
-    , "SplitWire"
-    , equalsButFunctions
-    )
-
-
-let private renderGate =
-    FunctionComponent.Of(
-        fun (props : RenderSymbolProps) ->
-            match props.Symbol.Type with
-            | CommonTypes.ComponentType.Not  ->   createLogicGate "1" true props
-            | CommonTypes.ComponentType.And  ->   createLogicGate "&" false props
-            | CommonTypes.ComponentType.Or   ->   createLogicGate "≥1" false props
-            | CommonTypes.ComponentType.Xor  ->   createLogicGate "=1" false props
-            | CommonTypes.ComponentType.Nand ->   createLogicGate "&" true props
-            | CommonTypes.ComponentType.Nor  ->   createLogicGate "≥1" true props
-            | CommonTypes.ComponentType.Xnor ->   createLogicGate "=1" true props
-            | _ -> failwithf "Shouldn't happen"
-    , "Gate"
-    , equalsButFunctions
-    )
-
-let private renderRectSymbol =
-    FunctionComponent.Of(
-        fun (props : RenderSymbolProps) ->
-            match props.Symbol.Type with
-            | CommonTypes.ComponentType.Decode4      ->   createRectangularSymbol "decode" ["Sel"; "Data"] ["0"; "1"; "2"; "3"] false props
-            | CommonTypes.ComponentType.NbitsAdder _ ->   createRectangularSymbol ("adder" + getBusWidthInfo props.Symbol) ["Cin"; "A"; "B"] ["Sum"; "Cout"] false props
-            | CommonTypes.ComponentType.NbitsXor _   ->   createRectangularSymbol ("XOR" + getBusWidthInfo props.Symbol) ["P"; "Q"] ["Out"] false props
-            | CommonTypes.ComponentType.DFF          ->   createRectangularSymbol "DFF" ["D"] ["Q"] true props
-            | CommonTypes.ComponentType.DFFE         ->   createRectangularSymbol "DFF" ["D"; "EN"] ["Q"] true props
-            | CommonTypes.ComponentType.Register _   ->   createRectangularSymbol ("REG" + getBusWidthInfo props.Symbol) ["data-in"] ["data-out"] true props
-            | CommonTypes.ComponentType.RegisterE _  ->   createRectangularSymbol ("REG" + getBusWidthInfo props.Symbol) ["data-in"; "EN"] ["data-out"] true props
-            | CommonTypes.ComponentType.AsyncROM _   ->   createRectangularSymbol "Async-ROM" ["addr"] ["data"] false props
-            | CommonTypes.ComponentType.ROM _        ->   createRectangularSymbol "ROM" ["addr"] ["data"] true props
-            | CommonTypes.ComponentType.RAM _        ->   createRectangularSymbol "RAM" ["addr"; "data-in"; "write"] ["data-out"] true props
-            | CommonTypes.ComponentType.Custom spec ->
-                let name, inputLabels, outputLabels = spec.Name, spec.InputLabels |> List.map fst, spec.OutputLabels |> List.map fst
-                createRectangularSymbol name inputLabels outputLabels true props
-            | _ -> failwithf "Shouldn't happen"
-    , "RectangularSymbol"
-    , equalsButFunctions
-    )
-
-let standardText x y sz txt = 
-    text [ // a demo text svg element
-        X x; 
-        Y y; 
-        Style [
-            TextAnchor "left" // left/right/middle: horizontal algnment vs (X,Y)
-            DominantBaseline "hanging" // auto/middle/hanging: vertical alignment vs (X,Y)
-            FontSize (sprintf "%ipx"sz)
-            FontWeight "Normal"
-            Fill "Black" // demo font color
-        ]
-    ] [str <| txt]
-let private drawRect x y w h clr= 
-    rect
-        [ 
-            //OnMouseUp (mouseUpHelper pr hmm)
-            //OnMouseDown (mouseDownHelper pr hmm)
-            X x
-            Y y
-            SVGAttr.Width w
-            SVGAttr.Height h
-            SVGAttr.Fill clr
-            SVGAttr.Stroke "black"
-            SVGAttr.StrokeWidth 1
-        ]
-        [ ]
-
-let private renderCatalogue = 
-    FunctionComponent.Of(
-        fun (props : RenderSymbolProps) ->
-            //let lx = props.Symbol.Pos.X
-            //let ly = props.Symbol.Pos.Y
-            
-            g   [ Style [
-                     UserSelect UserSelectOptions.None
-                     PointerEvents "none"
-                    ]
-                ]
-                [   
-                    drawRect 0. 0. 200. "100%" "white"
-                    standardText 10 20 20 "Catalogue"
-                    drawRect 0. 50. 200. 30. "white"
-                    standardText 15 60 15 "Input"
-                    drawRect 0. 80. 200. 30. "white"
-                    standardText 15 90 15 "Output"
-                    drawRect 0. 110. 200. 30. "white"
-                    standardText 15 120 15 "Constant"
-                    drawRect 0. 140. 200. 30. "white"
-                    standardText 15 150 15 "Label"
-                    drawRect 0. 170. 200. 30. "white"
-                    standardText 15 180 15 "Bus Select"
-                    drawRect 0. 200. 200. 30. "white"
-                    standardText 15 210 15 "Bus Compare"
-                    drawRect 0. 230. 200. 30. "white"
-                    standardText 15 240 15 "Merge Wires"
-                    drawRect 0. 260. 200. 30. "white"
-                    standardText 15 270 15 "Split Wires"
-
-                    drawRect 0. 290. 50. 30. "white"
-                    standardText 15 300 15 "Not"
-                    drawRect 50. 290. 50. 30. "white"
-                    standardText 65 300 15 "And"
-                    drawRect 100. 290. 50. 30. "white"
-                    standardText 115 300 15 "Or"
-                    drawRect 150. 290. 50. 30. "white"
-                    standardText 165 300 15 "Xor"
-                    drawRect 0. 320. 67. 30. "white"
-                    standardText 15 330 15 "Nand"
-                    drawRect 67. 320. 67. 30. "white"
-                    standardText 82 330 15 "Nor"
-                    drawRect 134. 320. 66. 30. "white"
-                    standardText 146 330 15 "Xnor"
-                ]          
-    , "Catalogue"
-    , equalsButFunctions
-    )
-
-
-let private renderSymbol (props : RenderSymbolProps) = 
-    match props.Symbol.Type with
-    | CommonTypes.ComponentType.Input _ -> renderInput props
-    | CommonTypes.ComponentType.Output _ -> renderOutput props
-    | CommonTypes.ComponentType.IOLabel -> renderIOLabel props
-    | CommonTypes.ComponentType.Constant _ -> renderConstant props
-    | CommonTypes.ComponentType.BusSelection _ -> renderBusSelection props
-    | CommonTypes.ComponentType.BusCompare _ -> renderBusCompare props
-    | CommonTypes.ComponentType.Not -> renderGate props
-    | CommonTypes.ComponentType.And -> renderGate props
-    | CommonTypes.ComponentType.Or -> renderGate props
-    | CommonTypes.ComponentType.Xor -> renderGate props
-    | CommonTypes.ComponentType.Nand -> renderGate props
-    | CommonTypes.ComponentType.Nor -> renderGate props
-    | CommonTypes.ComponentType.Xnor -> renderGate props
-    | CommonTypes.ComponentType.Decode4 -> renderRectSymbol props 
-    | CommonTypes.ComponentType.Mux2 -> renderMux2 props
-    | CommonTypes.ComponentType.Demux2 -> renderDemux2 props
-    | CommonTypes.ComponentType.NbitsAdder _ -> renderRectSymbol props
-    | CommonTypes.ComponentType.NbitsXor _ -> renderRectSymbol props
-    | CommonTypes.ComponentType.MergeWires -> renderMergeWires props
-    | CommonTypes.ComponentType.SplitWire _ -> renderSplitWire props
-    | CommonTypes.ComponentType.DFF -> renderRectSymbol props
-    | CommonTypes.ComponentType.DFFE -> renderRectSymbol props
-    | CommonTypes.ComponentType.Register _ -> renderRectSymbol props
-    | CommonTypes.ComponentType.RegisterE _ -> renderRectSymbol props
-    | CommonTypes.ComponentType.AsyncROM _ -> renderRectSymbol props
-    | CommonTypes.ComponentType.ROM _ -> renderRectSymbol props
-    | CommonTypes.ComponentType.RAM _ -> renderRectSymbol props
-    | CommonTypes.ComponentType.Custom _ -> renderRectSymbol props
-    | CommonTypes.ComponentType.Catalogue -> renderCatalogue props
-
-
-/// View function for symbol layer of SVG
-let view (model : Model) (dispatch : Msg -> unit) = 
-    model
-    |> List.map (fun ({Id = CommonTypes.ComponentId id} as symbol) ->
-        renderSymbol 
-            {
-                Symbol = symbol
-                Dispatch = dispatch
-                key = id
-            }
-    )
-    |> ofList
 
 
     

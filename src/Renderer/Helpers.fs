@@ -17,16 +17,12 @@ type XYPos =
     }
 
 type MouseOp = 
-    /// button up
     | Up
-    /// button down
     | Down
-    /// Move with button up
     | Move 
-    /// Move with button Down
     | Drag
     | CtrlScroll
-    | Scroll
+    | AltDown
 
 type CanvasProps = 
     {
@@ -53,6 +49,7 @@ type Line =
         P2 : XYPos
     }
 
+
 type PortOrientation = 
     | Top
     | Bottom
@@ -66,7 +63,7 @@ type PortDU =
 
 type CreateDU =
     | Init      //initialized
-    | Duplicate // duplicated
+    | Duplicated // duplicated
 
 type ChangeDU = 
     | Increment

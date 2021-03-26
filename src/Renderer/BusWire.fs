@@ -12,24 +12,23 @@ open Helpers
 //------------------------------BusWire Types-----------------------------//
 //------------------------------------------------------------------------//
 
-type ConnectPoint = {
-    Centre: XYPos
-    Id: CommonTypes.ComponentId
-    Select: bool
-}
-
+type segmentForDragging =
+    |Second
+    |Third
+    |Forth
+    |NoSeg
 
 type Wire = {
     Id : CommonTypes.ConnectionId 
     SourcePort : Symbol.Port
     TargetPort : Symbol.Port
-    isSelected : bool
-    hasError : bool 
-    relativPositions : XYPos list
-    PrevPositions : XYPos list
-    BeingDragged : int
-    BusWidth: int// create a list of boundingboxes
-    }
+    IsSelected : bool
+    HasError : bool 
+    RelativePos : XYPos*XYPos*XYPos
+    PrevPositions : XYPos*XYPos*XYPos
+    BeingDragged : segmentForDragging
+    BusWidth : int Option
+}
 
 type Model = {
     Symbol: Symbol.Model
@@ -37,7 +36,7 @@ type Model = {
     Color: CommonTypes.HighLightColor
     Countselected: int // Capitalize start of words
     PortToCursor : XYPos * XYPos * Symbol.Port option
-    }
+}
 
 //----------------------------Message Type-----------------------------------//
 type Msg =
@@ -46,50 +45,61 @@ type Msg =
     | MouseMsg of MouseT
     | DrawFromPortToCursor of XYPos*XYPos* Symbol.Port option
     | AddWire of Symbol.Port*Symbol.Port*CreateDU
-    | SelectWire of CommonTypes.ConnectionId*XYPos
+    | SelectWire of CommonTypes.ConnectionId
     | DeleteWire
-    | UpdatedPortsToBusWire of sId : Symbol.Port list
+    | UpdateBusWirePorts
     | DeselectWire
     | StartDraggingWire of CommonTypes.ConnectionId*XYPos
     | DraggingWire of CommonTypes.ConnectionId*XYPos
     | RemoveDrawnLine
     | SelectWiresWithinRegion of Helpers.BoundingBox
+    | EnforceBusWidth of int * Wire
+    | UpdateWires
 
 let origin = {X=0.0 ; Y=0.0}
 
 let posOf x y = {X=x;Y=y}
 
 /// look up wire in WireModel
-let wire (wModel: Model) (wId: CommonTypes.ConnectionId): Wire =
-    let correctwire cable =
+let findWire (wModel: Model) (wId: CommonTypes.ConnectionId): Wire =
+    let correctWire cable =
         cable.Id = wId
-    match wModel.WX |> List.tryFind (correctwire) with
+    match wModel.WX |> List.tryFind (correctWire) with
     | Some wr -> wr
     | None    -> failwithf "Ghost"
 
-type WireRenderProps = {
+type RenderWireProps = {
     key : CommonTypes.ConnectionId
     WireP: Wire
-    SrcP: XYPos 
-    TgtP: XYPos
     ColorP: string
     StrokeWidthP: string 
     SrcOrient: PortOrientation
     TgtOrient: PortOrientation
+    //Dispatch : Dispatch<Msg>
     }
 
+let getPortsOfWire (wModel :Model) (wire : Wire)  = 
+    let sym1,sym2 =
+        match  Symbol.getSymbolWithId wModel.Symbol wire.SourcePort.HostId, 
+               Symbol.getSymbolWithId wModel.Symbol wire.TargetPort.HostId with 
+        | Some sym1, Some sym2 -> sym1,sym2
+        | _ ,_ -> failwithf "Impossible : You can't have wires floating around unconnected !"
+
+    let srcPort = (Symbol.getPortWithId sym1 wire.SourcePort.Id)
+    let tgtPort = (Symbol.getPortWithId sym2 wire.TargetPort.Id)
+    
+    (srcPort,tgtPort)
 
 let selectBoundedWires (wModel: Model) (boundary: BoundingBox) =
     let selectWireinBounds (wr: Wire) =
         let inBounds (point: XYPos) =
             point.X > boundary.TopLeft.X && point.X < boundary.BottomRight.X && point.Y > boundary.TopLeft.Y && point.Y < boundary.BottomRight.Y
         if (inBounds wr.SourcePort.Pos && inBounds wr.TargetPort.Pos) then
-            {wr with isSelected = true}
+            {wr with IsSelected = true}
         else wr
     List.map selectWireinBounds wModel.WX
 
 let drawLineToCursor (startPos : XYPos, endPos : XYPos, endPort : Symbol.Port option) = 
-
     let drawLineColor,strokeWidth,strokeDashArray = 
         match endPort with
         | Some port -> drawLineColor_special, "5.0", "15.0 15.0"
@@ -108,266 +118,190 @@ let drawLineToCursor (startPos : XYPos, endPos : XYPos, endPort : Symbol.Port op
         ] []
         ]
 
-
+let busWidthAnnotation (wire : Wire) = 
+    match wire.BusWidth with
+    | None | Some 1 -> [] 
+    | Some wire -> [str $"{wire}"]
 
 
 let pairListElements sequence  = 
-        let revseq = List.rev sequence
-        match sequence,revseq with 
-        |hd::bodyone , tl::bodytwo -> List.rev bodytwo , bodyone
-        |_ -> sequence,sequence
+    let revseq = List.rev sequence
+    match sequence,revseq with 
+    |hd::bodyone , tl::bodytwo -> List.rev bodytwo , bodyone
+    |_ -> sequence,sequence
 
-let vertexlstZero (cable: Wire) (wModel: Model) (srcOrient: PortOrientation) (tgtOrient: PortOrientation) =
-    let startpt = cable.SourcePort.Pos 
-    let endpt = cable.TargetPort.Pos
-    let midX = (startpt.X+endpt.X)/2.0
-    let midY = (startpt.Y+endpt.Y)/2.0
+let vertexList (cable: Wire) (srcOrient: PortOrientation) (tgtOrient: PortOrientation) (initial : bool)= 
+    let a,b,c = 
+        match initial with
+        | true -> nullPos,nullPos,nullPos
+        | false -> cable.RelativePos
+          
+    let startPt = cable.SourcePort.Pos 
+    let endPt = cable.TargetPort.Pos
+    let midX = (startPt.X+endPt.X)/2.0
+    let midY = (startPt.Y+endPt.Y)/2.0
+    
+    let leftOf pTwo pOne = pOne.X < pTwo.X
+    let above pTwo pOne = pOne.Y < pTwo.Y
+    let below pTwo pOne = pOne.Y > pTwo.Y
+    let rightOf pTwo pOne = pOne.X > pTwo.X
 
-    let leftof ptwo pone = pone.X < ptwo.X
-    let above ptwo pone = pone.Y < ptwo.Y
-    let below ptwo pone = pone.Y > ptwo.Y
-    let rightof ptwo pone = pone.X > ptwo.X
-
-    let moveright x p = {p with X = p.X + x}
-    let movedown y p = {p with Y = p.Y + y}
+    let moveRight x p = {p with X = p.X + x}
+    let moveDown y p = {p with Y = p.Y + y}
     
     let moveHorizontallyTo x p = {p with X = x}
     let moveVerticallyTo y p = {p with Y = y}
 
     match srcOrient,tgtOrient with
-    |Right,Bottom -> match (startpt |> leftof endpt) , (startpt |> below endpt) with
-                     |true,true -> [startpt ; startpt |> moveHorizontallyTo endpt.X ; endpt]
+    |Right,Bottom -> match (startPt |> leftOf endPt) , (startPt |> below endPt) with
+                     |true,true -> [startPt ; startPt |> moveHorizontallyTo endPt.X ; endPt]
                      |true,false 
-                     |false,true -> [startpt ; startpt |> moveright 15.0 ; {X=startpt.X+15.0 ; Y=endpt.Y+15.0} ; endpt |> movedown 15.0 ; endpt]
-                     |false,false -> [startpt ; startpt |> moveright 100.0 ; {X=startpt.X+100.0;Y=endpt.Y+15.0} ; endpt |> movedown 15.0 ; endpt]
-    |Right,Top -> match (startpt |> leftof endpt) , (startpt |> above endpt) with
-                  |true,true -> [startpt ; {X=endpt.X;Y=startpt.Y} ; endpt]
+                     |false,true -> [startPt ; startPt |> moveRight(15.0+a.X) ; {X=startPt.X+15.0+a.X;Y=endPt.Y+15.0+b.Y} ; endPt |> moveDown(15.0+b.Y) ; endPt]
+                     |false,false -> [startPt ; startPt |> moveRight(100.0+a.X) ; {X=startPt.X+100.0+a.X;Y=endPt.Y+15.0+b.Y} ; endPt |> moveDown(15.0+b.Y) ; endPt]
+    |Right,Top -> match (startPt |> leftOf endPt) , (startPt |> above endPt) with
+                  |true,true -> [startPt ; startPt |> moveHorizontallyTo endPt.X ; endPt]
                   |true,false 
-                  |false,true -> [startpt ; startpt |> moveright 15.0 ; {X=startpt.X+15.0;Y=endpt.Y-15.0} ; endpt |> movedown -15.0 ; endpt]
-                  |false,false -> [startpt ; startpt |> moveright 100.0 ; {X=startpt.X+100.0;Y=endpt.Y-15.0} ; endpt |> movedown -15.0 ; endpt]
-    |Right,Left -> match (startpt |> leftof endpt) with 
-                   |true -> [startpt ; startpt |> moveHorizontallyTo midX ; endpt |> moveHorizontallyTo midX ; endpt]
-                   |false -> [startpt ; startpt |> moveright 15.0 ; {X=startpt.X+15.0;Y=midY} ; {X=endpt.X-15.0;Y=midY} ; endpt |> moveright -15.0 ; endpt]
-    |Right,Right -> [startpt ; {X=startpt.X+15.0;Y=startpt.Y} ; {X=startpt.X+15.0;Y=endpt.Y} ; endpt]
-    |Left,Bottom -> match (startpt |> rightof endpt) , (startpt |> below endpt) with
-                    |true,true -> [startpt ; {X=endpt.X;Y=startpt.Y} ; endpt]
+                  |false,true -> [startPt ; startPt |> moveRight(15.0+a.X) ; {X=startPt.X+15.0+a.X;Y=endPt.Y-15.0+b.Y} ; endPt |> moveDown(-15.0+b.Y) ; endPt]
+                  |false,false -> [startPt ; startPt |> moveRight(100.0+a.X) ; {X=startPt.X+100.0+a.X;Y=endPt.Y-15.0+b.Y} ; endPt |> moveDown(-15.0+b.Y) ; endPt]
+    |Right,Left -> match (startPt |> leftOf endPt) with 
+                   |true -> [startPt ; startPt |> moveHorizontallyTo (midX+a.X) ; endPt |> moveHorizontallyTo (midX+a.X) ; endPt]
+                   |false -> [startPt ; startPt |> moveRight(15.0+a.X) ; {X=startPt.X+15.0+a.X;Y=midY+b.Y} ; {X=endPt.X-15.0+c.X;Y=midY+b.Y} ; endPt |> moveRight(-15.0+c.X) ; endPt]
+    |Right,Right -> [startPt ; {X=startPt.X+15.0;Y=startPt.Y} ; {X=startPt.X+15.0;Y=endPt.Y} ; endPt]
+    |Left,Bottom -> match (startPt |> rightOf endPt) , (startPt |> below endPt) with
+                    |true,true -> [startPt ; startPt |> moveHorizontallyTo midX ; endPt]
                     |true,false 
-                    |false,true -> [startpt ; {X=startpt.X-15.0;Y=startpt.Y} ; {X=startpt.X-15.0;Y=endpt.Y+15.0} ; {X=endpt.X;Y=endpt.Y+15.0} ; endpt]
-                    |false,false -> [startpt ; {X=startpt.X-100.0;Y=startpt.Y} ; {X=startpt.X-100.0;Y=endpt.Y+15.0} ; {X=endpt.X;Y=endpt.Y+15.0} ; endpt]
-    |Left,Top -> match (startpt |> rightof endpt) , (startpt |> above endpt) with 
-                 |true,true -> [startpt ; startpt |> moveHorizontallyTo endpt.X ; endpt]
+                    |false,true -> [startPt ; startPt |> moveRight(-15.0+a.X) ; {X=startPt.X-15.0+a.X;Y=endPt.Y+15.0+b.Y} ; endPt |> moveDown(15.0+b.Y) ; endPt]
+                    |false,false -> [startPt ; {X=startPt.X-100.0+a.X;Y=startPt.Y} ; {X=startPt.X-100.0+a.X;Y=endPt.Y+15.0+b.Y} ; {X=endPt.X;Y=endPt.Y+15.0+b.Y} ; endPt]
+    |Left,Top -> match (startPt |> rightOf endPt) , (startPt |> above endPt) with
+                 |true,true -> [startPt ; startPt |> moveHorizontallyTo endPt.X ; endPt]
                  |true,false 
-                 |false,true -> [startpt ; {X=startpt.X-15.0;Y=startpt.Y} ; {X=startpt.X-15.0;Y=endpt.Y-15.0} ; {X=endpt.X;Y=endpt.Y-15.0} ; endpt]
-                 |false,false -> [startpt ; {X=startpt.X-100.0;Y=startpt.Y} ; {X=startpt.X-100.0;Y=endpt.Y-15.0} ; {X=endpt.X;Y=endpt.Y-15.0} ; endpt]
-    |Left,Right -> match (startpt |> rightof endpt) with 
-                   |true -> [startpt ; startpt |> moveHorizontallyTo midX ; endpt |> moveHorizontallyTo midX ; endpt]
-                   |false -> [startpt ; {X=startpt.X-15.0;Y=startpt.Y} ; {X=startpt.X-15.0;Y=midY} ; {X=endpt.X+15.0;Y=midY} ; {X=endpt.X+15.0;Y=endpt.Y} ; endpt]
-    |Top,Bottom -> match (startpt |> above endpt) with
-                   |true -> [startpt ; startpt |> moveVerticallyTo midY ; endpt |> moveVerticallyTo midY ; endpt]
-                   |false -> [startpt ; startpt |> movedown -15.0 ; {X=midX;Y=startpt.Y-15.0} ; {X=midX;Y=endpt.Y+15.0} ; endpt |> movedown 15.0 ; endpt]
-    |Top,Left -> match (startpt |> leftof endpt) , (startpt |> below endpt) with
-                 |true,true -> [startpt ; startpt |> moveVerticallyTo endpt.Y ; endpt]
+                 |false,true -> [startPt ; startPt |> moveRight(-15.0+a.X) ; {X=startPt.X-15.0+a.X;Y=endPt.Y-15.0+b.Y} ; endPt |> moveDown(-15.0+b.Y) ; endPt]
+                 |false,false -> [startPt ; startPt |> moveRight(-100.0+a.X) ; {X=startPt.X-100.0+a.X;Y=endPt.Y-15.0+b.Y} ; endPt |> moveDown(-15.0+b.Y) ; endPt]
+    |Left,Right -> match (startPt |> rightOf endPt) with 
+                   |true -> [startPt ; startPt |> moveHorizontallyTo (midX+a.X) ; {X=midX+a.X;Y=endPt.Y} ; endPt]
+                   |false -> [startPt ; startPt |> moveRight (-15.0+a.X) ; {X=startPt.X-15.0+a.X;Y=midY+b.Y} ; {X=endPt.X+15.0+c.X;Y=midY+b.Y} ; {X=endPt.X+15.0+c.X;Y=endPt.Y} ; endPt]
+    |Top,Bottom -> match (startPt |> below endPt) with
+                   |true -> [startPt ; startPt |> moveVerticallyTo (midY+a.Y) ; endPt |> moveVerticallyTo (midY+a.Y) ; endPt]
+                   |false -> [startPt ; startPt |> moveDown(-15.0+a.Y) ; {X=midX+b.X;Y=startPt.Y-15.0+a.Y} ; {X=midX+b.X;Y=endPt.Y+15.0+c.Y} ; endPt |> moveDown(15.0+c.Y) ; endPt]
+    |Top,Left -> match (startPt |> leftOf endPt) , (startPt |> below endPt) with
+                 |true,true -> [startPt ; startPt |> moveVerticallyTo endPt.Y ; endPt]
                  |true,false
-                 |false,true -> [startpt ; {X=startpt.X;Y=startpt.Y-15.0} ; {X=endpt.X-15.0;Y=startpt.Y-15.0} ; {X=endpt.X-15.0;Y=endpt.Y} ; endpt]
-                 |false,false -> [startpt ; {X=startpt.X;Y=startpt.Y-100.0} ; {X=endpt.X-15.0;Y=startpt.Y-100.0} ; {X=endpt.X-15.0;Y=endpt.Y} ; endpt]
-    |Top,Right -> match (startpt |> rightof endpt) , (startpt |> below endpt) with
-                  |true,true -> [startpt ; {X=startpt.X;Y=endpt.Y} ; endpt]
+                 |false,true -> [startPt ; startPt |> moveDown(-15.0+a.Y) ; {X=endPt.X-15.0+b.X;Y=startPt.Y-15.0+a.Y} ; endPt |> moveRight(-15.0+b.X) ; endPt]
+                 |false,false -> [startPt ; startPt |> moveDown(-100.0+a.Y) ; {X=endPt.X-15.0+b.X;Y=startPt.Y-100.0+a.Y} ; endPt |> moveRight(-15.0+b.X) ; endPt]
+    |Top,Right -> match (startPt |> rightOf endPt) , (startPt |> below endPt) with
+                  |true,true -> [startPt ; startPt |> moveVerticallyTo endPt.Y ; endPt]
                   |true,false
-                  |false,true -> [startpt ; {X=startpt.X;Y=startpt.Y-15.0} ; {X=endpt.X+15.0;Y=startpt.Y-15.0} ; {X=endpt.X+15.0;Y=endpt.Y} ; endpt]
-                  |false,false -> [startpt ; {X=startpt.X;Y=startpt.Y+100.0} ; {X=endpt.X-15.0;Y=startpt.Y+100.0} ; {X=endpt.X+15.0;Y=endpt.Y} ; endpt]
-    |Top,Top -> match (startpt |> above endpt) with
-                |true -> [startpt ; startpt |> movedown -15.0 ; startpt |> movedown -15.0 |> moveHorizontallyTo endpt.X ; endpt]
-                |false -> [startpt ; endpt |> movedown -15.0 |> moveHorizontallyTo startpt.X ; endpt |> movedown -15.0 ; endpt]
-    |Bottom,Bottom -> match (startpt |> below endpt) with
-                      |true -> [startpt ; {X=startpt.X;Y=startpt.Y+15.0} ; {X=endpt.X;Y=startpt.Y+15.0} ; endpt]
-                      |false -> [startpt ; {X=startpt.X;Y=endpt.Y+15.0} ; {X=endpt.X;Y=endpt.Y+15.0} ; endpt]
-    |Bottom,Top ->  match (startpt |> above endpt) with
-                    |true -> [startpt ; {X=startpt.X;Y=midY} ; {X=endpt.X;Y=midY} ; endpt]
-                    |false -> [startpt ; {X=startpt.X;Y=startpt.Y+15.0} ; {X=midX;Y=startpt.Y+15.0} ; {X=midX;Y=endpt.Y-15.0} ; {X=endpt.X;Y=endpt.Y-15.0} ; endpt]
-    |Bottom,Left -> match (startpt |> leftof endpt) , (startpt |> above endpt) with
-                    |true,true -> [startpt ; {X=startpt.X;Y=endpt.Y} ; endpt]
+                  |false,true -> [startPt ; startPt |> moveDown (-15.0+a.Y) ; {X=endPt.X+15.0+b.X;Y=startPt.Y-15.0+a.Y} ; endPt |> moveRight (15.0+b.X) ; endPt]
+                  |false,false -> [startPt ; startPt |> moveDown (-100.0+a.Y) ; {X=endPt.X+15.0+b.X;Y=startPt.Y-100.0+a.Y} ; endPt |> moveRight (15.0+b.X) ; endPt]
+    |Top,Top -> match (startPt |> above endPt) with
+                |true -> [startPt ; {X=startPt.X;Y=startPt.Y-15.0+a.Y} ; {X=endPt.X;Y=startPt.Y-15.0+a.Y} ; endPt]
+                |false -> [startPt ; {X=startPt.X;Y=endPt.Y-15.0+a.Y} ; {X=endPt.X;Y=endPt.Y-15.0+a.Y} ; endPt]
+    |Bottom,Bottom -> match (startPt |> below endPt) with
+                      |true -> [startPt ; startPt |> moveDown (15.0+a.Y) ; {X=endPt.X;Y=startPt.Y+15.0+a.Y} ; endPt]
+                      |false -> [startPt ; {X=startPt.X;Y=endPt.Y+15.0+a.Y} ; endPt |> moveDown (15.0+a.Y) ; endPt]
+    |Bottom,Top ->  match (startPt |> above endPt) with
+                    |true -> [startPt ; {X=startPt.X;Y=midY+a.Y} ; {X=endPt.X;Y=midY+a.Y} ; endPt]
+                    |false -> [startPt ; startPt |> moveDown (15.0+a.Y) ; {X=midX+b.X;Y=startPt.Y+15.0+a.Y} ; {X=midX+b.X;Y=endPt.Y-15.0+c.Y} ; endPt |> moveDown (-15.0+c.Y) ; endPt]
+    |Bottom,Left -> match (startPt |> leftOf endPt) , (startPt |> above endPt) with
+                    |true,true -> [startPt ; startPt |> moveVerticallyTo endPt.Y ; endPt]
                     |true,false
-                    |false,true -> [startpt ; {X=startpt.X;Y=startpt.Y+15.0} ; {X=endpt.X-15.0;Y=startpt.Y+15.0} ; {X=endpt.X-15.0;Y=endpt.Y} ; endpt]
-                    |false,false -> [startpt ; {X=startpt.X;Y=startpt.Y+100.0} ; {X=endpt.X-15.0;Y=startpt.Y+100.0} ; {X=endpt.X-15.0;Y=endpt.Y} ; endpt]
-    |Bottom,Right -> match (startpt |> rightof endpt) , (startpt |> above endpt) with
-                     |true,true -> [startpt ; startpt |> moveVerticallyTo endpt.Y ; endpt]
+                    |false,true -> [startPt ; startPt |> moveDown(15.0+a.Y) ; {X=endPt.X-15.0+b.X;Y=startPt.Y+15.0+a.Y} ; endPt |> moveRight (-15.0+b.X) ; endPt]
+                    |false,false -> [startPt ; {X=startPt.X;Y=startPt.Y+100.0+a.Y} ; {X=endPt.X-15.0+b.X;Y=startPt.Y+100.0+a.Y} ; {X=endPt.X-15.0+b.X;Y=endPt.Y} ; endPt]
+    |Bottom,Right -> match (startPt |> rightOf endPt) , (startPt |> above endPt) with
+                     |true,true -> [startPt ; startPt |> moveVerticallyTo endPt.Y ; endPt]
                      |true,false
-                     |false,true -> [startpt ; startpt |> movedown(15.0) ; {X=endpt.X+15.0;Y=startpt.Y+15.0} ; endpt |> moveright(15.0) ; endpt]
-                     |false,false -> [startpt ; startpt |> movedown(100.0) ; {X=endpt.X+15.0;Y=startpt.Y+100.0} ; endpt |> moveright(15.0) ; endpt]
-    |_ ->  [startpt ; {X=midX;Y=startpt.Y} ; {X=midX;Y=endpt.Y} ; endpt]
-
-let vertexlist (cable: Wire) (wModel: Model) (srcOrient: PortOrientation) (tgtOrient: PortOrientation)= 
-    let [a ; b ; c] = cable.relativPositions
-    let startpt = cable.SourcePort.Pos 
-    let endpt = cable.TargetPort.Pos
-    let midX = (startpt.X+endpt.X)/2.0
-    let midY = (startpt.Y+endpt.Y)/2.0
-    
-    let leftof ptwo pone = pone.X < ptwo.X
-    let above ptwo pone = pone.Y < ptwo.Y
-    let below ptwo pone = pone.Y > ptwo.Y
-    let rightof ptwo pone = pone.X > ptwo.X
-
-    let moveright x p = {p with X = p.X + x}
-    let movedown y p = {p with Y = p.Y + y}
-    
-    let moveHorizontallyTo x p = {p with X = x}
-    let moveVerticallyTo y p = {p with Y = y}
-
-    match srcOrient,tgtOrient with
-    |Right,Bottom -> match (startpt |> leftof endpt) , (startpt |> below endpt) with
-                     |true,true -> [startpt ; startpt |> moveHorizontallyTo endpt.X ; endpt]
-                     |true,false 
-                     |false,true -> [startpt ; startpt |> moveright(15.0+a.X) ; {X=startpt.X+15.0+a.X;Y=endpt.Y+15.0+b.Y} ; endpt |> movedown(15.0+b.Y) ; endpt]
-                     |false,false -> [startpt ; startpt |> moveright(100.0+a.X) ; {X=startpt.X+100.0+a.X;Y=endpt.Y+15.0+b.Y} ; endpt |> movedown(15.0+b.Y) ; endpt]
-    |Right,Top -> match (startpt |> leftof endpt) , (startpt |> above endpt) with
-                  |true,true -> [startpt ; startpt |> moveHorizontallyTo endpt.X ; endpt]
-                  |true,false 
-                  |false,true -> [startpt ; startpt |> moveright(15.0+a.X) ; {X=startpt.X+15.0+a.X;Y=endpt.Y-15.0+b.Y} ; endpt |> movedown(-15.0+b.Y) ; endpt]
-                  |false,false -> [startpt ; startpt |> moveright(100.0+a.X) ; {X=startpt.X+100.0+a.X;Y=endpt.Y-15.0+b.Y} ; endpt |> movedown(-15.0+b.Y) ; endpt]
-    |Right,Left -> match (startpt |> leftof endpt) with 
-                   |true -> [startpt ; startpt |> moveHorizontallyTo (midX+a.X) ; endpt |> moveHorizontallyTo (midX+a.X) ; endpt]
-                   |false -> [startpt ; startpt |> moveright(15.0+a.X) ; {X=startpt.X+15.0+a.X;Y=midY+b.Y} ; {X=endpt.X-15.0+c.X;Y=midY+b.Y} ; endpt |> moveright(-15.0+c.X) ; endpt]
-    |Right,Right -> [startpt ; {X=startpt.X+15.0;Y=startpt.Y} ; {X=startpt.X+15.0;Y=endpt.Y} ; endpt]
-    |Left,Bottom -> match (startpt |> rightof endpt) , (startpt |> below endpt) with
-                    |true,true -> [startpt ; startpt |> moveHorizontallyTo midX ; endpt]
-                    |true,false 
-                    |false,true -> [startpt ; startpt |> moveright(-15.0+a.X) ; {X=startpt.X-15.0+a.X;Y=endpt.Y+15.0+b.Y} ; endpt |> movedown(15.0+b.Y) ; endpt]
-                    |false,false -> [startpt ; {X=startpt.X-100.0+a.X;Y=startpt.Y} ; {X=startpt.X-100.0+a.X;Y=endpt.Y+15.0+b.Y} ; {X=endpt.X;Y=endpt.Y+15.0+b.Y} ; endpt]
-    |Left,Top -> match (startpt |> rightof endpt) , (startpt |> above endpt) with
-                 |true,true -> [startpt ; startpt |> moveHorizontallyTo endpt.X ; endpt]
-                 |true,false 
-                 |false,true -> [startpt ; startpt |> moveright(-15.0+a.X) ; {X=startpt.X-15.0+a.X;Y=endpt.Y-15.0+b.Y} ; endpt |> movedown(-15.0+b.Y) ; endpt]
-                 |false,false -> [startpt ; startpt |> moveright(-100.0+a.X) ; {X=startpt.X-100.0+a.X;Y=endpt.Y-15.0+b.Y} ; endpt |> movedown(-15.0+b.Y) ; endpt]
-    |Left,Right -> match (startpt |> rightof endpt) with 
-                   |true -> [startpt ; startpt |> moveHorizontallyTo (midX+a.X) ; {X=midX+a.X;Y=endpt.Y} ; endpt]
-                   |false -> [startpt ; startpt |> moveright (-15.0+a.X) ; {X=startpt.X-15.0+a.X;Y=midY+b.Y} ; {X=endpt.X+15.0+c.X;Y=midY+b.Y} ; {X=endpt.X+15.0+c.X;Y=endpt.Y} ; endpt]
-    |Top,Bottom -> match (startpt |> below endpt) with
-                   |true -> [startpt ; startpt |> moveVerticallyTo (midY+a.Y) ; endpt |> moveVerticallyTo (midY+a.Y) ; endpt]
-                   |false -> [startpt ; startpt |> movedown(-15.0+a.Y) ; {X=midX+b.X;Y=startpt.Y-15.0+a.Y} ; {X=midX+b.X;Y=endpt.Y+15.0+c.Y} ; endpt |> movedown(15.0+c.Y) ; endpt]
-    |Top,Left -> match (startpt |> leftof endpt) , (startpt |> below endpt) with
-                 |true,true -> [startpt ; startpt |> moveVerticallyTo endpt.Y ; endpt]
-                 |true,false
-                 |false,true -> [startpt ; startpt |> movedown(-15.0+a.Y) ; {X=endpt.X-15.0+b.X;Y=startpt.Y-15.0+a.Y} ; endpt |> moveright(-15.0+b.X) ; endpt]
-                 |false,false -> [startpt ; startpt |> movedown(-100.0+a.Y) ; {X=endpt.X-15.0+b.X;Y=startpt.Y-100.0+a.Y} ; endpt |> moveright(-15.0+b.X) ; endpt]
-    |Top,Right -> match (startpt |> rightof endpt) , (startpt |> below endpt) with
-                  |true,true -> [startpt ; startpt |> moveVerticallyTo endpt.Y ; endpt]
-                  |true,false
-                  |false,true -> [startpt ; startpt |> movedown (-15.0+a.Y) ; {X=endpt.X+15.0+b.X;Y=startpt.Y-15.0+a.Y} ; endpt |> moveright (15.0+b.X) ; endpt]
-                  |false,false -> [startpt ; startpt |> movedown (-100.0+a.Y) ; {X=endpt.X+15.0+b.X;Y=startpt.Y-100.0+a.Y} ; endpt |> moveright (15.0+b.X) ; endpt]
-    |Top,Top -> match (startpt |> above endpt) with
-                |true -> [startpt ; {X=startpt.X;Y=startpt.Y-15.0+a.Y} ; {X=endpt.X;Y=startpt.Y-15.0+a.Y} ; endpt]
-                |false -> [startpt ; {X=startpt.X;Y=endpt.Y-15.0+a.Y} ; {X=endpt.X;Y=endpt.Y-15.0+a.Y} ; endpt]
-    |Bottom,Bottom -> match (startpt |> below endpt) with
-                      |true -> [startpt ; startpt |> movedown (15.0+a.Y) ; {X=endpt.X;Y=startpt.Y+15.0+a.Y} ; endpt]
-                      |false -> [startpt ; {X=startpt.X;Y=endpt.Y+15.0+a.Y} ; endpt |> movedown (15.0+a.Y) ; endpt]
-    |Bottom,Top ->  match (startpt |> above endpt) with
-                    |true -> [startpt ; {X=startpt.X;Y=midY+a.Y} ; {X=endpt.X;Y=midY+a.Y} ; endpt]
-                    |false -> [startpt ; startpt |> movedown (15.0+a.Y) ; {X=midX+b.X;Y=startpt.Y+15.0+a.Y} ; {X=midX+b.X;Y=endpt.Y-15.0+c.Y} ; endpt |> movedown (-15.0+c.Y) ; endpt]
-    |Bottom,Left -> match (startpt |> leftof endpt) , (startpt |> above endpt) with
-                    |true,true -> [startpt ; startpt |> moveVerticallyTo endpt.Y ; endpt]
-                    |true,false
-                    |false,true -> [startpt ; startpt |> movedown(15.0+a.Y) ; {X=endpt.X-15.0+b.X;Y=startpt.Y+15.0+a.Y} ; endpt |> moveright (-15.0+b.X) ; endpt]
-                    |false,false -> [startpt ; {X=startpt.X;Y=startpt.Y+100.0+a.Y} ; {X=endpt.X-15.0+b.X;Y=startpt.Y+100.0+a.Y} ; {X=endpt.X-15.0+b.X;Y=endpt.Y} ; endpt]
-    |Bottom,Right -> match (startpt |> rightof endpt) , (startpt |> above endpt) with
-                     |true,true -> [startpt ; startpt |> moveVerticallyTo endpt.Y ; endpt]
-                     |true,false
-                     |false,true -> [startpt ; startpt |> movedown (15.0+a.Y) ; {X=endpt.X+15.0+b.X;Y=startpt.Y+15.0+a.Y} ; endpt |> moveright (15.0+b.X) ; endpt]
-                     |false,false -> [startpt ; startpt |> movedown (100.0+a.Y) ; {X=endpt.X+15.0+b.X;Y=startpt.Y+100.0+a.Y} ; endpt |> moveright (100.0+b.X) ; endpt]
-    |_ ->  [startpt ; {X=midX;Y=startpt.Y} ; {X=midX;Y=endpt.Y} ; endpt]
+                     |false,true -> [startPt ; startPt |> moveDown (15.0+a.Y) ; {X=endPt.X+15.0+b.X;Y=startPt.Y+15.0+a.Y} ; endPt |> moveRight (15.0+b.X) ; endPt]
+                     |false,false -> [startPt ; startPt |> moveDown (100.0+a.Y) ; {X=endPt.X+15.0+b.X;Y=startPt.Y+100.0+a.Y} ; endPt |> moveRight (100.0+b.X) ; endPt]
+    |_ ->  [startPt ; {X=midX;Y=startPt.Y} ; {X=midX;Y=endPt.Y} ; endPt]
 
 let bounds (cable: Wire) (wModel: Model)=
     let individualBound (start:XYPos) (final: XYPos) =
         if (final.Y > start.Y || final.X > start.X) then
-            {TopLeft = {X=start.X-10.0;Y=start.Y-10.0} ;
-             BottomRight = {X=final.X+10.0;Y=final.Y+10.0}}
-         else {TopLeft = {X=final.X-10.0;Y=final.Y-10.0} ;
-             BottomRight = {X=start.X+10.0;Y=start.Y+10.0}}
-    let vlst = vertexlist cable wModel (Symbol.getOrientationOfPort wModel.Symbol cable.SourcePort) (Symbol.getOrientationOfPort wModel.Symbol cable.TargetPort)
-    let startlst , endlst = pairListElements vlst
-    List.map2 individualBound startlst endlst
+            {TopLeft = {X=start.X-5.0;Y=start.Y-5.0} ;
+             BottomRight = {X=final.X+5.0;Y=final.Y+5.0}}
+         else {TopLeft = {X=final.X-5.0;Y=final.Y-5.0} ;
+             BottomRight = {X=start.X+5.0;Y=start.Y+5.0}}
+    let vLst = vertexList cable (Symbol.getOrientationOfPort wModel.Symbol cable.SourcePort) (Symbol.getOrientationOfPort wModel.Symbol cable.TargetPort) false
+    let startList , endList = pairListElements vLst 
+    List.map2 individualBound startList endList
 
-let autosingleWireView (wModel: Model)= 
-    let displayFullWire (cable: Wire) (props: WireRenderProps) (vertices: list<XYPos>) = 
-        let displayWireSegment (start: XYPos) (final: XYPos) =
-            let color =
-                    if props.WireP.isSelected then
-                        "green" 
-                    else if props.WireP.hasError  then
-                        "red"
-                    else if props.WireP.BusWidth > 1 then
-                        "purple"
-                    else "black"
-            g   [ Style [ 
-            // the transform here does rotation, scaling, and translation
-            // the rotation and scaling happens with TransformOrigin as fixed point first
-                    TransformOrigin "0px 50px" // so that rotation is around centre of line
-                    Transform (sprintf "translate(%fpx,%fpx) rotate(%ddeg) scale(%f)" 0.0 0.0 0 1.0)
-                    ]
-                ]
-                [    
-                    line [
-                        X1 start.X
-                        Y1 start.Y
-                        X2 final.X
-                        Y2 final.Y
-                        SVGAttr.Stroke color
-                        SVGAttr.StrokeWidth props.StrokeWidthP
-                    ] []
-                ]
+let displayWireSegment (props: RenderWireProps) (start: XYPos) (final: XYPos) =
+    let color =
+        match props.WireP.IsSelected, props.WireP.HasError, props.WireP.BusWidth with
+        | true, _, _ -> "green" 
+        | _, true, _ -> "red" 
+        | _, _, Some wire when wire > 1 -> "purple"
+        | _, _, None -> "purple"
+        | _ -> "black"
 
-        let startlst,endlst = pairListElements vertices
-        let reactlst = List.map2 displayWireSegment startlst endlst 
-        
-        text [
-                        X (props.SrcP.X + 20.0)
-                        Y (props.SrcP.Y + 2.0)
-                        Style [
-                            TextAnchor "middle" // left/right/middle: horizontal algnment vs (X,Y)
-                            DominantBaseline "hanging" // auto/middle/hanging: vertical alignment vs (X,Y)
-                            FontSize "10px"
-                            FontWeight "Bold"
-                            Fill "Black"                // demo font color
-                            UserSelect UserSelectOptions.None
-                            PointerEvents "none"
-                        ]
-                    ]  [sprintf "%d" props.WireP.BusWidth|> str] :: reactlst
-         |> (fun lineEl -> 
-            g [] lineEl)
+    g   []
+        [    
+            line [
+                X1 start.X
+                Y1 start.Y
+                X2 final.X
+                Y2 final.Y
+                SVGAttr.Stroke color
+                SVGAttr.StrokeWidth props.StrokeWidthP
+            ] []
+        ]
 
+let displayFullWire (props: RenderWireProps) (vertices: list<XYPos>) = 
+    let srcPos = props.WireP.SourcePort.Pos
+    let tgtPos = props.WireP.TargetPort.Pos
+
+    let startList,endList = pairListElements vertices
+    let reactlst = List.map2 (displayWireSegment props) startList endList 
+    let annotatePos = if (props.WireP.SourcePort.PortType = CommonTypes.Output) then srcPos else tgtPos 
+
+    text [
+        X (annotatePos.X + 20.0)
+        Y (annotatePos.Y + 2.0)
+        Style [
+            TextAnchor "middle"
+            DominantBaseline "hanging" 
+            FontSize "10px"
+            FontWeight "Bold"
+            Fill "Black" 
+            UserSelect UserSelectOptions.None
+            PointerEvents "none"
+        ]
+    ]  (busWidthAnnotation props.WireP) :: reactlst
+        |> (fun reactElemLst -> 
+        g [] reactElemLst)
+  
+
+let wireView  = 
     FunctionComponent.Of (
-        fun (props: WireRenderProps) ->                                         
-            g   [ Style [ 
-                TransformOrigin "0px 50px"
-                Transform (sprintf "translate(%fpx,%fpx) rotate(%ddeg) scale(%f) " 0.0 0.0 0 1.0)
-                ]
-                ]
+        fun (props: RenderWireProps) ->  
+
+            g   []
                 [
-                displayFullWire props.WireP props (vertexlist props.WireP wModel props.SrcOrient props.TgtOrient)
+                    displayFullWire props (vertexList props.WireP props.SrcOrient props.TgtOrient false)
                 ]
         , "Wire"
-        , equalsButFunctions
-    )            
+        ,equalsButFunctions)
 
-let view (model:Model) (dispatch: Msg -> unit)= 
+let view (wModel:Model) (dispatch: Msg -> unit)= 
     let wires = 
-        model.WX
-        |> List.map (fun w ->
+        wModel.WX
+        |> List.map (fun wire ->
+            let srcPort, tgtPort = getPortsOfWire wModel wire
             let props = {
-                key = w.Id
-                WireP = w
-                SrcP = w.SourcePort.Pos 
-                TgtP = w.TargetPort.Pos
-                ColorP = model.Color.Text()
-                StrokeWidthP = if w.hasError then "3px" 
-                               else if w.BusWidth > 1 then "3px"
-                               else "1px"
-                SrcOrient = Symbol.getOrientationOfPort model.Symbol w.SourcePort
-                TgtOrient = Symbol.getOrientationOfPort model.Symbol w.TargetPort
-                }
-            autosingleWireView model props)
-    let symbols = Symbol.view model.Symbol (fun sMsg -> dispatch (Symbol sMsg))
-    let lineToCursor= drawLineToCursor model.PortToCursor
+                key = wire.Id
+                WireP = {wire with SourcePort = srcPort ; TargetPort = tgtPort}
+                ColorP = wModel.Color.Text()
+                StrokeWidthP = 
+                    match wire.HasError, wire.BusWidth with
+                    | false, Some wire when wire = 1 -> "1px"
+                    | _ -> "3px" 
+                SrcOrient = Symbol.getOrientationOfPort wModel.Symbol wire.SourcePort
+                TgtOrient = Symbol.getOrientationOfPort wModel.Symbol wire.TargetPort
+            }
+            wireView props
+        )
+    let symbols = SymbolRenderers.view wModel.Symbol (fun sMsg -> dispatch (Symbol sMsg))
+    let lineToCursor= drawLineToCursor wModel.PortToCursor
     
     g [] [(g [] wires) ; symbols; lineToCursor]
 
@@ -377,211 +311,238 @@ let init () =
     {WX=[];Symbol=symbols; Color=CommonTypes.Red  ; Countselected = 0 ; PortToCursor = ({X = 0.0; Y= 0.0},{X = 0.0; Y= 0.0}, None)},Cmd.none 
 
 
-let createWire (startPort: Symbol.Port) (endPort: Symbol.Port) (*(createDU : CreateDU)*) =
+
+
+
+
+
+
+
+
+
+
+let createWire (startPort: Symbol.Port) (endPort: Symbol.Port)  =
     {
         Id = CommonTypes.ConnectionId (uuid())
         SourcePort = startPort
         TargetPort = endPort
-        isSelected = false //if (createDU = Duplicate || createDU = DuplicateError) then true else false
-        hasError =  false // if (createDU = Error || createDU = DuplicateError) then true else false
-        relativPositions = [{X=0.0 ; Y=0.0} ; origin ; origin]
-        PrevPositions = [origin ; origin ; origin]
-        BeingDragged = -1
-        BusWidth = match startPort.BusWidth with
-                   |Some w -> w
-                   |None -> 1
+        IsSelected = false 
+        HasError = false 
+        RelativePos = origin,origin,origin
+        PrevPositions = origin,origin,origin
+        BeingDragged = NoSeg
+        BusWidth = 
+            match startPort.BusWidth, endPort.BusWidth with
+            | Some wStart, Some wEnd -> Some wStart
+            | None, Some wire | Some wire, None -> Some wire
+            | None, None -> None
     }
 
-let getWiresToBeDuplicated (displacementPos : XYPos ) (wireList : Wire list) (portList : Symbol.Port list) : (Symbol.Port option *Symbol.Port option* Wire) list  =    
+let getWiresToBeDuplicated (displacementPos: XYPos ) (wireList: Wire list) (portList: Symbol.Port list) : (Symbol.Port option * Symbol.Port option* Wire) list  =    
     wireList
     |> List.map (fun wire ->  
-        
-                let sourcePort =  List.tryFind (fun (p : Symbol.Port)  ->  
-                                                let dist = calcDistance (posAdd (wire.SourcePort.Pos)(displacementPos)) p.Pos
-                                                (dist < 0.001) ) portList
-                                        
-                let endPort =  List.tryFind (fun (p : Symbol.Port)  ->  
-                                             let dist = calcDistance (posAdd (wire.TargetPort.Pos)(displacementPos)) p.Pos
-                                             (dist < 0.001) ) portList
-                (sourcePort,endPort,wire)
-                )
-
-let addWire (startPort : Symbol.Port) (endPort : Symbol.Port) (createDU : CreateDU) (symModel : Symbol.Symbol list) =
+        let sourcePort =  
+            portList
+            |> List.tryFind (fun port ->  
+                (calcDistance (posAdd wire.SourcePort.Pos displacementPos) port.Pos) < 0.001)                   
+        let endPort = 
+            portList
+            |> List.tryFind (fun port ->  
+                (calcDistance (posAdd wire.TargetPort.Pos displacementPos) port.Pos) < 0.001) 
+        sourcePort, endPort, wire
+    )
+                
+let enforceBusWidth (symModel: Symbol.Symbol list) (busWidth: int) (undefPort: Symbol.Port) : Symbol.Symbol list =
+    symModel
+    |> List.map (fun sym -> 
+        match (sym.Id = undefPort.HostId) with 
+        | true ->  
+            sym
+            |> Symbol.updateSymWithPort {undefPort with BusWidth = Some busWidth} 
+            |> Symbol.autoCompleteWidths
+        | false -> sym        
+    )
+    
+let addWire (startPortTmp : Symbol.Port) (endPortTmp : Symbol.Port) (createDU : CreateDU) (symModel : Symbol.Symbol list) =
+    let inputPort = if startPortTmp.PortType = CommonTypes.Input then startPortTmp else endPortTmp
+    if inputPort.NumOfConnections <> 0 then failwithf "createError : InputPort can only have One Driver. If you want to merge two wires use MergeWire"
+    
     let duplicate =      
         match createDU with 
         | Init -> false
-        | Duplicate -> true
+        | Duplicated-> true
+
+    let startPort = {startPortTmp with NumOfConnections = startPortTmp.NumOfConnections + 1}
+    let endPort   = {endPortTmp   with NumOfConnections = endPortTmp.NumOfConnections   + 1}
+    let tmpSymModel  =
+        symModel
+        |> List.map (fun sym -> if sym.Id = startPort.HostId then Symbol.changeNumOfConnections Increment startPort.Id sym  else sym)
+        |> List.map (fun sym -> if sym.Id = endPort.HostId   then Symbol.changeNumOfConnections Increment endPort.Id   sym  else sym)
     
-    let newWire,newSym = 
+    let newWire, newSym = 
         match startPort, startPort.BusWidth, endPort, endPort.BusWidth with 
         | _, Some startWidth, _,  Some endWidth ->
-            let inputPort = if startPort.PortType = CommonTypes.Input then startPort else endPort
-            match startWidth = endWidth, inputPort.NumberOfConnections = 0 with
-            | true, true -> 
-                let wire = 
-                    createWire startPort endPort 
-                Some wire, symModel
-            | _, false -> 
-                printf ("createError : InputPort can only have One Driver. If you want to merge two wires you a MergeWire Component")
-                None, symModel
-            | false, _ -> 
-                let errorWire = { (createWire startPort endPort) with hasError = true} 
-                let newSymModel, symMsg = Symbol.update (Symbol.Msg.AddErrorToPorts (startPort,endPort)) symModel
+            match startWidth = endWidth with
+            | true -> 
+                let wire = createWire startPort endPort 
+                Some wire, tmpSymModel
+            | false -> 
+                let errorWire = { (createWire startPort endPort) with HasError = true} 
+                let newSymModel, symMsg = 
+                    Symbol.update (Symbol.Msg.AddErrorToPorts (startPort, endPort)) tmpSymModel
                 Some errorWire, newSymModel
        
         | _, Some width, undefinedPort, None | undefinedPort, None, _, Some width ->
             let wire = createWire startPort endPort  
-            let sym, symMsg = 
-                Symbol.update (Symbol.Msg.EnforceBusWidth (width, undefinedPort)) symModel
-            Some wire, sym
+            let newSymModel = enforceBusWidth tmpSymModel width undefinedPort
+            Some wire, newSymModel
 
-        | _ -> failwithf " BusWidths of sourcePort and targetPort are not specified !!!!"
+        | _-> let wire = createWire startPort endPort   //failwithf " BusWidths of sourcePort and targetPort are not specified !!!!"
+              Some wire, tmpSymModel
     if (duplicate) then 
         match newWire with
-        | Some w -> Some {w with isSelected = true}, newSym
+        | Some wire -> Some {wire with IsSelected = true}, newSym
         | None -> None, newSym
-    else newWire,newSym
+    else newWire, newSym
 
 
-
-
- 
 let startWireDragging (cable: Wire) (pos: XYPos) (wModel: Model)=
     let inShape (b:BoundingBox) =
         pos.X > b.TopLeft.X && pos.X < b.BottomRight.X && pos.Y > b.TopLeft.Y && pos.Y < b.BottomRight.Y
     let draggedSegment =
         match List.map inShape (bounds cable wModel) with
-        | [false ; true ; false] -> 0
-        | [false ; true ; false ; false] -> 0
-        | [false ; false ; true ; false] -> 1
-        | [false ; true ; false ; false ; false] -> 0
-        | [false ; false ; true ; false ; false] -> 1
-        | [false ; false ; false ; true ; false] -> 2
-        | _ -> -1
+        | [false ; true ; false] -> Second
+        | [false ; true ; false ; false] -> Second
+        | [false ; false ; true ; false] -> Third
+        | [false ; true ; false ; false ; false] -> Second
+        | [false ; false ; true ; false ; false] -> Third
+        | [false ; false ; false ; true ; false] -> Forth
+        | _ -> NoSeg
     {cable with BeingDragged = draggedSegment}
 
 let dragAWire (cable: Wire) (pos: XYPos) (wModel: Model) (srcOrient: PortOrientation) (tgtOrient: PortOrientation) =
-    let vLs = match vertexlstZero cable wModel srcOrient tgtOrient with
-              | [g ; h; i ; j ; k ; u] ->  h , i , j
-              | [s ; t ; u ; v ; w] -> t , u , v
-              | [l ; m ; n ; v] -> m , n , v
-              | _ -> origin , origin , origin
-    let o , p , q = vLs
-    let (a,b,c) = match cable.relativPositions with
-                  | [g ; h ; i] -> g , h , i
-                  | _ -> origin , origin , origin 
-    let (d,e,f) = match cable.PrevPositions with
-                  | [g ; h ; i] -> g , h , i
-                  | _ -> origin , origin , origin 
+    let vLs = 
+        match vertexList cable srcOrient tgtOrient true with
+        | [g ; h; i ; j ; k ; u] -> h, i, j
+        | [s ; t ; u ; v ; wire] -> t, u, v
+        | [l ; m ; n ; v] -> m, n, v
+        | _ -> origin, origin, origin
+    let o, p, q = vLs
+    let a, b, c = cable.RelativePos    
+    let d, e, f = cable.PrevPositions 
+ 
     match cable.BeingDragged with
-    | 0 ->  let offset = o
-            let correctedPos = posDiff pos offset 
-            let diff = posDiff correctedPos d           
-            { cable  with
-                relativPositions = [(posAdd a diff) ; b ; c]
-                PrevPositions = [correctedPos ; e ; f]
-            }
-    | 1 ->  let offset = p
-            let correctedPos = posDiff pos offset
-            let diff = posDiff correctedPos e 
-            { cable with 
-                relativPositions = [a ; (posAdd diff b) ; c]
-                PrevPositions = [d ; correctedPos ; f]
-            }
-    | 2 ->  let offset = q
-            let correctedPos = posDiff pos offset
-            let diff = posDiff correctedPos f
-            { cable with 
-                relativPositions = [a ; b ; (posAdd diff) c]
-                PrevPositions = [d ; e ; correctedPos]
-            }   
+    | Second ->  
+        let offset = o
+        let correctedPos = posDiff pos offset 
+        let diff = posDiff correctedPos d           
+        { cable  with
+            RelativePos = (posAdd a diff), b, c
+            PrevPositions = correctedPos, e, f
+        }
+    | Third ->  
+        let offset = p
+        let correctedPos = posDiff pos offset
+        let diff = posDiff correctedPos e 
+        { cable with 
+            RelativePos = a, (posAdd diff b), c
+            PrevPositions = d, correctedPos, f
+        }
+    | Forth ->  
+        let offset = q
+        let correctedPos = posDiff pos offset
+        let diff = posDiff correctedPos f
+        { cable with 
+            RelativePos = a, b, (posAdd diff) c
+            PrevPositions = d , e , correctedPos
+        }   
     | _ -> cable      
 
 let endWireDragging (cable: Wire) =
-    {cable with BeingDragged = -1}
+    {cable with BeingDragged = NoSeg}
 
-let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
+let update (msg : Msg) (wModel : Model): Model*Cmd<Msg> =
     match msg with
     | Symbol sMsg -> 
-        let sm,sCmd = Symbol.update sMsg model.Symbol
-        {model with Symbol=sm}, Cmd.map Symbol sCmd
-    | SetColor c -> {model with Color = c}, Cmd.none
-    | SelectWire (wId,p) ->         
+        let sm,sCmd = Symbol.update sMsg wModel.Symbol
+        {wModel with Symbol=sm}, Cmd.map Symbol sCmd
+    | SetColor c -> {wModel with Color = c}, Cmd.none
+    | SelectWire wId->         
         let clickedWire =
-            List.map (fun w ->
-                        if w.Id <> wId then w
-                        else {w with isSelected = true}
+            List.map (fun wire ->
+                        if wire.Id <> wId then wire
+                        else {wire with IsSelected = true}
                       )
-        let newWls = clickedWire model.WX 
-        {model with WX = newWls} ,Cmd.none
-    | UpdatedPortsToBusWire plst ->
+        let newWls = clickedWire wModel.WX 
+        {wModel with WX = newWls} ,Cmd.none
+    | UpdateBusWirePorts ->
+        let portList = Symbol.getAllPorts (wModel.Symbol)
         let newW wir =
             let updateWS wr =
                 let foundsrc (prt: Symbol.Port) = (wr.SourcePort.Id = prt.Id)
-                match List.tryFind (foundsrc) plst with
+                match List.tryFind (foundsrc) portList with
                 | Some pt -> {wr with SourcePort = pt}
                 | None -> wr
             let updateWT wr =
                 let foundtgt (prt: Symbol.Port) = (wr.TargetPort.Id = prt.Id)
-                match List.tryFind (foundtgt) plst with
+                match List.tryFind (foundtgt) portList with
                 | Some pt -> {wr with TargetPort = pt}
                 | None -> wr
             wir |> updateWS |> updateWT
         let updateNetList nLs = List.map newW nLs
-        {model with WX = updateNetList model.WX} , Cmd.none
-    | AddWire (startPort , endPort,createDU) ->  
-        let newWireSym  = addWire startPort endPort createDU model.Symbol
+        {wModel with WX = updateNetList wModel.WX} , Cmd.none
 
+    | AddWire (startPort, endPort, createDU) ->  
+        let newWireSym = addWire startPort endPort createDU wModel.Symbol
         match newWireSym with 
-        | Some newWire, sym -> let newSym  =
-                                    sym
-                                    |>List.map (fun sym -> Symbol.changeNumOfConnections startPort sym Increment)
-                                    |>List.map (fun sym -> Symbol.changeNumOfConnections endPort sym Increment)
-                               {model with WX = newWire :: model.WX ; Symbol = newSym} , Cmd.none
-        | None , sym -> model,Cmd.none
-    
-
+        | Some newWire, symModel -> {wModel with WX = newWire :: wModel.WX ; Symbol = symModel} , Cmd.none
+        | None , symModel -> wModel,Cmd.none
     
     | DeselectWire  ->
         let newWls =
-            model.WX |> List.map (fun w ->
-                               {w with isSelected = false}
+            wModel.WX |> List.map (fun wire ->
+                               {wire with IsSelected = false}
                                ) 
-        {model with WX = newWls} , Cmd.none
-    | StartDraggingWire (wid , p) ->
-        let newWls wLs = wLs |> List.map (fun w ->
-                                if w.Id <> wid then w
-                                else 
-                                    startWireDragging w p model)
-        {model with WX = newWls model.WX} , Cmd.ofMsg( SelectWire (wid, p))
+        {wModel with WX = newWls} , Cmd.none
+        
+    | StartDraggingWire (wId , p) ->
+        let newWls wLs = 
+            wLs 
+            |> List.map (fun wire ->
+                if wire.Id <> wId then wire
+                else 
+                   startWireDragging wire p wModel)
+        {wModel with WX = newWls wModel.WX} , Cmd.ofMsg( SelectWire wId)
     | DraggingWire (wid,p) ->      
-        let nwWls wLs = wLs |> List.map (fun w ->
-                                if w.Id <> wid then
-                                    w
-                                else
-                                    let srcO = Symbol.getOrientationOfPort model.Symbol w.SourcePort
-                                    let tgtO = Symbol.getOrientationOfPort model.Symbol w.TargetPort  
-                                    dragAWire w p model srcO tgtO
-                              ) 
-        {model with WX = nwWls model.WX} , Cmd.none
+        let nwWls wLs = 
+            wLs 
+            |> List.map (fun wire ->
+                if wire.Id <> wid then
+                    wire
+                else
+                    let srcO = Symbol.getOrientationOfPort wModel.Symbol wire.SourcePort
+                    let tgtO = Symbol.getOrientationOfPort wModel.Symbol wire.TargetPort  
+                    dragAWire wire p wModel srcO tgtO
+                ) 
+        {wModel with WX = nwWls wModel.WX} , Cmd.none
     | DeleteWire -> 
         let wireToBeRenderedFirst, wireToBeDeletedFirst =
             let wireRender,wireDelete =
-                model.WX
-                |>List.partition (fun w -> w.isSelected = false)
-            let wireRender2,wireDelete2 = 
+                wModel.WX
+                |>List.partition (fun wire -> wire.IsSelected = false)
+            let wireRender2,wireDelete2 =  //when a symbol is deleted remove wire as well
                 wireRender
-                |>List.partition (fun w -> (Symbol.getSymbolWithId (model.Symbol) (w.SourcePort.HostId)) <> None) 
-            let wireRender3,wireDelete3 =
+                |>List.partition (fun wire -> (Symbol.getSymbolWithId (wModel.Symbol) (wire.SourcePort.HostId)) <> None) 
+            let wireRender3,wireDelete3 =  //when a symbol is deleted remove wire as well
                 wireRender2                              
-                |>List.partition (fun w -> (Symbol.getSymbolWithId (model.Symbol) (w.TargetPort.HostId)) <> None) // when symbol is deleted, delete wire as well 
+                |>List.partition (fun wire -> (Symbol.getSymbolWithId (wModel.Symbol) (wire.TargetPort.HostId)) <> None) // when symbol is deleted, delete wire as well 
             let tmpRender = wireRender3 
             let tmpDelete = wireDelete @ wireDelete2 @ wireDelete3
             (tmpRender,tmpDelete)
 
         let allToBeDeletedPorts= //for all the wires that are gonna be deleted check if it has createError 
             wireToBeDeletedFirst
-            |> List.collect (fun w -> [(w.SourcePort, w.TargetPort, w.hasError)])
+            |> List.collect (fun wire -> [(wire.SourcePort, wire.TargetPort, wire.HasError)])
             |> Set.ofList
             |> Set.toList
         let wireToBeRendered =
@@ -590,19 +551,41 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             |>Set.toList
 
         let newSymModel,ignoreMsg = 
-            Symbol.update (Symbol.Msg.RemoveConnections allToBeDeletedPorts) model.Symbol
+            Symbol.update (Symbol.Msg.RemoveConnections allToBeDeletedPorts) wModel.Symbol
 
-        {model with WX = wireToBeRendered; Symbol = newSymModel} , Cmd.none
-
+        {wModel with WX = wireToBeRendered; Symbol = newSymModel} , Cmd.none
 
     | DrawFromPortToCursor (startPos,endPos,endPort) -> 
-        {model with PortToCursor = (startPos,endPos,endPort)}, Cmd.none
+        {wModel with PortToCursor = (startPos,endPos,endPort)}, Cmd.none
     | RemoveDrawnLine -> 
-        {model with PortToCursor = ({X = 0.0; Y = 0.0}, {X = 0.0; Y=0.0}, None)}, Cmd.none //zack 
+        {wModel with PortToCursor = ({X = 0.0; Y = 0.0}, {X = 0.0; Y=0.0}, None)}, Cmd.none //zack 
     | SelectWiresWithinRegion bbox ->
-        {model with WX =  selectBoundedWires (model) bbox},Cmd.none
+        {wModel with WX =  selectBoundedWires (wModel) bbox},Cmd.none
+    | UpdateWires ->
+        let newWireModel,newSymModel =
+            ( (wModel.WX,wModel.Symbol), wModel.WX )
+            ||>List.fold  (fun (wModel,sModel) wire ->
+                let srcPort,endPort = wire.SourcePort,wire.TargetPort 
+                let wBusWidth =    
+                    match (srcPort.BusWidth, endPort.BusWidth) with
+                    | Some width, None -> Some width
+                    | _ ,Some width -> Some width
+                    | None, None    -> None
 
-    | MouseMsg mMsg -> model, Cmd.ofMsg (Symbol (Symbol.MouseMsg mMsg))
+                wModel
+                |>List.map (fun wire -> if (wire.Id = wire.Id) then {wire with BusWidth = wBusWidth} else wire),
+                sModel
+                |>List.map (fun sym -> 
+                    sym
+                    |>Symbol.updateSymWithPort {srcPort with BusWidth = wBusWidth}
+                    |>Symbol.updateSymWithPort {endPort with BusWidth = wBusWidth}
+                    |>Symbol.autoCompleteWidths
+                )
+            )   
+        
+        {wModel with WX = newWireModel; Symbol = newSymModel},Cmd.none
+
+    | MouseMsg mMsg -> wModel, Cmd.ofMsg (Symbol (Symbol.MouseMsg mMsg))
 
 
 // Interface Functions
@@ -610,7 +593,7 @@ let wireToSelectOpt (wModel: Model) (pos: XYPos) : CommonTypes.ConnectionId opti
     let inShape (b:BoundingBox) =
         pos.X >= b.TopLeft.X && pos.X <= b.BottomRight.X && pos.Y >= b.TopLeft.Y && pos.Y <= b.BottomRight.Y 
     let inWireBounds (conId: CommonTypes.ConnectionId) =
-        let cable = wire wModel conId 
+        let cable = findWire wModel conId 
         match List.tryFind (inShape) (bounds cable wModel) with
         |Some b -> true
         |None -> false
@@ -619,13 +602,14 @@ let wireToSelectOpt (wModel: Model) (pos: XYPos) : CommonTypes.ConnectionId opti
 
 
 let getSelectedWireList (wireList : Wire list) : Wire list = 
-    List.filter (fun w -> w.isSelected) wireList
+    List.filter (fun wire -> wire.IsSelected) wireList
+
 
 let deselectWire (WX : Wire list)  =
     let newWX =
-        WX |> List.map (fun w ->
-                           {w with isSelected = false}
-                        ) 
+        WX 
+        |> List.map (fun wire ->
+           {wire with IsSelected = false})        
     newWX
 
 //----------------------interface to Issie-----------------------//
