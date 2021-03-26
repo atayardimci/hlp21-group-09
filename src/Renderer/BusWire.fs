@@ -12,12 +12,6 @@ open Helpers
 //------------------------------BusWire Types-----------------------------//
 //------------------------------------------------------------------------//
 
-type ConnectPoint = {
-    Centre: XYPos
-    Id: CommonTypes.ComponentId
-    Select: bool
-}
-
 
 type Wire = {
     Id : CommonTypes.ConnectionId 
