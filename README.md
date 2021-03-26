@@ -27,7 +27,7 @@ Our interface documentation can be found under ./docs directory. A document is i
 18. Buswidth annotation - the buswidth of a wire is written alongside the wire.
 19. Undo - When Alt-Z is clicked, the last action performed will be undone on the canvas
 20. Redo - When Alt-Shift-Z is clicked, the last action undone will be redone on the canvas 
-21. Zoom - Zoom in and zoom out respectively using mouse scroll - transforms the canvas accordingly so that all other mouse functions are not affected
+21. Zoom - Zoom in and zoom out respectively by holding down Alt while scrolling - transforms the canvas accordingly so that all other mouse functions are not affected
 22. Copy symbol/wire or a group of symbols and wires - Alt-C copies selected symbol(s)/wire(s).
 23. Copy and paste to new sheet - Selected symbols/ group of their connections can be pasted to new canvas.
 24. Paste symbol/ wire or a group of symbols and wires - Alt-V pastes selected symbol(s)/wires(s) on the canvas with a slight offset.
