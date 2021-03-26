@@ -100,47 +100,49 @@ let nullRender model  =
                 HoveringPortsToBeRendered = [];
                 DraggingPortsToBeRendered = [];
         }
+let alignRange = 3.0
 
 let within num1 num2 = 
-    if (num1 < (num2 + 2.5) ) && (num1 > (num2 - 2.5) ) then true else false
+    if (num1 < (num2 + alignRange) ) && (num1 > (num2 - alignRange) ) then true else false
 
 let withinPosX pos1 pos2 =
-    if (pos1.X < (pos2.X + 2.5) ) && (pos1.X > (pos2.X - 2.5)) then true else false
+    if (pos1.X < (pos2.X + alignRange) ) && (pos1.X > (pos2.X - alignRange)) then true else false
 
 let withinPosY pos1 pos2 =
-    if (pos1.Y < (pos2.Y + 2.5) ) && (pos1.Y > (pos2.Y - 2.5)) then true else false
+    if (pos1.Y < (pos2.Y + alignRange) ) && (pos1.Y > (pos2.Y - alignRange)) then true else false
 
-let symIsWithin (bBox : BoundingBox) (symList : Symbol.Symbol list) = 
-            let boxTL =  bBox.TopLeft 
-            let boxBR = bBox.BottomRight
+/// Returns true if Symbol is within snapped alignment range.
+let isSymWithin (bBox : BoundingBox) (symList : Symbol.Symbol list) = 
+    let boxTL =  bBox.TopLeft 
+    let boxBR = bBox.BottomRight
 
-            List.exists (fun (s : Symbol.Symbol) -> 
-                let sTL =  s.BBox.TopLeft
-                let sBR = s.BBox.BottomRight
-                // check if we should snap2alignment,  TL = TopLeft BR = BottomRight 
-                withinPosX  (calcCentreBBox bBox) (calcCentre ({X = sTL.X ; Y = sTL.Y + 15.0 },{X = sBR.X ; Y = sBR.Y}))  ||
-                withinPosY  (calcCentreBBox bBox) (calcCentre ({X = sTL.X ; Y = sTL.Y + 15.0 },{X = sBR.X ; Y = sBR.Y}))  ||
-                (within boxTL.X sTL.X) ||
-                (within boxTL.X sBR.X)||   
-                (within boxBR.X sTL.X) ||
-                (within boxBR.X sBR.X) ||
-                (within boxTL.Y  (sTL.Y + 15.0)) ||
-                (within boxTL.Y sBR.Y )||
-                (within boxBR.Y (sTL.Y + 15.0)) ||
-                (within boxBR.Y sBR.Y) 
-             ) symList
+    List.exists (fun (s : Symbol.Symbol) -> 
+        let sTL =  s.BBox.TopLeft
+        let sBR = s.BBox.BottomRight
+        // check if we should snap2alignment,  TL = TopLeft BR = BottomRight 
+        withinPosX  (calcCentreBBox bBox) (calcCentre ({X = sTL.X ; Y = sTL.Y + 15.0 },{X = sBR.X ; Y = sBR.Y}))  ||
+        withinPosY  (calcCentreBBox bBox) (calcCentre ({X = sTL.X ; Y = sTL.Y + 15.0 },{X = sBR.X ; Y = sBR.Y}))  ||
+        (within boxTL.X sTL.X) ||
+        (within boxTL.X sBR.X)||   
+        (within boxBR.X sTL.X) ||
+        (within boxBR.X sBR.X) ||
+        (within boxTL.Y  (sTL.Y + 15.0)) ||
+        (within boxTL.Y sBR.Y )||
+        (within boxBR.Y (sTL.Y + 15.0)) ||
+        (within boxBR.Y sBR.Y) 
+        ) symList
 
 let getCornersFromBBox (bBox : BoundingBox) = 
     match bBox with 
     |{TopLeft = tPos; BottomRight = bPos}  -> tPos,bPos  
-
+/// Returns a Line from two XY coordinates 
 let createLineCoordinates ( (x1,y1): float*float )  ( (x2,y2) : float*float ) : Line= 
     {P1 = {X = x1; Y = y1;}; P2 = {X = x2; Y= y2}}
-
+/// Returns the displacement of current symbol to nearest alignable Symbol tupled with a coordinate of the alignment lines.
 let isSymAligned (overallBBox : BoundingBox) (symList : Symbol.Symbol list) : (XYPos * Line) list = //BoudingBox has it's Y coordinates - 15 already
     let tOver, bOver = getCornersFromBBox overallBBox  //returns top and btm pos of overall box
     let notSelectedSym = List.filter (fun (sym : Symbol.Symbol) -> sym.IsSelected = false) symList
-    if (symIsWithin overallBBox notSelectedSym ) then
+    if (isSymWithin overallBBox notSelectedSym ) then
         let (createLines : (XYPos * Line) list) = 
             ([] ,notSelectedSym)
             ||>List.fold (
@@ -149,7 +151,7 @@ let isSymAligned (overallBBox : BoundingBox) (symList : Symbol.Symbol list) : (X
                     let symCentre = calcCentre corners
                     let overallCentre = calcCentreBBox overallBBox
                     let stx,sty,sbx,sby = sym.BBox.TopLeft.X,sym.BBox.TopLeft.Y,sym.BBox.BottomRight.X, sym.BBox.BottomRight.Y
-                   
+               
                     if  (withinPosX overallCentre symCentre )then 
                         let xDiff = symCentre.X - overallCentre.X 
                         if (symCentre.Y - overallCentre.Y < 0.0 ) then 
@@ -177,7 +179,7 @@ let isSymAligned (overallBBox : BoundingBox) (symList : Symbol.Symbol list) : (X
                         let xDiff = (sbx-tOver.X)
                         let line =  createLineCoordinates (sbx,tOver.Y) (sbx,sby) 
                         (posOf xDiff 0.0, line) ::lst    
-                        
+                    
                     elif within bOver.X sbx then 
                         let xDiff = (sbx-bOver.X)
                         let line =  createLineCoordinates (sbx,tOver.Y) (sbx,sby) 
@@ -214,19 +216,19 @@ let isSymAligned (overallBBox : BoundingBox) (symList : Symbol.Symbol list) : (X
           []
 let updateModelWithSym (model : Model) (symModel : Symbol.Model) = 
     {model with Wire = {model.Wire with Symbol = symModel}; }
-
+///  Stores the history of the changes made in the schematic Model as a Model list. Flushes half of it when list exceeds 30 elements.
 let storeUndoState (model : Model) : Model list = 
     if (model.UndoStates.Length >= 30) then 
         model :: List.take 15 model.UndoStates
     else 
         model :: model.UndoStates 
-
+///  Stores the history of undos made in the schematic Model as a Model list. Flushes half of it when list exceeds 30 elements.
 let storeRedoState (model : Model) : Model list = 
     if (model.UndoStates.Length >= 30) then 
         model :: List.take 15 model.UndoStates
     else 
         model :: model.UndoStates 
-
+/// Returns a Symbol that is shifted by a XY pos.
 let shiftSymbol (sym : Symbol.Symbol) (diffPos : XYPos ) = 
     { sym with
         Pos = posAdd sym.Pos diffPos
@@ -244,7 +246,7 @@ let shiftSymbol (sym : Symbol.Symbol) (diffPos : XYPos ) =
             BottomRight = (posAdd sym.BBox.BottomRight diffPos)
     }
         }
-
+/// Returns a Symbol list that is shifted by a XY Pos.
 let shiftSelectedSymbols (symList : Symbol.Symbol list ) (diffPos : XYPos ) = 
     symList 
     |>List.map (fun sym -> 
@@ -252,7 +254,7 @@ let shiftSelectedSymbols (symList : Symbol.Symbol list ) (diffPos : XYPos ) =
                 sym
             else
                 shiftSymbol sym diffPos)
-
+/// Sort Symbols according to distance from pos.
 let sortDistToSymbol (pos : XYPos) (symList : Symbol.Symbol list) : (float * CommonTypes.ComponentId) list=
     let getDistToCentreofSymbol (pos : XYPos) (sym : Symbol.Symbol) : float * CommonTypes.ComponentId = 
         let dist = calcDistance pos (calcCentreBBox sym.BBox)
@@ -272,6 +274,7 @@ let startDraggingSymbol (pagePos: XYPos)  (model : Symbol.Symbol list) sId  =
                     IsDragging = true
                 }
         )
+
 let draggingSymbol (pagePos: XYPos)  (model : Symbol.Symbol list) sId  = 
     model
     |> List.map (fun sym -> 
@@ -281,6 +284,7 @@ let draggingSymbol (pagePos: XYPos)  (model : Symbol.Symbol list) sId  =
             let diffPos = posDiff pagePos sym.LastDragPos      
             shiftSymbol sym diffPos
     )
+
 let endDraggingSymbol (model : Symbol.Symbol list) sId =
     model
     |> List.map (fun sym ->
@@ -289,7 +293,7 @@ let endDraggingSymbol (model : Symbol.Symbol list) sId =
         else
             { sym with
                 IsDragging = false 
-                
+            
             }
     )
 
@@ -772,7 +776,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
         {model with
             IsPortDragging = true 
             IdOfPortBeingDragged = startPort.Id
-        }, Cmd.none
+        }, Cmd.ofMsg(UpdatePorts)
 
     | DraggingPort (mousePos) -> 
         let msgs = draggingPort model mousePos
