@@ -13,10 +13,10 @@ open Helpers
 //------------------------------------------------------------------------//
 
 type SegmentForDragging =
-    |Second
-    |Third
-    |Forth
-    |NoSeg
+    | Second
+    | Third
+    | Forth
+    | NoSeg
 
 type Wire = {
     Id : CommonTypes.ConnectionId 
@@ -86,8 +86,7 @@ let getPortsOfWire (wModel :Model) (wire : Wire)  =
 
     let srcPort = (Symbol.getPortWithId sym1 wire.SourcePort.Id)
     let tgtPort = (Symbol.getPortWithId sym2 wire.TargetPort.Id)
-    
-    (srcPort,tgtPort)
+    srcPort, tgtPort
 
 let selectBoundedWires (wModel: Model) (boundary: BoundingBox) =
     let selectWireinBounds (wr: Wire) =
@@ -119,7 +118,7 @@ let drawLineToCursor (startPos : XYPos, endPos : XYPos, endPort : Symbol.Port op
 
 let busWidthAnnotation (wire : Wire) = 
     match wire.BusWidth with
-    | _ when wire.HasError = false -> []
+    | _ when wire.HasError -> []
     | None | Some 1 -> [] 
     | Some w -> [str $"{w}"]
 
@@ -280,7 +279,8 @@ let wireView  =
                     displayFullWire props (vertexList props.WireP props.SrcOrient props.TgtOrient false)
                 ]
         , "Wire"
-        ,equalsButFunctions)
+        , equalsButFunctions
+    )
 
 let view (wModel:Model) (dispatch: Msg -> unit)= 
     let wires = 
@@ -496,13 +496,15 @@ let update (msg : Msg) (wModel : Model): Model*Cmd<Msg> =
                                ) 
         {wModel with WX = newWls} , Cmd.none
         
-    | StartDraggingWire (wId , p) ->
+    | StartDraggingWire (wId, pos) ->
         let newWls wLs = 
             wLs 
             |> List.map (fun wire ->
-                if wire.Id <> wId then wire
+                if wire.Id <> wId then 
+                    wire
                 else 
-                   startWireDragging wire p wModel)
+                    printfn $"wireeeeeeeee: \n {wire}"
+                    startWireDragging wire pos wModel)
         {wModel with WX = newWls wModel.WX} , Cmd.ofMsg( SelectWire wId)
     | DraggingWire (wid,p) ->      
         let nwWls wLs = 
@@ -518,13 +520,13 @@ let update (msg : Msg) (wModel : Model): Model*Cmd<Msg> =
         {wModel with WX = nwWls wModel.WX} , Cmd.none
     | DeleteWire -> 
         let wireToBeRenderedFirst, wireToBeDeletedFirst =
-            let wireRender,wireDelete =
+            let wireRender, wireDelete =
                 wModel.WX
                 |>List.partition (fun wire -> wire.IsSelected = false)
-            let wireRender2,wireDelete2 =  //when a symbol is deleted remove wire as well
+            let wireRender2, wireDelete2 =  //when a symbol is deleted remove wire as well
                 wireRender
                 |>List.partition (fun wire -> (Symbol.getSymbolWithId (wModel.Symbol) (wire.SourcePort.HostId)) <> None) 
-            let wireRender3,wireDelete3 =  //when a symbol is deleted remove wire as well
+            let wireRender3, wireDelete3 =  //when a symbol is deleted remove wire as well
                 wireRender2                              
                 |>List.partition (fun wire -> (Symbol.getSymbolWithId (wModel.Symbol) (wire.TargetPort.HostId)) <> None) // when symbol is deleted, delete wire as well 
             let tmpRender = wireRender3 
@@ -553,28 +555,27 @@ let update (msg : Msg) (wModel : Model): Model*Cmd<Msg> =
     | SelectWiresWithinRegion bbox ->
         {wModel with WX =  selectBoundedWires (wModel) bbox},Cmd.none
     | UpdateWires ->
-        let newWireModel,newSymModel =
-            ( (wModel.WX,wModel.Symbol), wModel.WX )
-            ||>List.fold  (fun (wModel,sModel) wire ->
-                let srcPort,endPort = wire.SourcePort,wire.TargetPort 
+        let newWireModel, newSymModel =
+            ( (wModel.WX, wModel.Symbol), wModel.WX )
+            ||> List.fold (fun (wModel,sModel) wire ->
+                let srcPort, endPort = wire.SourcePort, wire.TargetPort 
                 let wBusWidth =    
-                    match (srcPort.BusWidth, endPort.BusWidth) with
+                    match srcPort.BusWidth, endPort.BusWidth with
                     | Some width, None -> Some width
                     | _ ,Some width -> Some width
                     | None, None    -> None
 
                 wModel
-                |>List.map (fun wire -> if (wire.Id = wire.Id) then {wire with BusWidth = wBusWidth} else wire),
+                |> List.map (fun wire -> if (wire.Id = wire.Id) then {wire with BusWidth = wBusWidth} else wire),
                 sModel
-                |>List.map (fun sym -> 
+                |> List.map (fun sym -> 
                     sym
                     |>Symbol.updateSymWithPort {srcPort with BusWidth = wBusWidth}
                     |>Symbol.updateSymWithPort {endPort with BusWidth = wBusWidth}
                     |>Symbol.autoCompleteWidths
                 )
             )   
-        
-        {wModel with WX = newWireModel; Symbol = newSymModel},Cmd.none
+        {wModel with WX = newWireModel; Symbol = newSymModel}, Cmd.none
 
     | MouseMsg mMsg -> wModel, Cmd.ofMsg (Symbol (Symbol.MouseMsg mMsg))
 
