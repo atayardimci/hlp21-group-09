@@ -1,10 +1,13 @@
 # HLP21 GROUP 9 
 
+
 This markdown file contains a summary of all the features implemented in the group stage of our project.
 
 Our interface documentation can be found under ./docs directory. A document is included for each of the three modules, that is Symbol, BusWire, and Sheet.
-For MAC users, use Option in replacement of Alt for keypresses.
-Main Features: 
+
+**For MAC users, use Option in replacement of Alt for keypresses.**
+
+### Main Features: 
 1. 27/27 issie symbols implemented - All 27 symbols in issie are implemented.
 2.. Symbol creation - When the AddSymbol message is received, CreateNewSymbol is called, and a new symbol is added to the Canvas
 3. Symbol selection - When a Symbol on the screen is clicked, it is selected and turns turquoise. You can select multiple by holding down Alt while clicking or by dragging a region to include the symbols.
