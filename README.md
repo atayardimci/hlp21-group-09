@@ -7,9 +7,11 @@ Issie (Interactive Schematic Simulator with Integrated Editor) is an application
 
 An Elmish application works by using `model`, `view`, and `update` functions with messages used to update the model. Our project includes three separate modules: `Symbol`, `BusWire`, `Sheet` each operating as individual Elmish components.
 
+Fork, clone, and build this repo. Look at the code in an IDE with intellisense to contribute.
+
 This markdown file contains a summary of all the features implemented in the group stage of our project with additional information on how to run and contribute to the project.
 
-Our interface documentation can be found under ./docs directory. A document is included for each of the three modules, that is Symbol, BusWire, and Sheet.
+A documentation for interfacing between modules can be found under ./docs directory. A document is included for each of the three modules, that is Symbol, BusWire, and Sheet.
 
 **For MAC users, use Option in replacement of Alt for keypresses.**
 
