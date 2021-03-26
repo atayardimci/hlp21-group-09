@@ -21,7 +21,7 @@ type MouseOp =
     | Down
     | Move 
     | Drag
-    | CtrlScroll
+    | AltScroll
     | AltDown
 
 type CanvasProps = 
