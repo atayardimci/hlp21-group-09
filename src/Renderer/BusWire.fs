@@ -81,12 +81,12 @@ type WireRenderProps = {
 
 
 let selectBoundedWires (wModel: Model) (boundary: BoundingBox) =
-    let selectWireinBounds (wr: Wire) =
+    let selectWireinBounds (wire: Wire) =
         let inBounds (point: XYPos) =
             point.X > boundary.TopLeft.X && point.X < boundary.BottomRight.X && point.Y > boundary.TopLeft.Y && point.Y < boundary.BottomRight.Y
-        if (inBounds wr.SourcePort.Pos && inBounds wr.TargetPort.Pos) then
-            {wr with IsSelected = true}
-        else wr
+        if (inBounds wire.SourcePort.Pos && inBounds wire.TargetPort.Pos) then
+            {wire with IsSelected = true}
+        else wire
     List.map selectWireinBounds wModel.WX
 
 let drawLineToCursor (startPos : XYPos, endPos : XYPos, endPort : Symbol.Port option) = 
@@ -122,13 +122,13 @@ let pairListElements sequence  =
     |hd::bodyone , tl::bodytwo -> List.rev bodytwo , bodyone
     |_ -> sequence,sequence
 
-let vertexlist (cable: Wire) (wModel: Model) (srcOrient: PortOrientation) (tgtOrient: PortOrientation) (initial: bool) = 
+let vertexlist (wire: Wire) (wModel: Model) (srcOrient: PortOrientation) (tgtOrient: PortOrientation) (initial: bool) = 
     let a,b,c = match initial with
                 |true -> origin,origin,origin 
-                |false-> cable.relativPositions
+                |false-> wire.relativPositions
 
-    let startpt = cable.SourcePort.Pos 
-    let endpt = cable.TargetPort.Pos
+    let startpt = wire.SourcePort.Pos 
+    let endpt = wire.TargetPort.Pos
     let midX = (startpt.X+endpt.X)/2.0
     let midY = (startpt.Y+endpt.Y)/2.0
     
@@ -219,19 +219,19 @@ let vertexlist (cable: Wire) (wModel: Model) (srcOrient: PortOrientation) (tgtOr
         | false, false -> [startpt ; startpt |> movedown (100.0+a.Y) ; {X=endpt.X+15.0+b.X;Y=startpt.Y+100.0+a.Y} ; endpt |> moveright (100.0+b.X) ; endpt]
     | _ ->  [startpt ; {X=midX;Y=startpt.Y} ; {X=midX;Y=endpt.Y} ; endpt]
 
-let bounds (cable: Wire) (wModel: Model) =
+let bounds (wire: Wire) (wModel: Model) =
     let individualBound (start:XYPos) (final: XYPos) =
         if (final.Y > start.Y || final.X > start.X) then
             {TopLeft = {X=start.X-10.0;Y=start.Y-10.0} ;
              BottomRight = {X=final.X+10.0;Y=final.Y+10.0}}
          else {TopLeft = {X=final.X-10.0;Y=final.Y-10.0} ;
              BottomRight = {X=start.X+10.0;Y=start.Y+10.0}}
-    let vlst = vertexlist cable wModel (Symbol.getOrientationOfPort wModel.Symbol cable.SourcePort) (Symbol.getOrientationOfPort wModel.Symbol cable.TargetPort) false
+    let vlst = vertexlist wire wModel (Symbol.getOrientationOfPort wModel.Symbol wire.SourcePort) (Symbol.getOrientationOfPort wModel.Symbol wire.TargetPort) false
     let startlst , endlst = pairListElements vlst
     List.map2 individualBound startlst endlst
 
 let autosingleWireView (wModel: Model)= 
-    let displayFullWire (cable: Wire) (props: WireRenderProps) (vertices: list<XYPos>) = 
+    let displayFullWire (wire: Wire) (props: WireRenderProps) (vertices: list<XYPos>) = 
         let displayWireSegment (start: XYPos) (final: XYPos) =
             let color =
                 match props.WireP.IsSelected, props.WireP.hasError, props.WireP.BusWidth with
