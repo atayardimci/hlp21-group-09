@@ -748,7 +748,7 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             }
 
         let portList = Symbol.getAllPorts (tmpModel.Wire.Symbol)
-        let dupWireList = BusWire.getWiresToBeDuplicated displacementPos cWireList portList
+        let dupWireList = BusWire.getWiresToBeDuplicated tmpModel.Wire displacementPos cWireList portList
         let newModel =          //Wire duplicated model
             (tmpModel,dupWireList)
             ||> List.fold (fun m tuple -> 
@@ -810,14 +810,8 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
                 }, Cmd.batch ([Cmd.ofMsg(RemoveDrawnLine); Cmd.ofMsg(UpdatePorts)])
       
     | UpdatePorts  ->
-        let newBusModel, newCmd = 
-            BusWire.update (BusWire.Msg.UpdateBusWirePorts) model.Wire
-            //|>fst 
-            //|>BusWire.update (BusWire.Msg.UpdateWires )
-        {model with 
-            Wire = newBusModel
-        }
-        |>nullRender,Cmd.none
+        model
+        |> nullRender, Cmd.none
     
     | RemoveDrawnLine ->
         let newBusModel, newMsg = 
