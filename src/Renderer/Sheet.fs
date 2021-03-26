@@ -983,26 +983,21 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
 
     | DeselectAllSymbols  ->
         let newSymModel, newCmd = 
-            Symbol.update (Symbol.Msg.DeselectAllSymbols) model.Wire.Symbol
+            Symbol.update Symbol.Msg.DeselectAllSymbols model.Wire.Symbol
         { model with 
             Wire = {model.Wire with Symbol = newSymModel}
             SymIdList = []
             OverallBBoxToBeRendered = nullBBox
         }
-         ,Cmd.none
+        ,Cmd.none
     
     | AddSymbol (symType , name) -> 
-        let newInput = Symbol.insertSymbol symType name
-        let newSymModel =
-            model.Wire.Symbol @ [newInput]
-
-        let newModel =  //Sym duplicated
-            { model with 
-                Wire = {model.Wire with Symbol = newSymModel}
-                UndoStates = storeUndoState (nullRender model)
-            }
-
-        newModel,Cmd.batch[Cmd.ofMsg(UpdatePorts)] 
+        let newSymModel, newCmd =
+            Symbol.update (Symbol.Msg.AddSymbol (symType, {X = 700.; Y = 100.})) model.Wire.Symbol
+        { model with 
+            Wire = {model.Wire with Symbol = newSymModel}
+        }
+        , Cmd.none
 
     | LoadCanvas sheetDU -> match sheetDU with
                             |First -> loadCanvasState model model.FirstSheet First, Cmd.none
@@ -1044,9 +1039,9 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
             | Move -> 
                 let portsWithinMinRange = getPortsWithinMinRange mMsg.Pos model 90.0 All
                 [RenderPorts (portsWithinMinRange, true)] //isHovering
-            | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y<80. && mMsg.Pos.Y>50.) ->   [(AddSymbol ((CommonTypes.ComponentType.Input 2), "I2"))]
-            | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>80. && mMsg.Pos.Y<110.) ->  [(AddSymbol ((CommonTypes.ComponentType.Output 2), "O2"))]
-            | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>110. && mMsg.Pos.Y<140.) -> [(AddSymbol ((CommonTypes.ComponentType.Constant (4,2)), "O2"))]
+            | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y<80. && mMsg.Pos.Y>50.) ->   [AddSymbol ((CommonTypes.ComponentType.Input 2), "I2")]
+            | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>80. && mMsg.Pos.Y<110.) ->  [AddSymbol ((CommonTypes.ComponentType.Output 2), "O2")]
+            | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>110. && mMsg.Pos.Y<140.) -> [AddSymbol ((CommonTypes.ComponentType.Constant (4,2)), "O2")]
             | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>140. && mMsg.Pos.Y<170.) -> [AddSymbol ((CommonTypes.ComponentType.IOLabel ), "IO2")]
             | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>170. && mMsg.Pos.Y<200.) -> [AddSymbol ((CommonTypes.ComponentType.BusSelection (4,0) ), "B2")]
             | Down when (mMsg.Pos.X<200. && mMsg.Pos.Y>200. && mMsg.Pos.Y<230.) -> [AddSymbol ((CommonTypes.ComponentType.BusCompare (4,0) ), "BC2")]      

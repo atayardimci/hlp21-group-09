@@ -62,7 +62,17 @@ type Msg =
     | RemoveConnections of (Port * Port * bool) list
  
     | SelectSymbolsWithinRegion of box: BoundingBox
-//--------------------------some interface functions------------------------//
+
+
+
+
+
+
+
+
+
+
+//--------------------------some helper and interface functions------------------------//
 
 /// Returns true if pos is within the bounds of the bounding box of the given symbol; else returns false.
 let isSymClicked (pos : XYPos) (sym : Symbol) : bool =
@@ -87,6 +97,7 @@ let boxesCollide (boxOne: BoundingBox) (boxTwo: BoundingBox) =
     let oneTL, oneBR, twoTL, twoBR = boxOne.TopLeft, boxOne.BottomRight, boxTwo.TopLeft, boxTwo.BottomRight
     not (oneBR.X < twoTL.X || oneBR.Y < twoTL.Y || oneTL.X > twoBR.X || oneTL.Y > twoBR.Y)
 
+/// Updates a symbol with its given updated port
 let updateSymWithPort (newPort: Port) (sym: Symbol) : Symbol =
     let newInputPorts, newOutputPorts = 
         sym.InputPorts  |> List.map (fun port -> if port.Id = newPort.Id then newPort else port),
@@ -94,40 +105,35 @@ let updateSymWithPort (newPort: Port) (sym: Symbol) : Symbol =
     {sym with InputPorts = newInputPorts; OutputPorts = newOutputPorts}
 
 
-
 /// Returns the overall BBox of a collection of symbols
-let getOverallBBox (symList: Symbol list) : BoundingBox = 
-    let selectedSymList = getSelectedSymbols symList
-    if (selectedSymList <> [] ) then
+let getOverallBBox (symModel: Symbol list) : BoundingBox = 
+    let selectedSymList = getSelectedSymbols symModel
+    if selectedSymList <> [] then
         let minX = 
             selectedSymList
-            |>List.minBy (fun sym -> sym.BBox.TopLeft.X)
-            |>(fun sym -> sym.BBox.TopLeft.X)
-
+            |> List.minBy (fun sym -> sym.BBox.TopLeft.X)
+            |> (fun sym -> sym.BBox.TopLeft.X)
         let maxX = 
             selectedSymList
-            |>List.minBy (fun sym -> (-1.0)*(sym.BBox.BottomRight.X))
-            |>(fun sym -> sym.BBox.BottomRight.X)
-
+            |> List.minBy (fun sym -> -1.0 * sym.BBox.BottomRight.X)
+            |> (fun sym -> sym.BBox.BottomRight.X)
         let minY = 
             selectedSymList
-            |>List.minBy (fun sym -> sym.BBox.TopLeft.Y)
-            |>(fun sym -> (sym.BBox.TopLeft.Y + 15.0))
-
+            |> List.minBy (fun sym -> sym.BBox.TopLeft.Y)
+            |> (fun sym -> sym.BBox.TopLeft.Y + 15.0)
         let maxY = 
             selectedSymList
-            |>List.minBy (fun sym -> (-1.0)*(sym.BBox.BottomRight.Y))
-            |>(fun sym -> sym.BBox.BottomRight.Y)
+            |> List.minBy (fun sym -> -1.0 * sym.BBox.BottomRight.Y)
+            |> (fun sym -> sym.BBox.BottomRight.Y)
         createBBoxFromPos {X = minX; Y = minY} {X = maxX; Y = maxY}
     else 
         nullBBox
 
-
+/// Get the port of a symbol with the given port Id
 let getPortWithId sym portId = 
     match (sym.InputPorts @ sym.OutputPorts) |> List.tryFind (fun port -> port.Id = portId) with
     | Some port -> port
     | None -> failwithf "Port with given Id in the given symbol was not found"
-
     
 /// Increments or decrements the number of connections of the given port and symbol according to the given ChangeDU and returns the updated symbol
 let changeNumOfConnections (change: ChangeDU) (portToChangeID: string) (symToChange: Symbol) : Symbol = 
@@ -141,11 +147,8 @@ let checkSymbolForError (sym:Symbol) : bool =
     (false, sym.InputPorts @ sym.OutputPorts)
     ||> List.fold (fun hasError port -> if port.NumOfErrors <> 0 then true else hasError)
 
-
-
-
-/// Auto Completed Widths of 5 special components
-let autoCompleteWidths (sym: Symbol) =  
+/// Auto completes widths of symbols (written for 5 special components)
+let autoCompleteWidths (sym: Symbol) :Symbol =  
     let inputs, outputs = sym.InputPorts, sym.OutputPorts
 
     match sym.Type with
@@ -221,9 +224,6 @@ let autoCompleteWidths (sym: Symbol) =
 
     | _ -> sym
 
-
-
-
 /// Removes a connection which can have an error or not and returns the model with the updated symbols
 let removeConnection (model:Model) (portOne:Port, portTwo:Port, connectionHasError:bool) : Model = 
     (model, [portOne; portTwo])
@@ -245,7 +245,6 @@ let removeConnection (model:Model) (portOne:Port, portTwo:Port, connectionHasErr
                 sym
         )
     )
-
 
 /// Selects all symbols which have their bounding box collide with the given box and returns the updated model
 let selectSymbolsInRegion (symModel: Model) (box: BoundingBox) : Model =
@@ -289,9 +288,52 @@ let getHeightWidthOf (sType:CommonTypes.ComponentType) =
 
 
 /// This function won't work! Implement later
-let countOfComponentType (model : Model) (sType:CommonTypes.ComponentType) = 
-    (0, model)
-    ||> List.fold (fun count sym -> if sym.Type = sType then count + 1 else count)
+let countOfComponentType (model: Model) (sType:CommonTypes.ComponentType) : int = 
+    match sType with
+    | CommonTypes.ComponentType.Input _ -> 
+        (0, model) ||> List.fold (fun count sym -> match sym.Type with | CommonTypes.ComponentType.Input w -> count + 1 | _ -> count)
+    | CommonTypes.ComponentType.Output _ -> 
+        (0, model) ||> List.fold (fun count sym -> match sym.Type with | CommonTypes.ComponentType.Output w -> count + 1 | _ -> count)
+    | CommonTypes.ComponentType.IOLabel -> 
+        (0, model) ||> List.fold (fun count sym -> match sym.Type with | CommonTypes.ComponentType.IOLabel -> count + 1 | _ -> count)
+    | CommonTypes.ComponentType.Constant _ -> 
+        (0, model) ||> List.fold (fun count sym -> match sym.Type with | CommonTypes.ComponentType.Constant _ -> count + 1 | _ -> count)
+    | CommonTypes.ComponentType.BusSelection _ -> 
+        (0, model) ||> List.fold (fun count sym -> match sym.Type with | CommonTypes.ComponentType.BusSelection _ -> count + 1 | _ -> count)
+    | CommonTypes.ComponentType.BusCompare _ -> 
+        (0, model) ||> List.fold (fun count sym -> match sym.Type with | CommonTypes.ComponentType.BusCompare _ -> count + 1 | _ -> count)
+    | CommonTypes.ComponentType.Not | CommonTypes.ComponentType.Nand | CommonTypes.ComponentType.Nor | CommonTypes.ComponentType.Xnor
+    | CommonTypes.ComponentType.And | CommonTypes.ComponentType.Or | CommonTypes.ComponentType.Xor -> 
+        (0, model) ||> List.fold (fun count sym -> 
+            match sym.Type with 
+            | CommonTypes.ComponentType.Not | CommonTypes.ComponentType.Nand | CommonTypes.ComponentType.Nor | CommonTypes.ComponentType.Xnor
+            | CommonTypes.ComponentType.And | CommonTypes.ComponentType.Or | CommonTypes.ComponentType.Xor -> count + 1 
+            | _ -> count)
+    | CommonTypes.ComponentType.Mux2 -> 
+        (0, model) ||> List.fold (fun count sym -> match sym.Type with | CommonTypes.ComponentType.Mux2 -> count + 1 | _ -> count)
+    | CommonTypes.ComponentType.Demux2 -> 
+        (0, model) ||> List.fold (fun count sym -> match sym.Type with | CommonTypes.ComponentType.Demux2 -> count + 1 | _ -> count)
+    | CommonTypes.ComponentType.NbitsAdder _ ->
+        (0, model) ||> List.fold (fun count sym -> match sym.Type with | CommonTypes.ComponentType.NbitsAdder _ -> count + 1 | _ -> count)
+    | CommonTypes.ComponentType.NbitsXor _ -> 
+        (0, model) ||> List.fold (fun count sym -> match sym.Type with | CommonTypes.ComponentType.NbitsXor _ -> count + 1 | _ -> count)
+    | CommonTypes.ComponentType.DFF -> 
+        (0, model) ||> List.fold (fun count sym -> match sym.Type with | CommonTypes.ComponentType.DFF -> count + 1 | _ -> count)
+    | CommonTypes.ComponentType.DFFE -> 
+        (0, model) ||> List.fold (fun count sym -> match sym.Type with | CommonTypes.ComponentType.DFFE -> count + 1 | _ -> count)
+    | CommonTypes.ComponentType.Register _ -> 
+        (0, model) ||> List.fold (fun count sym -> match sym.Type with | CommonTypes.ComponentType.Register _ -> count + 1 | _ -> count)
+    | CommonTypes.ComponentType.RegisterE _ -> 
+        (0, model) ||> List.fold (fun count sym -> match sym.Type with | CommonTypes.ComponentType.RegisterE _ -> count + 1 | _ -> count)
+    | CommonTypes.ComponentType.AsyncROM _ -> 
+        (0, model) ||> List.fold (fun count sym -> match sym.Type with | CommonTypes.ComponentType.AsyncROM _ -> count + 1 | _ -> count)
+    | CommonTypes.ComponentType.ROM _ -> 
+        (0, model) ||> List.fold (fun count sym -> match sym.Type with | CommonTypes.ComponentType.ROM _ -> count + 1 | _ -> count)
+    | CommonTypes.ComponentType.RAM _ -> 
+        (0, model) ||> List.fold (fun count sym -> match sym.Type with | CommonTypes.ComponentType.RAM _ -> count + 1 | _ -> count)
+    | CommonTypes.ComponentType.Custom _ -> 
+        (0, model) ||> List.fold (fun count sym -> match sym.Type with | CommonTypes.ComponentType.Custom _ -> count + 1 | _ -> count)
+    | _ -> 1
 
 /// Returns the initial name of a component given to it on its creation
 let initialNameOfComponent (model : Model) (sType:CommonTypes.ComponentType) = 
