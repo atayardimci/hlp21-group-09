@@ -4,7 +4,6 @@ open Fable.React.Props
 open Browser
 open Elmish
 open Elmish.React
-
 open Helpers
 
 type Model = {
@@ -247,7 +246,7 @@ let shiftSymbol (sym : Symbol.Symbol) (diffPos : XYPos ) =
             BottomRight = (posAdd sym.BBox.BottomRight diffPos)
     }
         }
-///shifts all Selected symbols by a X and Y value
+
 let shiftSelectedSymbols (symList : Symbol.Symbol list ) (diffPos : XYPos ) = 
     symList 
     |>List.map (fun sym -> 
@@ -522,15 +521,15 @@ let private renderBackground =
             ]
             [
                 defs[]
-                [ 
-                pattern [
-                    Id "smallGrid"
-                    SVGAttr.Width 24.0;
-                    SVGAttr.Height 24.0;
-                    SVGAttr.PatternUnits "userSpaceOnUse"
-                    ] [path [SVGAttr.D "M 24 0 L 0 0 0 24" ; SVGAttr.Fill "none" ; 
-                                SVGAttr.Stroke "silver"; SVGAttr.StrokeWidth 0.5] []]
-                ]
+                    [ 
+                    pattern [
+                        Id "smallGrid"
+                        SVGAttr.Width 24.0;
+                        SVGAttr.Height 24.0;
+                        SVGAttr.PatternUnits "userSpaceOnUse"
+                        ] [path [SVGAttr.D "M 24 0 L 0 0 0 24" ; SVGAttr.Fill "none" ; 
+                                    SVGAttr.Stroke "silver"; SVGAttr.StrokeWidth 0.5] []]
+                    ]
                
                 rect [
                     SVGAttr.Width "100%"
@@ -565,6 +564,7 @@ let renderPortOfWireSelected (model: Model) (w:BusWire.Wire)  =
         ]
 
 
+   
 let mutable getScrollPos : (unit ->(float*float) option) = (fun () -> None) 
 
 let displaySvgWithZoom (model: Model) (svgReact: ReactElement) (dispatch: Dispatch<Msg>) =

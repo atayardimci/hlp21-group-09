@@ -41,11 +41,12 @@
             invisibleMenu.visible <- true // false if you want keys but no "Edit" menu
             invisibleMenu.submenu <-
                 [| makeKeyItem "Default" "CmdOrCtrl+S" (fun () -> dispatch KeyboardMsg.CtrlS)
-                   makeKeyItem "Duplicate" "Alt+C" (fun () -> dispatch KeyboardMsg.AltC)
-                   makeKeyItem "Green" "Alt+V" (fun () -> dispatch KeyboardMsg.AltV)
+                   makeKeyItem "Copy" "Alt+C" (fun () -> dispatch KeyboardMsg.AltC)
+                   makeKeyItem "Paste" "Alt+V" (fun () -> dispatch KeyboardMsg.AltV)
                    makeKeyItem "Default"  "Backspace" (fun () -> dispatch KeyboardMsg.DEL)
                    makeKeyItem "Undo" "Alt+Z" (fun () -> dispatch KeyboardMsg.AltZ)
-                   makeKeyItem "NEW" "Alt+Q" (fun () -> dispatch KeyboardMsg.AltQ)
+                   makeKeyItem "Redo" "Alt+Shift+Z" (fun () -> dispatch KeyboardMsg.AltShiftZ)
+                   makeKeyItem "New" "Alt+Q" (fun () -> dispatch KeyboardMsg.AltQ)
                    makeKeyItem "inPortLeft" "Alt+A" (fun () -> dispatch KeyboardMsg.AltA)
                    makeKeyItem "inPortRight" "Alt+D" (fun () -> dispatch KeyboardMsg.AltD)
                    makeKeyItem "inPortTop" "Alt+W" (fun () -> dispatch KeyboardMsg.AltW)
@@ -58,7 +59,7 @@
                    makeKeyItem "secondSheet" "Alt+1"  (fun () -> dispatch KeyboardMsg.AltOne)
                    makeKeyItem "secondSheet" "Alt+2"  (fun () -> dispatch KeyboardMsg.AltTwo)
                    menuSeparator
-                   makeKeyItem "Redo" "Alt+Shift+Z" (fun () -> dispatch KeyboardMsg.AltShiftZ)
+
                    makeRoleItem MenuItemRole.ForceReload
                    makeRoleItem MenuItemRole.Reload
                    makeRoleItem MenuItemRole.ToggleDevTools

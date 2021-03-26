@@ -142,9 +142,6 @@ let checkSymbolForError (sym:Symbol) : bool =
     (false, sym.InputPorts @ sym.OutputPorts)
     ||> List.fold (fun hasError port -> if port.NumOfErrors <> 0 then true else hasError)
 
-
-
-
 /// Auto Completed Widths of 5 special components
 let autoCompleteWidths (sym: Symbol) =  
     let inputs, outputs = sym.InputPorts, sym.OutputPorts
@@ -254,15 +251,6 @@ let selectSymbolsInRegion (symModel: Model) (box: BoundingBox) : Model =
     symModel
     |> List.map (fun sym -> if doesCollide sym.BBox then {sym with IsSelected = true} else sym)
 
-
-
-
-
-           
-
-
-
-                        
 
 //---------------------------------helper types and functions----------------//
 
