@@ -8,7 +8,7 @@ Our interface documentation can be found under ./docs directory. A document is i
 **For MAC users, use Option in replacement of Alt for keypresses.**
 
 ### Main Features: 
-1. 27/27 issie symbols implemented - All 27 symbols in issie are implemented.
+1. 27/27 issie symbols implemented - All 27 symbols in issie draw 2D are implemented.
 2.. Symbol creation - When the AddSymbol message is received, CreateNewSymbol is called, and a new symbol is added to the Canvas
 3. Symbol selection - When a Symbol on the screen is clicked, it is selected and turns turquoise. You can select multiple by holding down Alt while clicking or by dragging a region to include the symbols.
 4. Symbol deselection - When a symbol is deselected, it returns to its grey hue
