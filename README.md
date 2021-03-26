@@ -5,6 +5,8 @@
 Issie (Interactive Schematic Simulator with Integrated Editor) is an application for digital circuit design and simulation initially developed by Marco Selvatici. It is targeted at students and hobbyists that want to get a grasp of Digital Electronics concepts in a simple and fun way. Issie is designed to be beginner-friendly and guide the users toward their goals via clear error messages and visual clues. However, Issie has several bugs, the main bug being its schematic drawing library Draw2D which is implemented in Javascript. This is very slow and buggy, therefore thre main aim of the project will be to reimplement a drawing library specifcally catered to Issie with a pure F# implementation using the Elmish MVU (pure functional) web framework. 
 [[1]](https://intranet.ee.ic.ac.uk/t.clarke/hlp/project.html)
 
+An Elmish application works by using `model`, `view`, and `update` functions with messages used to update the model. Our project includes three separate modules: `Symbol`, `BusWire`, `Sheet` each operating as individual Elmish components.
+
 This markdown file contains a summary of all the features implemented in the group stage of our project with additional information on how to run and contribute to the project.
 
 Our interface documentation can be found under ./docs directory. A document is included for each of the three modules, that is Symbol, BusWire, and Sheet.
