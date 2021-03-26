@@ -2,10 +2,10 @@
 
 
 
-Issie (Interactive Schematic Simulator with Integrated Editor) is an application for digital circuit design and simulation. It is targeted at students and hobbyists that want to get a grasp of Digital Electronics concepts in a simple and fun way. Issie is designed to be beginner-friendly and guide the users toward their goals via clear error messages and visual clues. However Issie has several bugs, the main bug being its schematic drawing library Draw2D which is implemented in Javascript. This is very slow and buggy, therefore thre main aim of the project will be to reimplement the parts of Draw2d used in Issie from scratch (the existing js code is irrelevant to this), with a pure F# implementation using the Elmish MVU (pure functional) web framework. 
+Issie (Interactive Schematic Simulator with Integrated Editor) is an application for digital circuit design and simulation initially developed by Marco Selvatici. It is targeted at students and hobbyists that want to get a grasp of Digital Electronics concepts in a simple and fun way. Issie is designed to be beginner-friendly and guide the users toward their goals via clear error messages and visual clues. However, Issie has several bugs, the main bug being its schematic drawing library Draw2D which is implemented in Javascript. This is very slow and buggy, therefore thre main aim of the project will be to reimplement a drawing library specifcally catered to Issie with a pure F# implementation using the Elmish MVU (pure functional) web framework. 
 [ref: https://intranet.ee.ic.ac.uk/t.clarke/hlp/project.html]
 
-This markdown file contains a summary of all the features implemented in the group stage of our project.
+This markdown file contains a summary of all the features implemented in the group stage of our project with additional information on how to run and contribute to the project.
 
 Our interface documentation can be found under ./docs directory. A document is included for each of the three modules, that is Symbol, BusWire, and Sheet.
 
