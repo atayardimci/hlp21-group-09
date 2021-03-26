@@ -26,47 +26,33 @@ A documentation for interfacing between modules can be found under ./docs direct
 
 
 **For MAC users, use Option in replacement of Alt for keypresses.**
-
+buswidth inference
 ### Main Features: 
-1. All 27 Issie symbols implemented
-2. Symbol creation - When the AddSymbol message is received, CreateNewSymbol is called, and a new symbol is added to the Canvas
-3. Symbol selection - When a Symbol on the screen is clicked, it is selected and turns turquoise. You can select multiple by holding down Alt while clicking or by dragging a region to include the symbols.
-4. Symbol deselection - When a symbol is deselected, it returns to its grey hue
-6. Drag a group of symbols - When a group of symbols are highlighted, you can move the symbols across the canvas by holding left-click.
-7. Highlight ports interactively when moving - Small circles are drawn on symbol ports and its opacity (darkness) increases as the cursor moves closer to them and decrease in opacity as the cursor moves further away
-8. Highlight ports interactively when connecting -When connecting wires from one Port to another, Sheet will enlarge only connectable Ports. A small blue circle is drawn around the port to indicate cursor is within the range to complete the connection.
-9. Symbol deletion - when Del is pressed, DeleteSymbol message is sent to Symbol which removes the symbol from the canvas. If the symbols have connections, connections will also be deleted.
-10. Draw lines during drag and drop connection - While drawing a line from one Port to another, a dashed blue line is simultaneously drawn to show the user he is making a connection.
-11. Selecting a Wire: - Clicking in a Wire's BoundingBox selects it turns green. You can select multiple either by holding Alt while clicking or dragging a region to include the wires you want to select.
-12. Deselecting a Wire: - Unclicking on a wire deselects it, and it reverts back to original color (green, red, black or purple) depending on the symbol and error message.
-13. Dragging a Wire: - Individual Wire segments can be moved around to adjust the routing.
-14. Deleting a Wire: - When the Delete message is received all Selected wires are deleted.
-15. Wire rerouting: We implemented a port rotation feature, which allows us to rotate the positions of the input and output ports. When the ports are rotated, the wires adjust automatically to new port positions.
-16. Select region of wires/symbols on canvas - Drag cursor over multiple symbols and/or their connections to select them. They would turn green to indicate their selection.
-17. Deselect region of wires/symbols on canvas - Click away from the selected symbol(s) and/or their connections to deselect them, they should revert to the colours they were before selection.
-18. Buswidth annotation - the buswidth of a wire is written alongside the wire.
-19. Undo - When Alt-Z is clicked, the last action performed will be undone on the canvas
-20. Redo - When Alt-Shift-Z is clicked, the last action undone will be redone on the canvas 
-21. Zoom - Zoom in and zoom out respectively by holding down Alt while scrolling - transforms the canvas accordingly so that all other mouse functions are not affected
-22. Copy symbol/wire or a group of symbols and wires - Alt-C copies selected symbol(s)/wire(s).
-23. Copy and paste to new sheet - Selected symbols/ group of their connections can be pasted to new canvas.
-24. Paste symbol/ wire or a group of symbols and wires - Alt-V pastes selected symbol(s)/wires(s) on the canvas with a slight offset.
-25. Multiple Sheets - Multiple sheets are implemented, for instance, switching between Sheets. Switching between sheets can be done via the Catalogue
-26. Buswidth inference - For symbols in which all ports buswidth is not specified, Buswidth inference infers the undefined port buswidth based on the defined widths(can be input or output), extended to work for Multiplexer, Demultiplexer, MergeWire, Splitwire and IO Label and groups of these symbols.
-27. Symbol alignment - Symbols that are close to each other are automatically aligned to enhance the canvas's neatness.
-28. Input Port location switching (rotate symbol) - Alt-A,W,S,D are used to shift the orientation of the input ports (left, up, down and right) respectively, it has the effect of rotating the symbol.
-29. Output Port location switching (rotate symbol) - Alt-Shift-A,W,S,D are used to shift the orientation of the output ports (left, up, down and right) respectively it has the effect of rotating the symbol.
-30. Error highlighting (symbol and buswire) - When the buswidths of two connecting symbols do not match, both symbol and buswire highlight RED to indicate that there is an error
-31. Catalog for inserting symbols - Catalogue of symbols for adding symbols.
-32. Initial naming
+1. All 27 Issie symbols implemented.
+2. Symbol creation with automated naming
+3. Symbol and wire selection, selecting multiple symbols with alt key, selecting multiple symbols within a box, deselecting.
+4. Error highlighting (symbol and wires): when the buswidths of two connecting symbols do not match, both symbol and buswire highlight RED to indicate that there is an error
+5. Drag a group of symbols: when a group of symbols are highlighted, you can move the symbols across the canvas.
+6. Highlight ports interactively when moving - Small circles are drawn on symbol ports and its opacity (darkness) increases as the cursor moves closer to them and decrease in opacity as the cursor moves further away.
+7. Highlight ports interactively when connecting, i.e. when connecting wires from one Port to another, Sheet will enlarge only connectable Ports. A small blue circle is drawn around the port to indicate cursor is within the range to complete the connection.
+8. Symbol and wire deletion - when Del is pressed, a message is sent to remove all selected symbols and wires from the canvas. If the symbols have connections, connections will also be deleted.
+9. Interactive draging and dropping og connections, i.e. while drawing a line from one Port to another, a dashed blue line is simultaneously drawn to show the user he is making a connection.
+13. Dragging a Wire: Individual Wire segments can be moved around to adjust the routing.
+14. Wire rerouting: We implemented a port rotation (port orientation) feature, which allows user to rotate the positions of the input and output ports. When the ports are rotated, the wires adjust automatically to new port positions.
+15. Buswidth annotation: the buswidth of a wire is written alongside the wire.
+16. Buswidth inference: buswidth inference - For symbols in which all ports buswidth is not specified, Buswidth inference infers the undefined port buswidth based on the defined widths(can be input or output), extended to work for Multiplexer, Demultiplexer, MergeWire, Splitwire and IO Label and groups of these symbols.
+17. Undo: when Alt-Z is clicked, the last action performed will be undone on the canvas.
+18. Redo: when Alt-Shift-Z is clicked, the last action undone will be redone on the canvas 
+19. Zoom: Zoom in and zoom out respectively by holding down Alt while scrolling - transforms the canvas accordingly so that all other mouse functions are not affected.
+20. Copy and Past symbol/wire or a group of symbols and wires. Alt-C copies selected symbol(s)/wire(s). Alt-V pastes selected symbol(s)/wires(s) on the canvas with a slight offset.
+21. Copy and paste to new sheet - Selected symbols/ group of their connections can be pasted to new canvas.
+22. Multiple Sheets: multiple sheets are implemented, for instance, switching between Sheets. Switching between sheets can be done via the Catalogue.
+23. Symbol alignment: symbols that are close to each other are automatically aligned to enhance the canvas's neatness.
+24. Input Ports, changing the orientation (rotate symbol): Alt-A,W,S are used to shift the orientation of the input ports, left, up, and down respectively; it has the effect of rotating the symbol.
+30. Output Port, changing the orientation  (rotate symbol): Alt-Shift-W,S,D are used to shift the orientation of the output ports, up, down and, right respectively.
+32. New symbols can be created by using the catalogue on the left by clicking on the desired symbol type.
 
 
-* New symbols can be created by using the catalogue on the left by clicking on the desired symbol type.
-* It is possible to swap between the two sheets by clicking on the appropriate one in the catalogue.
-* Multiple symbols can be dragged together by drawing a box around them.
-* Backspace key is used to delete symbols. Multiple symbols can be deleted as described in the previous example.
-* Wire connections can be made by dragging from one port to the next. The symbols and the wire will turn red if the connection is invalid.
-* Last action can be undone by the Alt + z keybind.
 
 
 
