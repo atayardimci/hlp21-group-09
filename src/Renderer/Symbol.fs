@@ -123,7 +123,7 @@ let getOverallBBox (symList: Symbol list) : BoundingBox =
         nullBBox
 
 
-let getPortWithId portId sym  = 
+let getPortWithId sym portId = 
     match (sym.InputPorts @ sym.OutputPorts) |> List.tryFind (fun port -> port.Id = portId) with
     | Some port -> port
     | None -> failwithf "Port with given Id in the given symbol was not found"
@@ -133,7 +133,7 @@ let getPortWithId portId sym  =
 /// Increments or decrements the number of connections of the given port and symbol according to the given ChangeDU and returns the updated symbol
 let changeNumOfConnections (change: ChangeDU) (portToChangeID: string) (symToChange: Symbol) : Symbol = 
     let operand = if change = Increment then 1 else -1
-    let portToChange = getPortWithId portToChangeID symToChange
+    let portToChange = getPortWithId symToChange portToChangeID
     let newPort = {portToChange with NumOfConnections = portToChange.NumOfConnections + operand}
     {updateSymWithPort newPort symToChange with NumOfConnections = symToChange.NumOfConnections + operand}
 
@@ -565,36 +565,6 @@ let init () =
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 let update (msg : Msg) (model : Model): Model*Cmd<'a> =
     match msg with
     | AddSymbol (sType, pos) -> 
@@ -718,16 +688,10 @@ let symbolPos (symModel: Model) (sId: CommonTypes.ComponentId) : XYPos =
     List.find (fun sym -> sym.Id = sId) symModel
     |> (fun sym -> sym.Pos)
 
-let symbolInModel symModel sId : bool = 
-    match List.tryFind (fun sym -> sym.Id = sId) symModel with
-    | Some sym -> true
-    | None -> false
-
 /// Returns the symbol with given Id
-let getSymbolWithId (symModel: Model) (sId: CommonTypes.ComponentId) : Symbol =
-    match List.tryFind (fun sym -> sym.Id = sId) symModel with
-    | Some sym -> sym
-    | None -> failwithf "Symbol with given Id not found"
+let getSymbolWithId (symModel: Model) (sId: CommonTypes.ComponentId) : Symbol option =
+    List.tryFind (fun sym -> sym.Id = sId) symModel 
+
 
 // Returns all Ports of all symbols in the model
 let getAllPorts (symModel: Model) : Port list =
@@ -736,31 +700,54 @@ let getAllPorts (symModel: Model) : Port list =
 
 // Returns the bounding box of the symbol with the given Id
 let getBoundingBoxOf (symModel: Model) (sId: CommonTypes.ComponentId) : BoundingBox =
-    (getSymbolWithId symModel sId).BBox
+    let sym = 
+        match (getSymbolWithId symModel sId) with
+        | Some sym -> sym
+        | None -> failwithf "The symbol with given Id not found"
+    sym.BBox
     
 // Returns all ports of the symbol with the given Id
-let getPortsOfSym (symModel: Model) (sId: CommonTypes.ComponentId) : Port list =
-    let sym = getSymbolWithId symModel sId
+let getPortsOf (symModel: Model) (sId: CommonTypes.ComponentId) : Port list =
+    let sym = 
+        match (getSymbolWithId symModel sId) with
+        | Some sym -> sym
+        | None -> failwithf "The symbol with given Id not found"
     sym.InputPorts @ sym.OutputPorts
 
+    
 let getOrientationOfPort (symModel: Model) (port:Port) : PortOrientation = 
-    let sym = getSymbolWithId symModel port.HostId
-    if sym.Type = CommonTypes.Mux2 && port.PortNumber = Some 2 then Bottom
-    else if sym.Type = CommonTypes.Demux2 && port.PortNumber = Some 2 then Bottom
-    else if port.PortType = CommonTypes.PortType.Input then sym.InputOrientation 
-    else sym.OutputOrientation
+    match getSymbolWithId symModel port.HostId with
+    | Some sym -> if (sym.Type=CommonTypes.Mux2 && port.PortNumber=Some 2) then Bottom
+                  else if (sym.Type=CommonTypes.Demux2 && port.PortNumber=Some 2) then Bottom
+                  else if port.PortType = CommonTypes.PortType.Input then sym.InputOrientation else sym.OutputOrientation
+    | _ -> failwithf "The hosting symbol of the given port is not found"
 
 
-   
+
+/// Update the symbol with matching componentId to comp, or add a new symbol based on comp.
+let updateSymbolModelWithComponent (symModel: Model) (comp:CommonTypes.Component) =
+    failwithf "Not Implemented"
+
+
+/// Return the output Buswire width (in bits) if this can be calculated based on known
+/// input wire widths, for the symbol wId. The types used here are possibly wrong, since
+/// this calculation is based on ports, and the skeleton code does not implement ports or
+/// port ids. If This is done the inputs could be expressed in terms of port Ids.
+let calculateOutputWidth 
+        (wId: CommonTypes.ConnectionId) 
+        (outputPortNumber: int) 
+        (inputPortWidths: int option list) : int option =
+    failwithf "Not implemented"
+
 
 //----------------------interface to Issie-----------------------------//
-// let extractComponent 
-//         (symModel: Model) 
-//         (sId:CommonTypes.ComponentId) : CommonTypes.Component= 
-//     failwithf "Not implemented"
+let extractComponent 
+        (symModel: Model) 
+        (sId:CommonTypes.ComponentId) : CommonTypes.Component= 
+    failwithf "Not implemented"
 
-// let extractComponents (symModel: Model) : CommonTypes.Component list = 
-//     failwithf "Not implemented"
+let extractComponents (symModel: Model) : CommonTypes.Component list = 
+    failwithf "Not implemented"
 
 let createSymbolFromComponent (comp:CommonTypes.Component) (pos:XYPos) : Symbol =
     let h, w = getHeightWidthOf comp.Type
@@ -816,5 +803,107 @@ let createSymbolFromComponent (comp:CommonTypes.Component) (pos:XYPos) : Symbol 
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+// Returns all ports of the symbol with the given Id
+let getPortOf (symModel: Model) (sId: CommonTypes.ComponentId) : Port list =
+    let sym = 
+        match (getSymbolWithId symModel sId) with
+        | Some sym -> sym
+        | None -> failwithf "Symbol with given Id not found"
+    sym.InputPorts @ sym.OutputPorts
+
+// let getBusWidthOfPortWithId () ->>> we need an interface function 
+    
+
+///// Update the symbol with matching componentId to comp, or add a new symbol based on comp.
+//let updateSymbolModelWithComponent (symModel: Model) (comp:CommonTypes.Component) =
+//    failwithf "Not Implemented"
+
+
+// change this to get parametersOfSym
+/// Returns the buswidth information of the symbol with the given id. 
+/// If the buswidth information not known at symbol creation, None is returned.
+/// For memory symbols, the first element is the address width, and the second element is the width of the data
+let getBusWidthOf (symModel: Model) (sId: CommonTypes.ComponentId) : Option<int list> =
+    let sym = 
+        match (getSymbolWithId symModel sId) with
+        | Some sym -> sym
+        | None -> failwithf "Symbol with given Id not found"
+    
+    match sym.Type with
+    | CommonTypes.ComponentType.Input w | CommonTypes.ComponentType.Output w 
+    | CommonTypes.ComponentType.NbitsAdder w 
+    | CommonTypes.ComponentType.Register w 
+    | CommonTypes.ComponentType.RegisterE w -> Some [w]
+
+    | CommonTypes.ComponentType.Constant (w, v) -> Some [w; v]
+    | CommonTypes.ComponentType.BusSelection (wIn, wOut) -> Some [wIn; wOut]
+    | CommonTypes.ComponentType.AsyncROM memo | CommonTypes.ComponentType.ROM memo | CommonTypes.ComponentType.RAM memo ->
+        Some [memo.AddressWidth; memo.WordWidth] 
+    | CommonTypes.ComponentType.Custom spec ->
+        (spec.InputLabels @ spec.OutputLabels)
+        |> List.map snd
+        |> Some
+    | _ -> None
+
+/// Return the output Buswire width (in bits) if this can be calculated based on known
+/// input wire widths, for the symbol wId. The types used here are possibly wrong, since
+/// this calculation is based on ports, and the skeleton code does not implement ports or
+/// port ids. If This is done the inputs could be expressed in terms of port Ids.
+//let calculateOutputWidth 
+//        (wId: CommonTypes.ConnectionId) 
+//        (outputPortNumber: int) 
+//        (inputPortWidths: int option list) : int option =
+//    failwithf "Not implemented"
+
+
+//----------------------interface to Issie-----------------------------//
+    
 
 
