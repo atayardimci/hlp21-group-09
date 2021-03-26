@@ -60,12 +60,12 @@ type Msg =
     | UpdateOutputOrientation of outputOrientation: PortOrientation 
     | AddErrorToPorts of (Port * Port)
     | RemoveConnections of (Port * Port * bool) list
- 
     | SelectSymbolsWithinRegion of box: BoundingBox
+
 //--------------------------some interface functions------------------------//
 
 /// Returns true if pos is within the bounds of the bounding box of the given symbol; else returns false.
-let isSymClicked (pos : XYPos) (sym : Symbol) : bool =
+let isSymClicked (pos: XYPos) (sym: Symbol) : bool =
     match pos with 
     | p when (p.X >= sym.BBox.TopLeft.X) && (p.X <= sym.BBox.BottomRight.X) &&
              (p.Y >= sym.BBox.TopLeft.Y) && (p.Y <= sym.BBox.BottomRight.Y)  
@@ -87,49 +87,43 @@ let boxesCollide (boxOne: BoundingBox) (boxTwo: BoundingBox) =
     let oneTL, oneBR, twoTL, twoBR = boxOne.TopLeft, boxOne.BottomRight, boxTwo.TopLeft, boxTwo.BottomRight
     not (oneBR.X < twoTL.X || oneBR.Y < twoTL.Y || oneTL.X > twoBR.X || oneTL.Y > twoBR.Y)
 
+/// Updates a symbol with its given updated port
 let updateSymWithPort (newPort: Port) (sym: Symbol) : Symbol =
     let newInputPorts, newOutputPorts = 
         sym.InputPorts  |> List.map (fun port -> if port.Id = newPort.Id then newPort else port),
         sym.OutputPorts |> List.map (fun port -> if port.Id = newPort.Id then newPort else port)
     {sym with InputPorts = newInputPorts; OutputPorts = newOutputPorts}
 
-
-
 /// Returns the overall BBox of a collection of symbols
-let getOverallBBox (symList: Symbol list) : BoundingBox = 
-    let selectedSymList = getSelectedSymbols symList
-    if (selectedSymList <> [] ) then
+let getOverallBBox (symModel: Symbol list) : BoundingBox = 
+    let selectedSymList = getSelectedSymbols symModel
+    if selectedSymList <> [] then
         let minX = 
             selectedSymList
-            |>List.minBy (fun sym -> sym.BBox.TopLeft.X)
-            |>(fun sym -> sym.BBox.TopLeft.X)
-
+            |> List.minBy (fun sym -> sym.BBox.TopLeft.X)
+            |> (fun sym -> sym.BBox.TopLeft.X)
         let maxX = 
             selectedSymList
-            |>List.minBy (fun sym -> (-1.0)*(sym.BBox.BottomRight.X))
-            |>(fun sym -> sym.BBox.BottomRight.X)
-
+            |> List.minBy (fun sym -> -1.0 * sym.BBox.BottomRight.X)
+            |> (fun sym -> sym.BBox.BottomRight.X)
         let minY = 
             selectedSymList
-            |>List.minBy (fun sym -> sym.BBox.TopLeft.Y)
-            |>(fun sym -> (sym.BBox.TopLeft.Y + 15.0))
-
+            |> List.minBy (fun sym -> sym.BBox.TopLeft.Y)
+            |> (fun sym -> sym.BBox.TopLeft.Y + 15.0)
         let maxY = 
             selectedSymList
-            |>List.minBy (fun sym -> (-1.0)*(sym.BBox.BottomRight.Y))
-            |>(fun sym -> sym.BBox.BottomRight.Y)
+            |> List.minBy (fun sym -> -1.0 * sym.BBox.BottomRight.Y)
+            |> (fun sym -> sym.BBox.BottomRight.Y)
         createBBoxFromPos {X = minX; Y = minY} {X = maxX; Y = maxY}
     else 
         nullBBox
 
-
+/// Get the port of a symbol with the given port Id
 let getPortWithId sym portId = 
     match (sym.InputPorts @ sym.OutputPorts) |> List.tryFind (fun port -> port.Id = portId) with
     | Some port -> port
     | None -> failwithf "Port with given Id in the given symbol was not found"
 
-
-    
 /// Increments or decrements the number of connections of the given port and symbol according to the given ChangeDU and returns the updated symbol
 let changeNumOfConnections (change: ChangeDU) (portToChangeID: string) (symToChange: Symbol) : Symbol = 
     let operand = if change = Increment then 1 else -1
