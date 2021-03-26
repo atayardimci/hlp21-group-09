@@ -21,7 +21,7 @@ type MouseOp =
     | Down
     | Move 
     | Drag
-    | AltScroll
+    | CtrlScroll
     | AltDown
 
 type CanvasProps = 
@@ -48,7 +48,6 @@ type Line =
         P1 : XYPos 
         P2 : XYPos
     }
-
 
 type PortOrientation = 
     | Top
