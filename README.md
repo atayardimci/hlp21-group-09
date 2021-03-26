@@ -38,6 +38,7 @@ Our interface documentation can be found under ./docs directory. A document is i
 29. Output Port location switching (rotate symbol) - Alt-Shift-A,W,S,D are used to shift the orientation of the output ports (left, up, down and right) respectively it has the effect of rotating the symbol.
 30. Error highlighting (symbol and buswire) - When the buswidths of two connecting symbols do not match, both symbol and buswire highlight RED to indicate that there is an error
 31. Catalog for inserting symbols - Catalogue of symbols for adding symbols.
+32. Initial naming
 
 
 
