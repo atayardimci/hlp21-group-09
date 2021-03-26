@@ -62,8 +62,8 @@ let posOf x y = {X=x;Y=y}
 
 /// look up wire in WireModel
 let wire (wModel: Model) (wId: CommonTypes.ConnectionId): Wire =
-    let correctwire cable =
-        cable.Id = wId
+    let correctwire wire =
+        wire.Id = wId
     match wModel.WX |> List.tryFind (correctwire) with
     | Some wr -> wr
     | None    -> failwithf "Ghost"
@@ -414,11 +414,11 @@ let addWire (startPortTmp : Symbol.Port) (endPortTmp : Symbol.Port) (createDU : 
 
 
  
-let startWireDragging (cable: Wire) (pos: XYPos) (wModel: Model)=
+let startWireDragging (wire: Wire) (pos: XYPos) (wModel: Model)=
     let inShape (b:BoundingBox) =
         pos.X > b.TopLeft.X && pos.X < b.BottomRight.X && pos.Y > b.TopLeft.Y && pos.Y < b.BottomRight.Y
     let draggedSegment =
-        match List.map inShape (bounds cable wModel) with
+        match List.map inShape (bounds wire wModel) with
         | [false ; true ; false] -> Second
         | [false ; true ; false ; false] -> Second
         | [false ; false ; true ; false] -> Third
@@ -426,25 +426,25 @@ let startWireDragging (cable: Wire) (pos: XYPos) (wModel: Model)=
         | [false ; false ; true ; false ; false] -> Third
         | [false ; false ; false ; true ; false] -> Forth
         | _ -> NoSeg
-    {cable with BeingDragged = draggedSegment}
+    {wire with BeingDragged = draggedSegment}
 
-let dragAWire (cable: Wire) (pos: XYPos) (wModel: Model) (srcOrient: PortOrientation) (tgtOrient: PortOrientation) =
+let dragAWire (wire: Wire) (pos: XYPos) (wModel: Model) (srcOrient: PortOrientation) (tgtOrient: PortOrientation) =
     let vLs = 
-        match vertexlist cable wModel srcOrient tgtOrient true with
+        match vertexlist wire wModel srcOrient tgtOrient true with
         | [g ; h; i ; j ; k ; u] -> h, i, j
         | [s ; t ; u ; v ; w] -> t, u, v
         | [l ; m ; n ; v] -> m, n, v
         | _ -> origin, origin, origin
     let o, p, q = vLs
-    let a, b, c = cable.relativPositions      
-    let d, e, f = cable.PrevPositions 
+    let a, b, c = wire.relativPositions      
+    let d, e, f = wire.PrevPositions 
          
-    match cable.BeingDragged with
+    match wire.BeingDragged with
     |Second ->  
         let offset = o
         let correctedPos = posDiff pos offset 
         let diff = posDiff correctedPos d           
-        { cable  with
+        {wire  with
             relativPositions = (posAdd a diff),b,c
             PrevPositions = correctedPos,e,f
         }
@@ -452,7 +452,7 @@ let dragAWire (cable: Wire) (pos: XYPos) (wModel: Model) (srcOrient: PortOrienta
         let offset = p
         let correctedPos = posDiff pos offset
         let diff = posDiff correctedPos e 
-        { cable with 
+        {wire with 
             relativPositions = a,(posAdd diff b),c
             PrevPositions = d,correctedPos,f
         }
@@ -460,14 +460,14 @@ let dragAWire (cable: Wire) (pos: XYPos) (wModel: Model) (srcOrient: PortOrienta
         let offset = q
         let correctedPos = posDiff pos offset
         let diff = posDiff correctedPos f
-        { cable with 
+        {wire with 
             relativPositions = a,b,(posAdd diff) c
             PrevPositions = d,e,correctedPos
         }   
-    | _ -> cable      
+    | _ -> wire      
 
-let endWireDragging (cable: Wire) =
-    {cable with BeingDragged = NoSeg}
+let endWireDragging (wire: Wire) =
+    {wire with BeingDragged = NoSeg}
 
 let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
     match msg with
@@ -599,11 +599,11 @@ let wireToSelectOpt (wModel: Model) (pos: XYPos) : CommonTypes.ConnectionId opti
     let inShape (b:BoundingBox) =
         pos.X >= b.TopLeft.X && pos.X <= b.BottomRight.X && pos.Y >= b.TopLeft.Y && pos.Y <= b.BottomRight.Y 
     let inWireBounds (conId: CommonTypes.ConnectionId) =
-        let cable = wire wModel conId 
-        match List.tryFind (inShape) (bounds cable wModel) with
+        let wire = wire wModel conId 
+        match List.tryFind (inShape) (bounds wire wModel) with
         |Some b -> true
         |None -> false
-    let name cable = cable.Id
+    let name wire = wire.Id
     List.tryFind (inWireBounds) (List.map name wModel.WX)
 
 
