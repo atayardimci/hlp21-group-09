@@ -75,7 +75,6 @@ type RenderWireProps = {
     StrokeWidthP: string 
     SrcOrient: PortOrientation
     TgtOrient: PortOrientation
-    //Dispatch : Dispatch<Msg>
     }
 
 let getPortsOfWire (wModel :Model) (wire : Wire)  = 
@@ -120,8 +119,9 @@ let drawLineToCursor (startPos : XYPos, endPos : XYPos, endPort : Symbol.Port op
 
 let busWidthAnnotation (wire : Wire) = 
     match wire.BusWidth with
+    | _ when wire.HasError = false -> []
     | None | Some 1 -> [] 
-    | Some wire -> [str $"{wire}"]
+    | Some w -> [str $"{w}"]
 
 
 let pairListElements sequence  = 
@@ -230,7 +230,7 @@ let displayWireSegment (props: RenderWireProps) (start: XYPos) (final: XYPos) =
         match props.WireP.IsSelected, props.WireP.HasError, props.WireP.BusWidth with
         | true, _, _ -> "green" 
         | _, true, _ -> "red" 
-        | _, _, Some wire when wire > 1 -> "purple"
+        | _, _, Some w when w > 1 -> "purple"
         | _, _, None -> "purple"
         | _ -> "black"
 
@@ -286,14 +286,14 @@ let view (wModel:Model) (dispatch: Msg -> unit)=
     let wires = 
         wModel.WX
         |> List.map (fun wire ->
-            let srcPort, tgtPort = getPortsOfWire wModel wire
+            let srcPort, tgtPort = wire.SourcePort, wire.TargetPort
             let props = {
                 key = wire.Id
                 WireP = {wire with SourcePort = srcPort ; TargetPort = tgtPort}
                 ColorP = wModel.Color.Text()
                 StrokeWidthP = 
                     match wire.HasError, wire.BusWidth with
-                    | false, Some wire when wire = 1 -> "1px"
+                    | false, Some w when w = 1 -> "1px"
                     | _ -> "3px" 
                 SrcOrient = Symbol.getOrientationOfPort wModel.Symbol wire.SourcePort
                 TgtOrient = Symbol.getOrientationOfPort wModel.Symbol wire.TargetPort
@@ -325,7 +325,7 @@ let createWire (startPort: Symbol.Port) (endPort: Symbol.Port)  =
         BusWidth = 
             match startPort.BusWidth, endPort.BusWidth with
             | Some wStart, Some wEnd -> Some wStart
-            | None, Some wire | Some wire, None -> Some wire
+            | None, Some w | Some w, None -> Some w
             | None, None -> None
     }
 
@@ -415,7 +415,7 @@ let dragAWire (wire: Wire) (pos: XYPos) (wModel: Model) (srcOrient: PortOrientat
     let vLs = 
         match vertexList wire srcOrient tgtOrient true with
         | [g ; h; i ; j ; k ; u] -> h, i, j
-        | [s ; t ; u ; v ; wire] -> t, u, v
+        | [s ; t ; u ; v ; w] -> t, u, v
         | [l ; m ; n ; v] -> m, n, v
         | _ -> origin, origin, origin
     let o, p, q = vLs
