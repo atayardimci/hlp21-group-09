@@ -211,7 +211,7 @@ let vertexList (cable: Wire) (srcOrient: PortOrientation) (tgtOrient: PortOrient
                      |true,true -> [startPt ; startPt |> moveVerticallyTo endPt.Y ; endPt]
                      |true,false
                      |false,true -> [startPt ; startPt |> moveDown (15.0+a.Y) ; {X=endPt.X+15.0+b.X;Y=startPt.Y+15.0+a.Y} ; endPt |> moveRight (15.0+b.X) ; endPt]
-                     |false,false -> [startPt ; startPt |> moveDown (100.0+a.Y) ; {X=endPt.X+15.0+b.X;Y=startPt.Y+100.0+a.Y} ; endPt |> moveRight (100.0+b.X) ; endPt]
+                     |false,false -> [startPt ; startPt |> moveDown (100.0+a.Y) ; {X=endPt.X+15.0+b.X;Y=startPt.Y+100.0+a.Y} ; endPt |> moveRight (15.0+b.X) ; endPt]
     |_ ->  [startPt ; {X=midX;Y=startPt.Y} ; {X=midX;Y=endPt.Y} ; endPt]
 
 let bounds (cable: Wire) (wModel: Model)=
