@@ -28,8 +28,8 @@ A documentation for interfacing between modules can be found under ./docs direct
 **For MAC users, use Option in replacement of Alt for keypresses.**
 
 ### Main Features: 
-1. 27/27 issie symbols implemented - All 27 symbols in issie draw 2D are implemented.
-2.. Symbol creation - When the AddSymbol message is received, CreateNewSymbol is called, and a new symbol is added to the Canvas
+1. All 27 Issie symbols implemented
+2. Symbol creation - When the AddSymbol message is received, CreateNewSymbol is called, and a new symbol is added to the Canvas
 3. Symbol selection - When a Symbol on the screen is clicked, it is selected and turns turquoise. You can select multiple by holding down Alt while clicking or by dragging a region to include the symbols.
 4. Symbol deselection - When a symbol is deselected, it returns to its grey hue
 6. Drag a group of symbols - When a group of symbols are highlighted, you can move the symbols across the canvas by holding left-click.
