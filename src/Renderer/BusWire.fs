@@ -78,7 +78,6 @@ type WireRenderProps = {
     StrokeWidthP: string 
     SrcOrient: PortOrientation
     TgtOrient: PortOrientation
-    //Dispatch : Dispatch<Msg>
     }
 
 
