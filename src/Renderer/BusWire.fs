@@ -565,28 +565,31 @@ let update (msg : Msg) (model : Model): Model*Cmd<Msg> =
     | SelectWiresWithinRegion bbox ->
         {model with WX =  selectBoundedWires (model) bbox},Cmd.none
     | UpdateWires ->
-        let newWireModel,newSymModel =
-            ( (model.WX,model.Symbol), model.WX )
-            ||>List.fold  (fun (wModel,sModel) wire ->
-                let srcPort,endPort = wire.SourcePort,wire.TargetPort 
-                let wBusWidth =    
-                    match (srcPort.BusWidth, endPort.BusWidth) with
-                    | Some width, None -> Some width
-                    | _ ,Some width -> Some width
-                    | None, None    -> None
+       let newWireModel,newSymModel =
+           ( (model.WX,model.Symbol), model.WX )
+           ||>List.fold  (fun (wModel,sModel) wire ->
+               let srcPort,endPort = wire.SourcePort,wire.TargetPort 
+               let wBusWidth,symIdOption =    
+                   match (srcPort.BusWidth, endPort.BusWidth) with
+                   | Some width, None -> Some width, Some endPort.HostId
+                   | None ,Some width -> Some width, Some srcPort.HostId
+                   | None, None  -> None , None 
+                   | Some width, Some width2 -> Some width, None
 
-                wModel
-                |>List.map (fun w -> if (w.Id = wire.Id) then {w with BusWidth = wBusWidth} else w),
-                sModel
-                |>List.map (fun sym -> 
-                    sym
-                    |>Symbol.updateSymWithPort {srcPort with BusWidth = wBusWidth}
-                    |>Symbol.updateSymWithPort {endPort with BusWidth = wBusWidth}
-                    |>Symbol.autoCompleteWidths
-                )
-            )   
-        
-        {model with WX = newWireModel; Symbol = newSymModel},Cmd.none
+               wModel
+               |>List.map (fun w -> if (w.Id = wire.Id) then {w with BusWidth = wBusWidth} else w),
+               sModel
+               |>List.map (fun sym ->
+                   match symIdOption with
+                   |Some symId when (sym.Id = symId) -> sym
+                                                        |>Symbol.updateSymWithPort {srcPort with BusWidth = wBusWidth}
+                                                        |>Symbol.updateSymWithPort {endPort with BusWidth = wBusWidth}
+                                                        |>Symbol.autoCompleteWidths
+                   |_ -> sym
+                 
+               )
+            )     
+       {model with WX = newWireModel; Symbol = newSymModel},Cmd.none
 
     | MouseMsg mMsg -> model, Cmd.ofMsg (Symbol (Symbol.MouseMsg mMsg))
 
