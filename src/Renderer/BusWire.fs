@@ -53,7 +53,6 @@ type Msg =
     | DraggingWire of CommonTypes.ConnectionId*XYPos
     | RemoveDrawnLine
     | SelectWiresWithinRegion of Helpers.BoundingBox
-    | EnforceBusWidth of int * Wire
     | UpdateWires
 
 let origin = {X=0.0 ; Y=0.0}
@@ -123,9 +122,10 @@ let pairListElements sequence  =
     |_ -> sequence,sequence
 
 let vertexlist (wire: Wire) (wModel: Model) (srcOrient: PortOrientation) (tgtOrient: PortOrientation) (initial: bool) = 
-    let a,b,c = match initial with
-                |true -> origin,origin,origin 
-                |false-> wire.relativPositions
+    let a,b,c = 
+        match initial with
+        |true -> origin,origin,origin 
+        |false-> wire.relativPositions
 
     let startpt = wire.SourcePort.Pos 
     let endpt = wire.TargetPort.Pos
@@ -262,7 +262,7 @@ let autosingleWireView (wModel: Model)=
         let annotatePos = if (props.WireP.SourcePort.PortType = CommonTypes.Output) then props.SrcP else props.TgtP
 
         text [
-                        X (annotatePos.X + 20.0)
+                        X (annotatePos.X + 21.0)
                         Y (annotatePos.Y + 2.0)
                         Style [
                             TextAnchor "middle" // left/right/middle: horizontal algnment vs (X,Y)
